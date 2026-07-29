@@ -10,7 +10,7 @@
     <packaging>pom</packaging>
 
     <name>PXL Spring</name>
-    <description>A Spring-native wrapper around PXL, bringing effortless spreadsheet-object binding to Spring applications</description>
+    <description>Multipart uploads and download responses for spreadsheet-object binding in Spring, built on PXL</description>
     <url>https://github.com/hclimkr/pxl-spring</url>
 
     <licenses>

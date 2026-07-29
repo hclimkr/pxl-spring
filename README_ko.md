@@ -9,8 +9,8 @@ PXL Spring
 [![Java](https://img.shields.io/badge/Java-8%2B%20%2F%2017%2B-orange.svg)](#구성)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-PXL Spring은 **[PXL](https://github.com/hclimkr/pxl)을 스프링 웹 계층에 연결하는 컴포넌트**다.
-멀티파트 업로드 수신과 다운로드 응답을 생성하고, 바인딩은 PXL에 맡긴다. Java 8 이상을 지원한다.
+PXL Spring은 [PXL](https://github.com/hclimkr/pxl) 기반으로 **스프링에서 스프레드시트-객체 바인딩을 위한 멀티파트 업로드와 다운로드 응답**을 제공한다.
+바인딩은 PXL에 맡기고, Java 8 이상을 지원한다.
 
 - Import: Multipart 업로드(XLSX · XLS · CSV) → 자바 객체
 - Export: 자바 객체 → 엑셀 · 샘플 엑셀 · ZIP 다운로드

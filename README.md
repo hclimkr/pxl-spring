@@ -9,8 +9,8 @@ PXL Spring
 [![Java](https://img.shields.io/badge/Java-8%2B%20%2F%2017%2B-orange.svg)](#setup)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-PXL Spring is **the Spring web layer for [PXL](https://github.com/hclimkr/pxl)**.
-It handles multipart uploads and download responses, leaves the binding to PXL, and supports Java 8 and later.
+PXL Spring provides **multipart uploads and download responses for spreadsheet-object binding in Spring**, built on [PXL](https://github.com/hclimkr/pxl).
+It leaves the binding to PXL and supports Java 8 and later.
 
 - Import: multipart uploads (XLSX · XLS · CSV) → Java objects
 - Export: Java objects → Excel · sample Excel · ZIP download
