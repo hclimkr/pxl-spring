@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.github.hclimkr</groupId>
+    <artifactId>pxl-spring</artifactId>
+    <version>${revision}</version>
+    <packaging>pom</packaging>
+
+    <name>PXL Spring</name>
+    <description>A Spring-native wrapper around PXL, bringing effortless spreadsheet-object binding to Spring applications</description>
+    <url>https://github.com/hclimkr/pxl-spring</url>
+
+    <licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>hclim</name>
+            <email>hclim.kr@gmail.com</email>
+            <organization>Individual</organization>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:git://github.com/hclimkr/pxl-spring.git</connection>
+        <developerConnection>scm:git:ssh://github.com/hclimkr/pxl-spring.git</developerConnection>
+        <url>https://github.com/hclimkr/pxl-spring/tree/main</url>
+    </scm>
+
+    <modules>
+        <module>pxl-spring-javax</module>
+        <module>pxl-spring-jakarta</module>
+    </modules>
+
+    <properties>
+        <revision>0.9.0</revision>
+        <pxlRevision>0.9.2</pxlRevision>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>2.0.18</version>
+            <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.46</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
+            <version>2.26.1</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>2.26.1</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.14.4</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.27.7</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+          Test-only: PxlPerformanceLoggingAspectTests weaves the @Around advice via Spring's
+          AspectJProxyFactory, whose @annotation(...) pointcut is parsed by aspectjweaver's
+          PointcutParser (not present in aspectjrt).
+        -->
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+            <version>1.9.25.1</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+              Forbid depending on the core library internals (io.github.hclimkr.pxl.internal.*) from
+              pxl-spring sources: those types are non-public and may change without notice. Inherited by
+              both modules and run at validate. This effectively guards the hand-written javax sources
+              (the source of truth); the jakarta module has no src/ of its own — its sources are generated
+              from javax with only javax.*->jakarta.* import rewrites, which cannot introduce a new
+              pxl.internal import, so guarding javax is sufficient.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.6.3</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>de.skuzzle.enforcer</groupId>
+                        <artifactId>restrict-imports-enforcer-rule</artifactId>
+                        <version>3.0.0</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>check-no-pxl-internal-imports</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <RestrictImports>
+                                    <reason>Do not depend on pxl core internals; use the public API instead.</reason>
+                                    <bannedImport>io.github.hclimkr.pxl.internal.**</bannedImport>
+                                </RestrictImports>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.6</version>
+                <configuration>
+                    <skipTests>false</skipTests>
+                </configuration>
+            </plugin>
+
+            <!--
+              Resolves the CI-friendly ${revision} version into the installed/deployed POMs.
+              resolveCiFriendliesOnly substitutes only the version property and leaves the rest
+              of the POM (name/description/url, dependencies) untouched, so consumers never see a
+              literal ${revision}. The single source of truth for the version is the <revision>
+              property above; bump it (or pass -Drevision=x.y.z) to release a new version.
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.7.3</version>
+                <configuration>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten-clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.11.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                    <autoPublish>false</autoPublish>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.12.0</version>
+                <configuration>
+                    <excludePackageNames>
+                        io.github.hclimkr.pxl.spring.internal:io.github.hclimkr.pxl.spring.internal.*
+                    </excludePackageNames>
+                    <doclint>all</doclint>
+                    <failOnError>true</failOnError>
+                    <failOnWarnings>true</failOnWarnings>
+                    <quiet>true</quiet>
+                    <encoding>UTF-8</encoding>
+                    <charset>UTF-8</charset>
+                    <docencoding>UTF-8</docencoding>
+                    <!--
+                      These annotation/servlet APIs are declared 'provided' in the modules, so the
+                      javadoc tool's classpath omits them and doclint fails to resolve the imports
+                      ('package ... does not exist'). jsr305 covers pxl-spring-javax
+                      (javax.annotation.Nullable); jakarta.annotation-api covers pxl-spring-jakarta
+                      (javax.annotation. is rewritten to jakarta.annotation. by the antrun transform).
+                      Likewise javax.servlet-api covers pxl-spring-javax
+                      (javax.servlet.http.HttpServletResponse) and jakarta.servlet-api covers
+                      pxl-spring-jakarta (javax.servlet. is rewritten to jakarta.servlet.).
+                      Both variants of each are listed here because this config is shared by both
+                      modules; the extra one on each side is harmless.
+                    -->
+                    <additionalDependencies>
+                        <additionalDependency>
+                            <groupId>com.google.code.findbugs</groupId>
+                            <artifactId>jsr305</artifactId>
+                            <version>3.0.2</version>
+                        </additionalDependency>
+                        <additionalDependency>
+                            <groupId>jakarta.annotation</groupId>
+                            <artifactId>jakarta.annotation-api</artifactId>
+                            <version>3.0.0</version>
+                        </additionalDependency>
+                        <additionalDependency>
+                            <groupId>javax.servlet</groupId>
+                            <artifactId>javax.servlet-api</artifactId>
+                            <version>4.0.1</version>
+                        </additionalDependency>
+                        <additionalDependency>
+                            <groupId>jakarta.servlet</groupId>
+                            <artifactId>jakarta.servlet-api</artifactId>
+                            <version>6.1.0</version>
+                        </additionalDependency>
+                    </additionalDependencies>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.8</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+</project>

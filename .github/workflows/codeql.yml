@@ -1,0 +1,61 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the in-flight run for that branch.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    # While the repository is private, only run on demand — code scanning on a private repository
+    # needs GitHub Advanced Security, and an automatic push/PR run would burn private-repo Actions
+    # minutes. The push/pull_request triggers above stay in place: once the repository is made public
+    # this condition starts evaluating true on its own and automatic runs resume, with nothing to edit.
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    permissions:
+      # Required to upload the results to the code-scanning dashboard.
+      security-events: write
+      # Only needed for workflows in private repositories.
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            # 'none' analyzes the Java sources directly without a build. This suits the
+            # multi-module layout: pxl-spring-jakarta has no checked-in sources (they are generated
+            # at build time by string-substituting pxl-spring-javax), so a compiled analysis would
+            # scan the same logic twice and raise duplicate alerts. Source-only mode sees the
+            # single real copy under pxl-spring-javax and avoids that.
+            build-mode: none
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # Add the extended security query suite on top of the default set.
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

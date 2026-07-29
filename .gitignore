@@ -1,0 +1,59 @@
+### Maven Build Output ###
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.properties
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# flatten-maven-plugin output (CI-friendly ${revision} resolution)
+.flattened-pom.xml
+
+### Gradle Build Output ###
+.gradle/
+build/
+out/
+
+### Kotlin ###
+.kotlin
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+
+# AI Assistant Configurations (Claude Code)
+CLAUDE.md
+LIMITATION.md
+RELEASE.md
+TODO.md
+.claude/
+.claude_history
+.claude_cache/
+.claude_doc/
+.claudeignore
