@@ -93,7 +93,10 @@ class PxlExcelZipExporterTests {
     }
 
     private static File writeTempZip(final byte[] bytes) throws IOException {
-        final File tmp = File.createTempFile("pxl-zip-", ".zip");
+        // Files.createTempFile, not File.createTempFile: on systems whose temp directory is shared
+        // between local users the latter creates a world-readable file (CodeQL
+        // java/local-temp-file-or-directory-information-disclosure).
+        final File tmp = Files.createTempFile("pxl-zip-", ".zip").toFile();
         tmp.deleteOnExit();
         Files.write(tmp.toPath(), bytes);
         return tmp;
