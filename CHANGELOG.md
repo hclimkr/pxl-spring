@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-29
+
 First public release. Built against [pxl](https://github.com/hclimkr/pxl) 0.9.2 — `pxl-javax` for the
 javax variant, `pxl-jakarta` for the jakarta one.
 
@@ -20,4 +22,5 @@ javax variant, `pxl-jakarta` for the jakarta one.
 - `PxlSpring`, one bean fronting all five entry points, with Bean Validation, RFC 5987
   download names, and opt-in AOP performance logging.
 
-[Unreleased]: https://github.com/hclimkr/pxl-spring/commits/main
+[Unreleased]: https://github.com/hclimkr/pxl-spring/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/hclimkr/pxl-spring/releases/tag/v0.9.0
