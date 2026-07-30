@@ -183,9 +183,9 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
-@Getter
-@Setter
-@NoArgsConstructor          // no-arg constructor is required for import
+@Getter                     // (optional) for your convenience — PXL binds fields directly, so a getter is not required.
+@Setter                     // (optional) for your convenience — PXL binds fields directly, so a setter is not required.
+@NoArgsConstructor          // (required) no-arg constructor is required for import
 public class Employee {
 
     @PxlRowIndex            // (optional) 1-based spreadsheet row number. Types: byte/short/int/long + wrappers (Byte/Short/Integer/Long)
@@ -231,9 +231,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor          // no-arg constructor is required for import
+@Getter                     // (optional) for your convenience — PXL binds fields directly, so a getter is not required.
+@Setter                     // (optional) for your convenience — PXL binds fields directly, so a setter is not required.
+@NoArgsConstructor          // (required) no-arg constructor is required for import
 public class Department {
 
     @PxlColumn(name = "Code")
@@ -260,9 +260,9 @@ import lombok.Setter;
 
 import java.util.List;
 
-@Getter
-@Setter
-@NoArgsConstructor          // no-arg constructor is required for import
+@Getter                     // (optional) for your convenience — PXL binds fields directly, so a getter is not required.
+@Setter                     // (optional) for your convenience — PXL binds fields directly, so a setter is not required.
+@NoArgsConstructor          // (required) no-arg constructor is required for import
 public class Company {
 
     @PxlWorkbookName        // (optional) a String field to hold the workbook name

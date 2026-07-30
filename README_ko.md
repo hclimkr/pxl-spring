@@ -183,9 +183,9 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
-@Getter
-@Setter
-@NoArgsConstructor          // import 시에 무인자 생성자 필수
+@Getter                     // (선택) 사용자 편의용 — PXL은 직접 바인딩하기 때문에 Getter가 필요하지는 않다.
+@Setter                     // (선택) 사용자 편의용 — PXL은 직접 바인딩하기 때문에 Setter가 필요하지는 않다.
+@NoArgsConstructor          // (필수) import 시에 무인자 생성자 필수
 public class Employee {
 
     @PxlRowIndex            // (선택) 1-based 스프레드시트 행 번호. 타입: byte/short/int/long + 래퍼 클래스(Byte/Short/Integer/Long)
@@ -231,9 +231,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor          // import 시에 무인자 생성자 필수
+@Getter                     // (선택) 사용자 편의용 — PXL은 직접 바인딩하기 때문에 Getter가 필요하지는 않다.
+@Setter                     // (선택) 사용자 편의용 — PXL은 직접 바인딩하기 때문에 Setter가 필요하지는 않다.
+@NoArgsConstructor          // (필수) import 시에 무인자 생성자 필수
 public class Department {
 
     @PxlColumn(name = "Code")
@@ -260,9 +260,9 @@ import lombok.Setter;
 
 import java.util.List;
 
-@Getter
-@Setter
-@NoArgsConstructor          // import 시에 무인자 생성자 필수
+@Getter                     // (선택) 사용자 편의용 — PXL은 직접 바인딩하기 때문에 Getter가 필요하지는 않다.
+@Setter                     // (선택) 사용자 편의용 — PXL은 직접 바인딩하기 때문에 Setter가 필요하지는 않다.
+@NoArgsConstructor          // (필수) import 시에 무인자 생성자 필수
 public class Company {
 
     @PxlWorkbookName        // (선택) 워크북 이름을 담을 String 필드
