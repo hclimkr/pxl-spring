@@ -14,11 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accepted — and asks for the version and artifact, the Java and Spring (or Spring Boot)
   versions, expected versus actual behavior, and a minimal reproduction: the annotated
   DTO plus the calling code, either the controller method or the `PxlSpring` builder
-  chain, with sensitive data stripped from any attached source file. Vulnerabilities are
-  pointed at `SECURITY.md`. The developer-facing sections it used to carry (repository
-  structure, build and test commands, test authoring and code conventions) are gone, and
-  the `Build & Contributing` paragraph in both READMEs now points at the policy instead
-  of those sections.
+  chain, with sensitive data stripped from any attached source file.
 
 ## [0.9.0] - 2026-07-29
 
