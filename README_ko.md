@@ -968,7 +968,7 @@ pxl.performance.logging.low-performance-in-ms=5000
 ## 빌드 & 기여
 
 소스 코드는 `pxl-spring-javax`에만 있고 `pxl-spring-jakarta`는 빌드 시 문자열 치환으로 생성된다.  
-빌드·테스트 명령, 소스 코드 편집 규칙, 테스트 작성 규칙은 [CONTRIBUTING_ko.md](CONTRIBUTING_ko.md) 에 정리돼 있다.
+이 저장소는 이슈 보고와 제안만 받는다 — [CONTRIBUTING_ko.md](CONTRIBUTING_ko.md) 를 참고한다.
 
 ---
 
