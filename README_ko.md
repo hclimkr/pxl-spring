@@ -290,21 +290,21 @@ import org.springframework.http.ResponseEntity;
 import java.util.Arrays;
 import java.util.List;
 
-// Employee 행 객체 준비
-Employee alice = new Employee();
-alice.setName("Alice");
-alice.setAge(30);
-
-Employee bob = new Employee();
-bob.setName("Bob");
-bob.setAge(42);
-
-// Employees 시트 객체 준비
-List<Employee> employees = Arrays.asList(alice, bob);
-
 // Export: Employees 시트 → 엑셀 다운로드 응답
 @GetMapping("/employees/excel")
 public ResponseEntity<Resource> download() throws Exception {
+    // Employee 행 객체 준비
+    Employee alice = new Employee();
+    alice.setName("Alice");
+    alice.setAge(30);
+
+    Employee bob = new Employee();
+    bob.setName("Bob");
+    bob.setAge(42);
+
+    // Employees 시트 객체 준비
+    List<Employee> employees = Arrays.asList(alice, bob);
+
     return pxlSpring.exportExcel()
                     .sheet(Employee.class, employees, "Employees")
                     .toResponseEntity("직원목록");
@@ -343,7 +343,7 @@ public int upload(@RequestParam MultipartFile file) throws Exception {
 - export는 `.sheet(...)`를 여러 번 호출해 여러 시트를 만든다. `exportSampleExcel()`도 동일하다.
 - import는 `.sheet(...)`를 연달아 체인할 수 없다. 여러 시트를 읽는 방법은 두 가지다.
     - 워크북 형태로 한 번에: `@PxlWorkbook` 클래스를 `.workbook(...)`에 주면 `@PxlSheet` 필드별로 여러 시트가 한 번에 바인딩된다.  
-    - 시트별로 나눠서: 같은 빌더 인스턴스로 `.sheet(...)`를 시트마다 호출하고 각각 `.fromMultipartFile(...)`까지 실행한다.
+    - 시트별로 나눠서: 시트마다 체인을 새로 시작해 각각 `.fromMultipartFile(...)`까지 실행한다.
 
 체인 중간에 `override(...)`(코어 옵션), `workbookName(...)`(워크북명)을 선택적으로 끼워 넣을 수 있다. 순서는 자유이며, 같은 값을 두 번 지정하면 나중 값이 최종 사용된다.
 
@@ -665,15 +665,18 @@ public int importLockedCompany(@RequestParam MultipartFile file) throws Exceptio
 
 **다중 시트 업로드**
 
-Import시 `sheet(...)`는 연달아 체인할 수 없으므로 시트마다 실행한다. 같은 file을 그대로 다시 넘기면 된다 — 호출할 때마다 새 `InputStream`이 열린다.
+Import시 `sheet(...)`는 연달아 체인할 수 없으므로 시트마다 체인을 새로 시작한다. 같은 file을 그대로 다시 넘기면 된다 — 호출할 때마다 새 `InputStream`이 열린다.
 
 ```java
 @PostMapping("/company/import-sheets")
 public int importCompanySheets(@RequestParam MultipartFile file) throws Exception {
-    PxlExcelImporter.Builder builder = pxlSpring.importExcel();
+    List<Employee> employees = pxlSpring.importExcel()
+                                        .sheet(Employee.class, "Employees")
+                                        .fromMultipartFile(file);
 
-    List<Employee> employees = builder.sheet(Employee.class, "Employees").fromMultipartFile(file);
-    List<Department> departments = builder.sheet(Department.class, "Departments").fromMultipartFile(file);
+    List<Department> departments = pxlSpring.importExcel()
+                                            .sheet(Department.class, "Departments")
+                                            .fromMultipartFile(file);
 
     return employees.size() + departments.size();
 }
@@ -870,7 +873,7 @@ R fromMultipartFiles(List<MultipartFile> csvFiles)  // 업로드 여러 개
 - **매핑 클래스 요구사항**  
   무인자 생성자가 있어야 하고, `@PxlColumn(name=...)`의 이름이 실제 헤더 셀 텍스트와 일치해야 한다.
 - **빌더 재사용 금지**  
-  빌더는 스레드 안전하지 않고 실행 메서드 1회 호출 기준이다. 요청마다 시작 메서드(`exportExcel()` 등)를 새로 호출한다.
+  빌더는 스레드 안전하지 않으며 재사용을 염두에 두고 만들어지지 않았다. 빌더 하나는 실행 한 번에 쓰고, 다음 실행은 시작 메서드(`exportExcel()` 등)를 새로 호출한다. 재사용했을 때의 동작은 보장하지 않으며 버전에 따라 달라질 수 있다.
 
 ---
 

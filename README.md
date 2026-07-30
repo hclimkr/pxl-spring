@@ -290,21 +290,21 @@ import org.springframework.http.ResponseEntity;
 import java.util.Arrays;
 import java.util.List;
 
-// Prepare Employee row objects
-Employee alice = new Employee();
-alice.setName("Alice");
-alice.setAge(30);
-
-Employee bob = new Employee();
-bob.setName("Bob");
-bob.setAge(42);
-
-// Prepare the Employees sheet object
-List<Employee> employees = Arrays.asList(alice, bob);
-
 // Export: Employees sheet → Excel download response
 @GetMapping("/employees/excel")
 public ResponseEntity<Resource> download() throws Exception {
+    // Prepare Employee row objects
+    Employee alice = new Employee();
+    alice.setName("Alice");
+    alice.setAge(30);
+
+    Employee bob = new Employee();
+    bob.setName("Bob");
+    bob.setAge(42);
+
+    // Prepare the Employees sheet object
+    List<Employee> employees = Arrays.asList(alice, bob);
+
     return pxlSpring.exportExcel()
                     .sheet(Employee.class, employees, "Employees")
                     .toResponseEntity("employee-list");
@@ -343,7 +343,7 @@ Every operation is handled through a single method chain like the examples above
 - For export, calling `.sheet(...)` multiple times creates multiple sheets. `exportSampleExcel()` works the same way.
 - For import, `.sheet(...)` cannot be chained consecutively. There are two ways to read multiple sheets.
     - All at once, in workbook form: passing a `@PxlWorkbook` class to `.workbook(...)` binds multiple sheets at once, one per `@PxlSheet` field.  
-    - One sheet at a time: call `.sheet(...)` once per sheet on the same builder instance and run each through `.fromMultipartFile(...)`.
+    - One sheet at a time: start a fresh chain per sheet and run each through `.fromMultipartFile(...)`.
 
 You can insert `override(...)` (core option) and `workbookName(...)` (workbook name) anywhere in the chain. The order is free, and if you set the same value twice the later one is the one used.
 
@@ -377,7 +377,7 @@ public ResponseEntity<Resource> downloadEmployees() throws Exception {
 
     return pxlSpring.exportExcel()
                     .sheet(Employee.class, employees, "Employees")
-                    .toResponseEntity("보고서");
+                    .toResponseEntity("report");
 }
 ```
 
@@ -665,15 +665,18 @@ public int importLockedCompany(@RequestParam MultipartFile file) throws Exceptio
 
 **Multiple sheets uploaded**
 
-On import, `sheet(...)` cannot be chained consecutively, so run one per sheet. Hand the same file over again — a fresh `InputStream` is opened per call.
+On import, `sheet(...)` cannot be chained consecutively, so start a fresh chain per sheet. Hand the same file over again — a fresh `InputStream` is opened per call.
 
 ```java
 @PostMapping("/company/import-sheets")
 public int importCompanySheets(@RequestParam MultipartFile file) throws Exception {
-    PxlExcelImporter.Builder builder = pxlSpring.importExcel();
+    List<Employee> employees = pxlSpring.importExcel()
+                                        .sheet(Employee.class, "Employees")
+                                        .fromMultipartFile(file);
 
-    List<Employee> employees = builder.sheet(Employee.class, "Employees").fromMultipartFile(file);
-    List<Department> departments = builder.sheet(Department.class, "Departments").fromMultipartFile(file);
+    List<Department> departments = pxlSpring.importExcel()
+                                            .sheet(Department.class, "Departments")
+                                            .fromMultipartFile(file);
 
     return employees.size() + departments.size();
 }
@@ -870,7 +873,7 @@ R fromMultipartFiles(List<MultipartFile> csvFiles)  // several uploads
 - **Mapping class requirements**  
   A no-arg constructor is required, and the name in `@PxlColumn(name=...)` must match the actual header cell text.
 - **Do not reuse a builder**  
-  Builders are not thread-safe and are single-use per execution. Call the start method (`exportExcel()` and friends) afresh for each request.
+  No builder is thread-safe, and none is meant to be reused. Use one builder for one execution and call the start method (`exportExcel()` and friends) afresh for the next one. What a reused builder does is not guaranteed and may change between versions.
 
 ---
 
