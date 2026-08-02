@@ -15,6 +15,8 @@ import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.core.io.InputStreamSource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
@@ -30,21 +32,31 @@ import java.text.Normalizer;
 import java.util.*;
 
 /**
- * Spring component that reads multipart CSV uploads into Java objects.
+ * Spring component that reads CSV sources — multipart uploads and Spring {@link Resource}s — into Java
+ * objects.
  *
  * <p>Everything is configured through the fluent builder returned by {@link #importCsv()}, which mirrors the
  * core {@code Pxl.importCsv()} shape — optionally set {@code workbookName(...)}/{@code override(...)}, pick a
- * parse target ({@code workbook(...)} / {@code sheet(...)}), then call {@code fromMultipartFile(...)} or
- * {@code fromMultipartFiles(...)}. The result type is carried through the generics, so no cast is needed:</p>
+ * parse target ({@code workbook(...)} / {@code sheet(...)}), then call {@code fromMultipartFile(...)} /
+ * {@code fromMultipartFiles(...)} or {@code fromResource(...)} / {@code fromResources(...)}. The result type
+ * is carried through the generics, so no cast is needed:</p>
  *
  * <pre>{@code
  * ReportDto report = pxlSpring.importCsv().workbook(ReportDto.class).fromMultipartFiles(uploads);
  * List<User> users = pxlSpring.importCsv().sheet(User.class).fromMultipartFile(upload);
+ * List<User> seed = pxlSpring.importCsv().sheet(User.class)
+ *         .fromResource(new ClassPathResource("seed/Users.csv"));
  * }</pre>
  *
+ * <p>The {@code fromResource(...)} pair is the non-HTTP half of the same operation, for the paths a Spring
+ * application reads a CSV on that are not an upload — a batch job reading files off disk, an initializer
+ * reading a classpath seed, an integration test reading a fixture. They exist so those callers need not
+ * build their own core {@code Pxl} instance to get at a stream terminal.</p>
+ *
  * <p>The file extension is validated ({@code .csv}); a violation raises
- * {@link HttpMediaTypeNotSupportedException}. Each CSV file becomes one sheet whose name is derived
- * from the file name and NFC-normalized.</p>
+ * {@link HttpMediaTypeNotSupportedException}, and so does a resource that reports no file name at all,
+ * since an extension that cannot be read cannot be checked. Each CSV becomes one sheet whose name is
+ * derived from the file name and NFC-normalized.</p>
  *
  * <p>That builder is the nested {@link Builder}, and its parse-target step is {@link Builder.Source}. A
  * fluent chain never has to name either; on the rare occasion you hold one in a variable, spell them
@@ -56,10 +68,11 @@ import java.util.*;
  * <p>Reached through {@link io.github.hclimkr.pxl.spring.PxlSpring PxlSpring}: inject that one bean and call
  * {@code pxlSpring.importCsv()}, which hands back the builder documented here.</p>
  *
- * <p>The {@code importCsvFrom*} method below is the builder's execution back-end. It is {@code public} only
- * because Spring AOP (and {@code @Validated} method validation) can advise public methods only — a terminal
- * has to re-enter this component through its proxy for {@link PxlPerformanceLogging} to fire. Treat it as
- * internal and always go through {@link #importCsv()}.</p>
+ * <p>The {@code importCsvFrom*} methods below are the builder's execution back-ends, one per source form.
+ * They are {@code public} only because Spring AOP (and {@code @Validated} method validation) can advise public
+ * methods only — a terminal has to re-enter this component through its proxy for
+ * {@link PxlPerformanceLogging} to fire. Treat them as internal and always go through
+ * {@link #importCsv()}.</p>
  */
 @Validated
 @Component
@@ -87,7 +100,7 @@ public class PxlCsvImporter {
     private PxlCsvImporter self;
 
     /**
-     * Starts a fluent multipart CSV import.
+     * Starts a fluent CSV import, from multipart uploads or {@link Resource}s.
      *
      * @return a new builder bound to this component
      */
@@ -96,7 +109,7 @@ public class PxlCsvImporter {
         return new Builder(pxl, Objects.nonNull(self) ? self : this);
     }
 
-    // ----- builder execution back-end (internal; reached through the nested Builder) -----
+    // ----- builder execution back-ends (internal; reached through the nested Builder) -----
 
     /**
      * Reads the uploaded CSV files — one sheet per file — into whatever parse target the source step carries.
@@ -124,10 +137,7 @@ public class PxlCsvImporter {
                                              @NotEmpty final List<@NotNull MultipartFile> csvFiles)
             throws PxlException, HttpMediaTypeNotSupportedException {
 
-        PxlArgumentSupport.requireNonNull(csvFiles, "csvFiles");
-        if (csvFiles.isEmpty()) {
-            throw new PxlArgumentException("at least one CSV file must be specified");
-        }
+        validateCsvSources(csvFiles);
 
         // rejects a null element too, so the getOriginalFilename() calls below are safe
         for (final MultipartFile csvFile : csvFiles) {
@@ -135,11 +145,109 @@ public class PxlCsvImporter {
         }
 
         final List<String> csvNames = new ArrayList<>();
+        for (final MultipartFile csvFile : csvFiles) {
+            csvNames.add(sheetNameFrom(csvFile.getOriginalFilename()));
+        }
+
+        return readInto(source, csvNames, csvFiles);
+    }
+
+    /**
+     * Reads the given CSV resources — one sheet per resource — into whatever parse target the source step
+     * carries.
+     *
+     * <p>Internal: called by {@link Builder.Source#fromResources(List)} (and, with a single-element list, by
+     * {@code fromResource(...)}).</p>
+     *
+     * <p>Guarded exactly like the multipart back-end above, and for the same reason. The extension check
+     * also rejects a resource reporting no file name, which is what makes the sheet-name derivation below
+     * safe.</p>
+     *
+     * @param source   the configured source step
+     * @param csvFiles the CSV resources (one resource becomes one sheet)
+     * @param <R>      the parsed result type
+     * @return the parsed workbook object or row collection
+     * @throws PxlException                       if {@code csvFiles} is {@code null} or empty or holds a
+     *                                            {@code null} element, a {@code sheet(...)} parse target is
+     *                                            given more than one resource, a resource cannot be read, or
+     *                                            parsing fails
+     * @throws HttpMediaTypeNotSupportedException if any resource reports no file name, or its extension is
+     *                                            not {@code .csv}
+     */
+    @PxlPerformanceLogging(TAG)
+    public <R> R importCsvFromResources(@NotNull final Builder.Source<R> source,
+                                        @NotEmpty final List<@NotNull Resource> csvFiles)
+            throws PxlException, HttpMediaTypeNotSupportedException {
+
+        validateCsvSources(csvFiles);
+
+        // rejects a null element too, so the getFilename() calls below are safe
+        for (final Resource csvFile : csvFiles) {
+            PxlImportSupport.validateCsvExtension(csvFile);
+        }
+
+        final List<String> csvNames = new ArrayList<>();
+        for (final Resource csvFile : csvFiles) {
+            csvNames.add(sheetNameFrom(csvFile.getFilename()));
+        }
+
+        return readInto(source, csvNames, csvFiles);
+    }
+
+    /**
+     * Rejects a source list that bean validation would have rejected, for components built plainly.
+     *
+     * @param csvFiles the source list handed to a back-end
+     * @throws PxlNullPointerException if {@code csvFiles} is {@code null}
+     * @throws PxlArgumentException    if {@code csvFiles} is empty
+     */
+    private static void validateCsvSources(final List<?> csvFiles)
+            throws PxlNullPointerException, PxlArgumentException {
+
+        PxlArgumentSupport.requireNonNull(csvFiles, "csvFiles");
+        if (csvFiles.isEmpty()) {
+            throw new PxlArgumentException("at least one CSV file must be specified");
+        }
+    }
+
+    /**
+     * Derives a sheet name from a CSV source's file name: the base name, NFC-normalized and trimmed.
+     *
+     * @param sourceFilename the source's file name (non-blank: the extension check has already run)
+     * @return the sheet name
+     */
+    private static String sheetNameFrom(final String sourceFilename) {
+
+        return Normalizer.normalize(FilenameUtils.getBaseName(sourceFilename), Normalizer.Form.NFC).trim();
+    }
+
+    /**
+     * Opens every source and parses them into the source step's target, one sheet per source.
+     *
+     * <p>Shared by both back-ends so the two cannot drift apart: uploads and resources differ only in where
+     * the streams and the file names come from, and both are {@link InputStreamSource}s, so everything past
+     * that point is one path. Every stream opened is closed here, whether the parse succeeded or not.</p>
+     *
+     * <p>The two lists line up by construction — the caller builds {@code csvNames} by walking
+     * {@code csvSources} in order, and the loop below walks the same list again — which matters because the
+     * core's {@code fromStreams} pairs them positionally without checking their lengths.</p>
+     *
+     * @param source     the configured source step (already validated)
+     * @param csvNames   the resolved sheet names, in source order
+     * @param csvSources the uploads or resources to read
+     * @param <R>        the parsed result type
+     * @return the parsed workbook object or row collection
+     * @throws PxlException if a source cannot be read or parsing fails
+     */
+    private static <R> R readInto(final Builder.Source<R> source,
+                                  final List<String> csvNames,
+                                  final List<? extends InputStreamSource> csvSources)
+            throws PxlException {
+
         final List<InputStream> csvStreams = new ArrayList<>();
         try {
-            for (final MultipartFile csvFile : csvFiles) {
-                csvNames.add(Normalizer.normalize(FilenameUtils.getBaseName(csvFile.getOriginalFilename()), Normalizer.Form.NFC).trim());
-                csvStreams.add(new BufferedInputStream(csvFile.getInputStream()));
+            for (final InputStreamSource csvSource : csvSources) {
+                csvStreams.add(new BufferedInputStream(csvSource.getInputStream()));
             }
 
             return source.coreSource.fromStreams(csvNames, csvStreams);
@@ -151,22 +259,25 @@ public class PxlCsvImporter {
     }
 
     /**
-     * Fluent builder for multipart CSV imports, created via {@link PxlCsvImporter#importCsv()}.
+     * Fluent builder for CSV imports, created via {@link PxlCsvImporter#importCsv()}.
      *
      * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlCsvImportBuilder} shape — optional
      * {@link #workbookName(String)}/{@link #override(PxlImportWorkbookOption)}, then a parse target
      * ({@link #workbook(Class)} or one of the {@code sheet(...)} forms) yielding a typed {@link Source}, then
      * a terminal — and swaps the core's file/stream terminals for the Spring-facing
-     * {@link Source#fromMultipartFile(MultipartFile)} / {@link Source#fromMultipartFiles(List)}.</p>
+     * {@link Source#fromMultipartFile(MultipartFile)} / {@link Source#fromMultipartFiles(List)} and
+     * {@link Source#fromResource(Resource)} / {@link Source#fromResources(List)}.</p>
      *
-     * <p>Each CSV upload becomes one sheet, named after its file (base name, NFC-normalized). The workbook
-     * form accepts several uploads; the sheet form accepts exactly one. The result type is carried through the
+     * <p>Each CSV source becomes one sheet, named after its file (base name, NFC-normalized). The workbook
+     * form accepts several sources; the sheet form accepts exactly one. The result type is carried through the
      * generics, so no cast is needed at the call site:</p>
      *
      * <pre>{@code
      * ReportDto report = pxlSpring.importCsv().workbook(ReportDto.class).fromMultipartFiles(uploads);
      * List<User> users = pxlSpring.importCsv().sheet(User.class).fromMultipartFile(upload);
      * Set<User> unique = pxlSpring.importCsv().sheet(User.class, Set.class).fromMultipartFile(upload);
+     * List<User> seed = pxlSpring.importCsv().sheet(User.class)
+     *         .fromResource(new ClassPathResource("seed/Users.csv"));
      * }</pre>
      *
      * <p>The builder holds the collected arguments only; the terminals delegate straight back to the enclosing
@@ -211,7 +322,7 @@ public class PxlCsvImporter {
          * (Optional)
          *
          * <p>Unlike {@link PxlExcelImporter.Builder#workbookName(String)} there is no file-name fallback: a
-         * CSV upload's file name names its <em>sheet</em>, not the workbook. Ignored by the
+         * CSV source's file name names its <em>sheet</em>, not the workbook. Ignored by the
          * {@code sheet(...)} forms, which produce no workbook object.</p>
          *
          * @param workbookName the workbook name, or {@code null}
@@ -238,7 +349,7 @@ public class PxlCsvImporter {
         // ----- parse target -----
 
         /**
-         * Parses the uploads into an object of the given {@code @PxlWorkbook}-annotated class, one sheet per
+         * Parses the sources into an object of the given {@code @PxlWorkbook}-annotated class, one sheet per
          * CSV.
          *
          * @param workbookClass the {@code @PxlWorkbook}-annotated target class
@@ -253,7 +364,7 @@ public class PxlCsvImporter {
         }
 
         /**
-         * Parses a single CSV upload into a {@link List} of rows.
+         * Parses a single CSV source into a {@link List} of rows.
          *
          * @param rowClass the row class each record is bound to
          * @param <T>      the row type
@@ -267,7 +378,7 @@ public class PxlCsvImporter {
         }
 
         /**
-         * Parses a single CSV upload into the requested collection type.
+         * Parses a single CSV source into the requested collection type.
          *
          * <p>{@code C} binds from the {@code collectionClass} literal, and a literal such as {@code Set.class}
          * is a {@code Class<Set>} — the raw type — so the parsed result arrives raw too. Assigning it to a
@@ -289,8 +400,8 @@ public class PxlCsvImporter {
         }
 
         /**
-         * Terminal source step for a multipart CSV import: holds the parse target chosen on the enclosing
-         * {@link Builder} and reads it from the uploaded file(s).
+         * Terminal source step for a CSV import: holds the parse target chosen on the enclosing
+         * {@link Builder} and reads it from the uploaded file(s) or {@link Resource}(s).
          *
          * <p>Obtained only from {@code workbook(...)}/{@code sheet(...)}: picking a parse target is what
          * produces this step, and its type parameter is what carries the result type through to the
@@ -384,6 +495,53 @@ public class PxlCsvImporter {
                     throws PxlException, HttpMediaTypeNotSupportedException {
 
                 return importer.importCsvFromMultipartFiles(this, csvFiles);
+            }
+
+            /**
+             * Reads a single CSV resource and returns the parsed result.
+             *
+             * <p>The one-resource case of {@link #fromResources(List)}, and the non-HTTP counterpart of
+             * {@link #fromMultipartFile(MultipartFile)} — for a file on disk ({@code FileSystemResource}), a
+             * packaged one ({@code ClassPathResource}), or anything else behind Spring's {@link Resource}
+             * abstraction.</p>
+             *
+             * <p>The resource must report a file name: it names the sheet, and it is what the extension is
+             * read from. One that does not (a bare {@code ByteArrayResource}, say) is rejected rather than
+             * let through unchecked.</p>
+             *
+             * @param csvFile the CSV resource
+             * @return the parsed workbook object or row collection
+             * @throws PxlException                       if {@code csvFile} is {@code null}, the resource
+             *                                            cannot be read, or parsing fails
+             * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its
+             *                                            extension is not {@code .csv}
+             */
+            public R fromResource(final Resource csvFile)
+                    throws PxlException, HttpMediaTypeNotSupportedException {
+
+                return fromResources(Collections.singletonList(csvFile));
+            }
+
+            /**
+             * Reads the given CSV resources — one sheet per resource — and returns the parsed result.
+             *
+             * <p>The non-HTTP counterpart of {@link #fromMultipartFiles(List)}, and identical to it in every
+             * other respect: the {@code sheet(...)} forms accept exactly one resource, and each resource's
+             * base file name becomes its sheet name.</p>
+             *
+             * @param csvFiles the CSV resources
+             * @return the parsed workbook object or row collection
+             * @throws PxlException                       if {@code csvFiles} is {@code null}, a
+             *                                            {@code sheet(...)} form is given more than one
+             *                                            resource, a resource cannot be read, or parsing
+             *                                            fails
+             * @throws HttpMediaTypeNotSupportedException if any resource reports no file name, or its
+             *                                            extension is not {@code .csv}
+             */
+            public R fromResources(final List<Resource> csvFiles)
+                    throws PxlException, HttpMediaTypeNotSupportedException {
+
+                return importer.importCsvFromResources(this, csvFiles);
             }
 
         }

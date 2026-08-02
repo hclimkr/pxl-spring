@@ -682,6 +682,21 @@ public int importCompanySheets(@RequestParam MultipartFile file) throws Exceptio
 }
 ```
 
+**업로드가 아닌 엑셀 파일**
+
+`fromResource(...)`는 스프링 `Resource`면 무엇이든 받는다 — 디스크의 파일, 클래스패스 항목, 그 추상화 뒤의 무엇이든. 그래서 배치 잡·시드 로더·테스트에 `MultipartFile`이 필요 없다. 다만 리소스에 파일명이 있어야 한다 — 검증 대상인 확장자와 워크북명 폴백이 거기서 나온다.
+
+```java
+@Scheduled(cron = "0 0 3 * * *")
+public void importNightlyFeed() throws Exception {
+    Company company = pxlSpring.importExcel()
+                               .workbook(Company.class)
+                               .fromResource(new FileSystemResource("/var/feed/company.xlsx"));
+
+    save(company);
+}
+```
+
 ### `PxlCsvImporter`
 
 **단일 시트 업로드**
@@ -723,6 +738,23 @@ public int importSemicolonCsv(@RequestParam MultipartFile csvFile) throws Except
                                         .fromMultipartFile(csvFile);
 
     return employees.size();
+}
+```
+
+**업로드가 아닌 CSV 파일**
+
+`fromResource(...)` / `fromResources(...)`는 스프링 `Resource`에 대한 같은 짝이다. 리소스의 파일명이 곧 시트명이므로 여기서도 파일명이 있어야 한다.
+
+```java
+@EventListener(ApplicationReadyEvent.class)
+public void loadSeedData() throws Exception {
+    Company company = pxlSpring.importCsv()
+                               .workbook(Company.class)
+                               .fromResources(Arrays.asList(
+                                       new ClassPathResource("seed/Employees.csv"),
+                                       new ClassPathResource("seed/Departments.csv")));
+
+    save(company);
 }
 ```
 
@@ -819,7 +851,7 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 
 ### `PxlExcelImporter`
 
-업로드된 Multipart 엑셀(`.xls` / `.xlsx`)을 워크북 객체 또는 시트 컬렉션으로 변환한다.
+엑셀 소스(`.xls` / `.xlsx`) — Multipart 업로드 또는 스프링 `Resource` — 를 워크북 객체 또는 시트 컬렉션으로 변환한다.
 
 ```java
 // 시작
@@ -837,14 +869,16 @@ Builder / Source<R> workbookName(String workbookName)
 Builder / Source<R> override(PxlImportWorkbookOption option)
 
 // 실행
-R fromMultipartFile(MultipartFile excelFile)
+R fromMultipartFile(MultipartFile excelFile)  // 업로드
+R fromResource(Resource excelFile)            // 파일, 클래스패스 항목, 그 밖의 모든 Resource
 ```
 
 - 컬렉션 타입을 지정하는 형식에는 `List.class` / `Set.class` 등을 넘긴다. 행 클래스만 주는 형식은 `List`로 고정이다.
+- `Resource`에는 파일명이 있어야 한다 — 검증 대상인 확장자가 거기서 나온다. 파일명이 없는 것(예: 그냥 만든 `ByteArrayResource`)은 지원하지 않는 확장자와 마찬가지로 `HttpMediaTypeNotSupportedException`으로 거절된다.
 
 ### `PxlCsvImporter`
 
-업로드된 Multipart CSV(`.csv`)를 워크북 객체 또는 시트 컬렉션으로 변환한다.
+CSV 소스(`.csv`) — Multipart 업로드 또는 스프링 `Resource` — 를 워크북 객체 또는 시트 컬렉션으로 변환한다.
 
 ```java
 // 시작
@@ -862,9 +896,12 @@ Builder / Source<R> override(PxlImportWorkbookOption option)
 // 실행
 R fromMultipartFile(MultipartFile csvFile)          // 업로드 1개
 R fromMultipartFiles(List<MultipartFile> csvFiles)  // 업로드 여러 개
+R fromResource(Resource csvFile)                    // 리소스 1개
+R fromResources(List<Resource> csvFiles)            // 리소스 여러 개
 ```
 
-- `workbook(...)` 형식은 업로드 여러 개를 시트별로 나눠 담고, `sheet(...)` 형식은 정확히 하나만 받는다. `sheet(...)` 형식에서 `fromMultipartFiles(...)`로 파일을 둘 이상 넘기면 `PxlArgumentException`이 발생한다.
+- `workbook(...)` 형식은 소스 여러 개를 시트별로 나눠 담고, `sheet(...)` 형식은 정확히 하나만 받는다. `sheet(...)` 형식에서 `fromMultipartFiles(...)` / `fromResources(...)`로 파일을 둘 이상 넘기면 `PxlArgumentException`이 발생한다.
+- 여기서도 `Resource`에는 파일명이 있어야 하며, 그 이름이 두 몫을 한다 — 검증 대상인 확장자이자 시트명이다.
 
 ---
 

@@ -9,21 +9,25 @@ import io.github.hclimkr.pxl.option.PxlExportWorkbookOption;
 import io.github.hclimkr.pxl.option.PxlImportWorkbookOption;
 import io.github.hclimkr.pxl.spring.PxlSpring;
 import io.github.hclimkr.pxl.spring.tcdata.TestMultiSheetWorkbook;
+import io.github.hclimkr.pxl.spring.tcdata.TestPaths;
 import io.github.hclimkr.pxl.spring.tcdata.TestUser;
 import io.github.hclimkr.pxl.spring.tcdata.TestWorkbook;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.github.hclimkr.pxl.spring.component.PxlExcelExporterTests.admins;
@@ -71,6 +75,38 @@ class PxlExcelImporterTests {
      */
     private static MultipartFile throwingFile(final String filename) {
         return new MockMultipartFile("file", filename, null, "x".getBytes(StandardCharsets.UTF_8)) {
+            @Override
+            public InputStream getInputStream() throws IOException {
+                throw new IOException("simulated read failure");
+            }
+        };
+    }
+
+    /**
+     * A resource reporting the given file name. {@link ByteArrayResource} reports none of its own, and a
+     * nameless resource is refused, so the name has to be supplied by an override.
+     */
+    private static Resource resource(final String filename, final byte[] content) {
+        return new ByteArrayResource(content) {
+            @Override
+            public String getFilename() {
+                return filename;
+            }
+        };
+    }
+
+    /**
+     * An Excel resource whose {@link Resource#getInputStream()} fails — the {@code IOException} →
+     * {@link PxlIOException} translation path for the resource source form. Its extension still validates, so
+     * the failure lands on the stream read rather than the extension check.
+     */
+    private static Resource throwingResource(final String filename) {
+        return new ByteArrayResource("x".getBytes(StandardCharsets.UTF_8)) {
+            @Override
+            public String getFilename() {
+                return filename;
+            }
+
             @Override
             public InputStream getInputStream() throws IOException {
                 throw new IOException("simulated read failure");
@@ -457,5 +493,172 @@ class PxlExcelImporterTests {
 
         assertThat(parsedUsers).extracting(TestUser::getName).containsExactly("Alice", "Bob");
         assertThat(parsedAdmins).extracting(TestUser::getName).containsExactly("Carol");
+    }
+
+    // ----- the Resource source form -----
+    // fromResource(...) is the non-HTTP half of the same operation: the batch job, the classpath seed, the
+    // test fixture. Everything after the source is opened is shared with fromMultipartFile(...), so what is
+    // swept here is the part that is not: extension validation, name derivation, and stream handling.
+
+    @Test
+    void importExcelSheet_fromResource_roundTrips() throws PxlException, HttpMediaTypeNotSupportedException {
+        final List<TestUser> result = pxlSpring.importExcel()
+                .sheet(TestUser.class, "Users")
+                .fromResource(resource("users.xlsx", sheetXlsx("Users")));
+
+        assertThat(result).extracting(TestUser::getName).containsExactly("Alice", "Bob");
+        assertThat(result).extracting(TestUser::getAge).containsExactly(30, 25);
+    }
+
+    @Test
+    void importExcelWorkbook_fromResource_roundTrips() throws PxlException, HttpMediaTypeNotSupportedException {
+        final TestWorkbook back = pxlSpring.importExcel()
+                .workbook(TestWorkbook.class)
+                .fromResource(resource("wb.xlsx", workbookXlsx()));
+
+        assertThat(back.getUsers()).extracting(TestUser::getName).containsExactly("Alice", "Bob");
+    }
+
+    @Test
+    void importExcelWorkbook_fromResource_derivesNameFromResourceFilename() throws PxlException, HttpMediaTypeNotSupportedException {
+        // the same fallback as the upload form, read off Resource.getFilename() instead
+        final TestWorkbook back = pxlSpring.importExcel()
+                .workbook(TestWorkbook.class)
+                .fromResource(resource("wb.xlsx", workbookXlsx()));
+
+        assertThat(back.getWorkbookName()).isEqualTo("wb");
+    }
+
+    @Test
+    void importExcelWorkbook_fromResource_withExplicitName_skipsFilenameDerivation() throws PxlException, HttpMediaTypeNotSupportedException {
+        final TestWorkbook back = pxlSpring.importExcel()
+                .workbookName("Explicit")
+                .workbook(TestWorkbook.class)
+                .fromResource(resource("wb.xlsx", workbookXlsx()));
+
+        assertThat(back.getWorkbookName()).isEqualTo("Explicit");
+    }
+
+    @Test
+    void importExcelFromFileSystemResource_roundTrips() throws PxlException, HttpMediaTypeNotSupportedException {
+        // the case the terminal exists for: a real file on disk, read back without going near a Pxl instance
+        // of the caller's own. Written through the export side's own file terminal, so this is a full
+        // file-to-object round trip.
+        final File file = TestPaths.exportFile("importExcelFromFileSystemResource.xlsx");
+        pxlSpring.exportExcel().sheet(TestUser.class, users(), "Users").toFile(file);
+
+        final List<TestUser> result = pxlSpring.importExcel()
+                .sheet(TestUser.class, "Users")
+                .fromResource(new FileSystemResource(file));
+
+        assertThat(result).extracting(TestUser::getName).containsExactly("Alice", "Bob");
+    }
+
+    @Test
+    void importExcelFromResource_unsupportedExtension_throwsHttpMediaTypeNotSupported() {
+        assertThatThrownBy(() -> pxlSpring.importExcel()
+                .workbook(TestWorkbook.class)
+                .fromResource(resource("users.txt", sheetXlsx("Users"))))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+    }
+
+    @Test
+    void importExcelFromNamelessResource_throwsHttpMediaTypeNotSupported() throws PxlException {
+        // A bare ByteArrayResource reports no file name, so its extension cannot be read - and an extension
+        // that cannot be read cannot be checked. Refused rather than let through unchecked; a caller holding
+        // bare bytes has to wrap them in a resource that reports a name.
+        final byte[] xlsx = sheetXlsx("Users");
+
+        assertThatThrownBy(() -> pxlSpring.importExcel()
+                .sheet(TestUser.class, "Users")
+                .fromResource(new ByteArrayResource(xlsx)))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+    }
+
+    @Test
+    void importExcelFromResource_whenReadFails_throwsPxlIOException() {
+        assertThatThrownBy(() -> pxlSpring.importExcel()
+                .workbook(TestWorkbook.class)
+                .fromResource(throwingResource("wb.xlsx")))
+                .isInstanceOf(PxlIOException.class);
+    }
+
+    @Test
+    void nullResourceOnPlainComponent_throwsPxlNullPointerNotRawNpe() {
+        // as with the upload form: @NotNull never fires on a plain instance, so PxlImportSupport's guard is
+        // what keeps this inside the library's exception contract
+        assertThatThrownBy(() -> pxlSpring.importExcel()
+                .workbook(TestWorkbook.class)
+                .fromResource(null))
+                .isInstanceOf(PxlNullPointerException.class);
+    }
+
+    @Test
+    void importExcelFromResource_closesTheStreamItOpened() throws PxlException, HttpMediaTypeNotSupportedException {
+        // The finally block in readInto owns every stream it opens. This matters more for resources than for
+        // uploads: a FileSystemResource hands out a real file handle, and a batch job importing in a loop
+        // would exhaust the descriptor table if they were left open.
+        final AtomicBoolean closed = new AtomicBoolean(false);
+        final byte[] xlsx = sheetXlsx("Users");
+
+        final Resource tracked = new ByteArrayResource(xlsx) {
+            @Override
+            public String getFilename() {
+                return "users.xlsx";
+            }
+
+            @Override
+            public InputStream getInputStream() {
+                return new ByteArrayInputStream(xlsx) {
+                    @Override
+                    public void close() throws IOException {
+                        closed.set(true);
+                        super.close();
+                    }
+                };
+            }
+        };
+
+        pxlSpring.importExcel().sheet(TestUser.class, "Users").fromResource(tracked);
+
+        assertThat(closed).as("the stream opened for the resource must be closed").isTrue();
+    }
+
+    @Test
+    void importExcelFromResource_andFromUpload_produceTheSameResult() throws PxlException, HttpMediaTypeNotSupportedException {
+        // Pins the claim the two back-ends rest on: past the point the source is opened they are one path
+        // (readInto), so the same bytes under the same file name must parse identically either way.
+        final byte[] xlsx = workbookXlsx();
+
+        final TestWorkbook fromUpload = pxlSpring.importExcel()
+                .workbook(TestWorkbook.class)
+                .fromMultipartFile(file("wb.xlsx", xlsx));
+        final TestWorkbook fromResource = pxlSpring.importExcel()
+                .workbook(TestWorkbook.class)
+                .fromResource(resource("wb.xlsx", xlsx));
+
+        assertThat(fromResource.getWorkbookName()).isEqualTo(fromUpload.getWorkbookName());
+        assertThat(fromResource.getUsers())
+                .extracting(TestUser::getName)
+                .containsExactlyElementsOf(
+                        fromUpload.getUsers().stream().map(TestUser::getName).collect(Collectors.toList()));
+    }
+
+    @Test
+    void importExcelFromResource_nfcNormalizesTheDerivedWorkbookName() throws PxlException, HttpMediaTypeNotSupportedException {
+        // The name derivation was pulled into a helper shared by both source forms; this pins that the NFC
+        // normalization survived the move. macOS hands out decomposed file names, so a local file and an
+        // upload can disagree on the bytes while naming the same thing.
+        //
+        // Spelled with escapes on purpose: written literally, this source file would already hold the
+        // composed form on both sides, and the test would pass whether or not anything normalized.
+        final String decomposed = "\u1100\u1161";   // HANGUL CHOSEONG KIYEOK + JUNGSEONG A
+        final String composed = "\uAC00";           // the same syllable, precomposed
+
+        final TestWorkbook back = pxlSpring.importExcel()
+                .workbook(TestWorkbook.class)
+                .fromResource(resource(decomposed + ".xlsx", workbookXlsx()));
+
+        assertThat(back.getWorkbookName()).isEqualTo(composed);
     }
 }

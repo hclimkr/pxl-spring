@@ -2,6 +2,8 @@ package io.github.hclimkr.pxl.spring.internal.support;
 
 import io.github.hclimkr.pxl.exception.PxlNullPointerException;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,11 +18,29 @@ import static org.assertj.core.api.Assertions.*;
  * by the importer component tests; this pins down the class's own contract: it is a non-instantiable
  * static-helper holder whose private constructor rejects reflective instantiation, and its extension
  * validators accept every supported extension case-insensitively while rejecting everything else.
+ *
+ * <p>Both source forms are swept, because they read the file name off different methods —
+ * {@code MultipartFile.getOriginalFilename()} and {@code Resource.getFilename()} — and only the second can
+ * legitimately be {@code null} on a perfectly usable source. That case is rejected on purpose; see
+ * {@code namelessResource_isRejected}.</p>
  */
 class PxlImportSupportTests {
 
     private static MultipartFile file(final String filename) {
         return new MockMultipartFile("file", filename, null, "x".getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * A resource that reports the given file name. {@link ByteArrayResource} itself reports none, so the
+     * name has to be supplied by an override — which is also what a caller holding bare bytes has to do.
+     */
+    private static Resource resource(final String filename) {
+        return new ByteArrayResource("x".getBytes(StandardCharsets.UTF_8)) {
+            @Override
+            public String getFilename() {
+                return filename;
+            }
+        };
     }
 
     /**
@@ -106,11 +126,77 @@ class PxlImportSupportTests {
     void nullUpload_isRejectedAsPxlNullPointerNotRawNpe() {
         // @NotNull on the components only fires through the Spring proxy, so the guard here is what keeps a
         // plainly built component inside the "every failure is a PxlException" contract
-        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension(null))
+        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension((MultipartFile) null))
                 .isInstanceOf(PxlNullPointerException.class)
                 .hasMessageContaining("excelFile");
 
-        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension(null))
+        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension((MultipartFile) null))
+                .isInstanceOf(PxlNullPointerException.class)
+                .hasMessageContaining("csvFile");
+    }
+
+    // ----- the same contract for the Resource source form -----
+
+    @Test
+    void validateExcelExtension_onResource_acceptsBothSupportedExtensions_caseInsensitively() {
+        assertThatCode(() -> {
+            PxlImportSupport.validateExcelExtension(resource("book.xls"));
+            PxlImportSupport.validateExcelExtension(resource("book.xlsx"));
+            PxlImportSupport.validateExcelExtension(resource("book.XLSX"));
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validateExcelExtension_onResource_rejectsOtherExtensions() {
+        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension(resource("book.csv")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+    }
+
+    @Test
+    void validateCsvExtension_onResource_acceptsCsvCaseInsensitively() {
+        assertThatCode(() -> {
+            PxlImportSupport.validateCsvExtension(resource("rows.csv"));
+            PxlImportSupport.validateCsvExtension(resource("rows.CSV"));
+        }).doesNotThrowAnyException();
+    }
+
+    @Test
+    void validateCsvExtension_onResource_rejectsOtherExtensions() {
+        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension(resource("rows.xlsx")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+    }
+
+    @Test
+    void namelessResource_isRejected() {
+        // A plain ByteArrayResource reports no file name at all - unlike a validated upload, which always has
+        // one. The extension cannot be read, so it cannot be checked, and the source is refused rather than
+        // let through unchecked. This is also what makes the importers' name derivation safe: past this
+        // check, getFilename() is known to be non-blank.
+        final Resource nameless = new ByteArrayResource("x".getBytes(StandardCharsets.UTF_8));
+
+        assertThat(nameless.getFilename()).isNull();
+
+        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension(nameless))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension(nameless))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+    }
+
+    @Test
+    void resourceWithNoExtension_isRejected() {
+        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension(resource("noextension")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension(resource("noextension")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+    }
+
+    @Test
+    void nullResource_isRejectedAsPxlNullPointerNotRawNpe() {
+        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension((Resource) null))
+                .isInstanceOf(PxlNullPointerException.class)
+                .hasMessageContaining("excelFile");
+
+        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension((Resource) null))
                 .isInstanceOf(PxlNullPointerException.class)
                 .hasMessageContaining("csvFile");
     }

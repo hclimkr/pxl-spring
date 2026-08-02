@@ -83,7 +83,7 @@ public class PxlSpring {
     }
 
     /**
-     * Starts a fluent multipart Excel import.
+     * Starts a fluent Excel import, from a multipart upload or a Spring {@code Resource}.
      *
      * @return a new builder bound to the Excel import component
      * @see PxlExcelImporter#importExcel()
@@ -94,7 +94,7 @@ public class PxlSpring {
     }
 
     /**
-     * Starts a fluent multipart CSV import.
+     * Starts a fluent CSV import, from multipart uploads or Spring {@code Resource}s.
      *
      * @return a new builder bound to the CSV import component
      * @see PxlCsvImporter#importCsv()

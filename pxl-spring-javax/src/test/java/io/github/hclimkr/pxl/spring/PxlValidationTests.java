@@ -288,6 +288,52 @@ class PxlValidationTests {
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
+    // ----- the same constraints on the Resource source form -----
+    // Each source form re-enters its component through a separate annotated back-end, so the multipart
+    // constraints above prove nothing about these. Both importers carry two back-ends for that reason.
+
+    @Test
+    void nullExcelResource_violatesNotNull() {
+        assertThatThrownBy(() ->
+                pxlExcelImporter.importExcel().workbook(TestWorkbook.class).fromResource(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void nullCsvResource_violatesNotNullElement() {
+        // fromResource(...) wraps the resource in a singleton list, so the null lands on the back-end's
+        // container-element constraint List<@NotNull Resource> rather than on @NotEmpty
+        assertThatThrownBy(() ->
+                pxlCsvImporter.importCsv().sheet(TestUser.class, List.class).fromResource(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void nullCsvResourceList_violatesNotNull() {
+        assertThatThrownBy(() ->
+                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromResources(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void emptyCsvResourceList_violatesNotEmpty() {
+        assertThatThrownBy(() ->
+                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromResources(Collections.emptyList()))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void facadeImportResource_violatesNotNull() {
+        // the facade hands back the proxied component's builder, so the resource terminals are validated
+        // through it too
+        assertThatThrownBy(() ->
+                pxlSpring.importExcel().workbook(TestWorkbook.class).fromResource(null))
+                .isInstanceOf(ConstraintViolationException.class);
+        assertThatThrownBy(() ->
+                pxlSpring.importCsv().sheet(TestUser.class, List.class).fromResource(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
     @Test
     void nullWorkbookObjectInZipEntry_throwsPxlNullPointer() {
         // the archive entries are collected by the fluent builder, which is a plain object rather than a

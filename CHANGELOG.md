@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Import from a Spring `Resource`, alongside the existing multipart terminals:
+  `fromResource(...)` on `importExcel()`, and `fromResource(...)` / `fromResources(...)`
+  on `importCsv()`. This covers the non-HTTP paths — a batch job reading a file off disk,
+  an initializer reading a classpath seed, a test reading a fixture — which previously had
+  no entry point here at all and forced callers to build their own core `Pxl` instance.
+  Everything else is unchanged: the same extension validation, the same name derivation
+  (a workbook-name fallback for Excel, a sheet name for CSV), the same option handling.
+  A resource must report a file name, because that is what the extension is read from; one
+  that does not, such as a bare `ByteArrayResource`, is rejected with
+  `HttpMediaTypeNotSupportedException` just like an unsupported extension.
+
 ### Changed
 
 - The contributing guide (`CONTRIBUTING.md` / `CONTRIBUTING_ko.md`) now states the

@@ -4,19 +4,29 @@ import io.github.hclimkr.pxl.PxlConstants;
 import io.github.hclimkr.pxl.exception.PxlNullPointerException;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.core.io.Resource;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Objects;
 
 /**
- * Shared multipart-upload helpers used by the import-family components.
+ * Shared source-validation helpers used by the import-family components.
  *
- * <p>Uploads are accepted or rejected on their file-name extension alone; content-type checks are
+ * <p>Sources are accepted or rejected on their file-name extension alone; content-type checks are
  * deliberately not applied, because browsers and OS registries report wildly inconsistent MIME types for
  * spreadsheet and CSV files.</p>
  *
- * <p>A {@code null} upload is rejected here with {@link PxlNullPointerException} rather than being left to
+ * <p>Both import source forms are covered — a multipart upload ({@link MultipartFile}) and a Spring
+ * {@link Resource} — and they differ in one way that matters here. A validated upload always has a file
+ * name, because the extension check itself is what proves it. A {@code Resource} need not: several
+ * implementations ({@code ByteArrayResource} and {@code InputStreamResource} among them) return
+ * {@code null} from {@link Resource#getFilename()}. Such a source is <strong>rejected</strong>, on the
+ * same {@link HttpMediaTypeNotSupportedException} as an unsupported extension: an extension that cannot be
+ * read cannot be checked, and letting it through would quietly drop the guarantee every other path
+ * enforces. Callers that hold nameless bytes should wrap them in a resource that reports a name.</p>
+ *
+ * <p>A {@code null} source is rejected here with {@link PxlNullPointerException} rather than being left to
  * blow up as a raw {@code NullPointerException} further in. The components' {@code @NotNull} bean validation
  * only fires when a call goes through the Spring proxy, so a component built plainly
  * ({@code new PxlExcelImporter()}, which is what {@code new PxlSpring()} does) would otherwise break the
@@ -44,7 +54,27 @@ public final class PxlImportSupport {
     public static void validateExcelExtension(final MultipartFile excelFile)
             throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
 
-        validateFileExtension(excelFile, "excelFile",
+        PxlArgumentSupport.requireNonNull(excelFile, "excelFile");
+
+        validateFileExtension(excelFile.getOriginalFilename(),
+                PxlConstants.FILENAME_EXTENSION_XLS, PxlConstants.FILENAME_EXTENSION_XLSX);
+    }
+
+    /**
+     * Validates that the resource is present and has a supported Excel extension
+     * ({@code .xls}/{@code .xlsx}).
+     *
+     * @param excelFile the resource to check
+     * @throws PxlNullPointerException            if {@code excelFile} is {@code null}
+     * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its extension is
+     *                                            unsupported
+     */
+    public static void validateExcelExtension(final Resource excelFile)
+            throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
+
+        PxlArgumentSupport.requireNonNull(excelFile, "excelFile");
+
+        validateFileExtension(excelFile.getFilename(),
                 PxlConstants.FILENAME_EXTENSION_XLS, PxlConstants.FILENAME_EXTENSION_XLSX);
     }
 
@@ -58,31 +88,44 @@ public final class PxlImportSupport {
     public static void validateCsvExtension(final MultipartFile csvFile)
             throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
 
-        validateFileExtension(csvFile, "csvFile", PxlConstants.FILENAME_EXTENSION_CSV);
+        PxlArgumentSupport.requireNonNull(csvFile, "csvFile");
+
+        validateFileExtension(csvFile.getOriginalFilename(), PxlConstants.FILENAME_EXTENSION_CSV);
     }
 
     /**
-     * Validates that the upload is present, then checks its extension against the supported set,
-     * case-insensitively.
+     * Validates that the resource is present and has a {@code .csv} extension.
      *
-     * <p>A {@code null} original file name yields a {@code null} extension, which is reported as an empty
-     * extension rather than the literal {@code "null"} — and, because that is rejected here, the callers'
-     * later {@code getOriginalFilename()} use is safe.</p>
-     *
-     * @param multipartFile       the file to check
-     * @param parameterName       the caller's parameter name, used in the {@code null} message
-     * @param supportedExtensions the accepted extensions, without the leading dot
-     * @throws PxlNullPointerException            if {@code multipartFile} is {@code null}
-     * @throws HttpMediaTypeNotSupportedException if the extension is missing or not in the supported set
+     * @param csvFile the resource to check
+     * @throws PxlNullPointerException            if {@code csvFile} is {@code null}
+     * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its extension is
+     *                                            not {@code .csv}
      */
-    private static void validateFileExtension(final MultipartFile multipartFile,
-                                              final String parameterName,
-                                              final String... supportedExtensions)
+    public static void validateCsvExtension(final Resource csvFile)
             throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
 
-        PxlArgumentSupport.requireNonNull(multipartFile, parameterName);
+        PxlArgumentSupport.requireNonNull(csvFile, "csvFile");
 
-        final String fileExtension = FilenameUtils.getExtension(multipartFile.getOriginalFilename());
+        validateFileExtension(csvFile.getFilename(), PxlConstants.FILENAME_EXTENSION_CSV);
+    }
+
+    /**
+     * Checks a source's file name extension against the supported set, case-insensitively.
+     *
+     * <p>A {@code null} file name yields a {@code null} extension, which is reported as an empty extension
+     * rather than the literal {@code "null"} — and, because that is rejected here, the callers' later use of
+     * the same name is safe. That is what lets both importers derive a workbook or sheet name from the file
+     * name without a further {@code null} check.</p>
+     *
+     * @param filename            the source's file name, or {@code null} if it reports none
+     * @param supportedExtensions the accepted extensions, without the leading dot
+     * @throws HttpMediaTypeNotSupportedException if the extension is missing or not in the supported set
+     */
+    private static void validateFileExtension(final String filename,
+                                              final String... supportedExtensions)
+            throws HttpMediaTypeNotSupportedException {
+
+        final String fileExtension = FilenameUtils.getExtension(filename);
 
         if (StringUtils.isNotBlank(fileExtension)) {
             for (final String supportedExtension : supportedExtensions) {

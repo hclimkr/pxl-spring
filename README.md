@@ -682,6 +682,21 @@ public int importCompanySheets(@RequestParam MultipartFile file) throws Exceptio
 }
 ```
 
+**An Excel file that is not an upload**
+
+`fromResource(...)` takes any Spring `Resource` — a file on disk, a classpath entry, anything else behind that abstraction — so batch jobs, seed loaders and tests need no `MultipartFile`. The resource must report a file name: it carries the extension that is validated, and the workbook-name fallback.
+
+```java
+@Scheduled(cron = "0 0 3 * * *")
+public void importNightlyFeed() throws Exception {
+    Company company = pxlSpring.importExcel()
+                               .workbook(Company.class)
+                               .fromResource(new FileSystemResource("/var/feed/company.xlsx"));
+
+    save(company);
+}
+```
+
 ### `PxlCsvImporter`
 
 **A single sheet uploaded**
@@ -723,6 +738,23 @@ public int importSemicolonCsv(@RequestParam MultipartFile csvFile) throws Except
                                         .fromMultipartFile(csvFile);
 
     return employees.size();
+}
+```
+
+**CSV files that are not uploads**
+
+`fromResource(...)` / `fromResources(...)` are the same pair for any Spring `Resource`. A resource's file name still names its sheet, so it has to report one.
+
+```java
+@EventListener(ApplicationReadyEvent.class)
+public void loadSeedData() throws Exception {
+    Company company = pxlSpring.importCsv()
+                               .workbook(Company.class)
+                               .fromResources(Arrays.asList(
+                                       new ClassPathResource("seed/Employees.csv"),
+                                       new ClassPathResource("seed/Departments.csv")));
+
+    save(company);
 }
 ```
 
@@ -819,7 +851,7 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 
 ### `PxlExcelImporter`
 
-Converts a multipart Excel upload (`.xls` / `.xlsx`) into a workbook object or a sheet collection.
+Converts an Excel source (`.xls` / `.xlsx`) — a multipart upload or a Spring `Resource` — into a workbook object or a sheet collection.
 
 ```java
 // start
@@ -837,14 +869,16 @@ Builder / Source<R> workbookName(String workbookName)
 Builder / Source<R> override(PxlImportWorkbookOption option)
 
 // execution
-R fromMultipartFile(MultipartFile excelFile)
+R fromMultipartFile(MultipartFile excelFile)  // an upload
+R fromResource(Resource excelFile)            // a file, a classpath entry, any Resource
 ```
 
 - For the forms that take a collection type, pass `List.class` / `Set.class` and so on. The forms that take only a row class are fixed to `List`.
+- A `Resource` must report a file name — it carries the extension that is validated. One that does not, such as a bare `ByteArrayResource`, is rejected with `HttpMediaTypeNotSupportedException` just like an unsupported extension.
 
 ### `PxlCsvImporter`
 
-Converts a multipart CSV upload (`.csv`) into a workbook object or a sheet collection.
+Converts a CSV source (`.csv`) — a multipart upload or a Spring `Resource` — into a workbook object or a sheet collection.
 
 ```java
 // start
@@ -862,9 +896,12 @@ Builder / Source<R> override(PxlImportWorkbookOption option)
 // execution
 R fromMultipartFile(MultipartFile csvFile)          // one upload
 R fromMultipartFiles(List<MultipartFile> csvFiles)  // several uploads
+R fromResource(Resource csvFile)                    // one resource
+R fromResources(List<Resource> csvFiles)            // several resources
 ```
 
-- The `workbook(...)` form spreads several uploads across sheets; the `sheet(...)` forms accept exactly one. With a `sheet(...)` form, passing more than one file to `fromMultipartFiles(...)` raises `PxlArgumentException`.
+- The `workbook(...)` form spreads several sources across sheets; the `sheet(...)` forms accept exactly one. With a `sheet(...)` form, passing more than one file to `fromMultipartFiles(...)` / `fromResources(...)` raises `PxlArgumentException`.
+- A `Resource` must report a file name here too, and it does double duty: it carries the validated extension, and it names the sheet.
 
 ---
 
