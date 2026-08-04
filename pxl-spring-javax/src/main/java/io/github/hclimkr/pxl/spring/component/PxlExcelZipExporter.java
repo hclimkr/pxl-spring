@@ -48,8 +48,8 @@ import java.util.zip.ZipOutputStream;
  * <pre>{@code
  * pxlSpring.exportExcelZip()
  *         .workbook(januaryReport)
- *         .workbook(februaryReport, option, "2월보고서")
- *         .toResponse(response, "분기보고서");
+ *         .workbook(februaryReport, option, "February")
+ *         .toResponse(response, "quarterly-report");
  * }</pre>
  *
  * <p>An entry's file name falls back to the workbook object name, then to {@code Pxl{index}}. It must be a
@@ -468,8 +468,8 @@ public class PxlExcelZipExporter {
      * <pre>{@code
      * pxlSpring.exportExcelZip()
      *         .workbook(januaryReport)
-     *         .workbook(februaryReport, option, "2월보고서")
-     *         .toResponse(response, "분기보고서");
+     *         .workbook(februaryReport, option, "February")
+     *         .toResponse(response, "quarterly-report");
      * }</pre>
      */
     public static final class Builder {

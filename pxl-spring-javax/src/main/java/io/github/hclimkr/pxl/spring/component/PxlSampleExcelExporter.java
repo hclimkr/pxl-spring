@@ -48,7 +48,7 @@ import java.util.Optional;
  *
  * <pre>{@code
  * pxlSpring.exportSampleExcel().workbook(ReportDto.class).toResponse(response, null);  // "PxlSample"
- * pxlSpring.exportSampleExcel().sheet(User.class, "Users").toResponseEntity("샘플");
+ * pxlSpring.exportSampleExcel().sheet(User.class, "Users").toResponseEntity("sample");
  * pxlSpring.exportSampleExcel().sheet(User.class, "Users").sheet(Order.class, "Orders").toFile(file);
  * }</pre>
  *
@@ -271,7 +271,7 @@ public class PxlSampleExcelExporter {
      * the source, option and terminal methods.</p>
      *
      * <p>Not thread-safe, and single-use per terminal call. Example:
-     * {@code pxlSpring.exportSampleExcel().sheet(User.class, "Users").toResponse(response, "샘플");}</p>
+     * {@code pxlSpring.exportSampleExcel().sheet(User.class, "Users").toResponse(response, "sample");}</p>
      */
     public static final class Builder {
 

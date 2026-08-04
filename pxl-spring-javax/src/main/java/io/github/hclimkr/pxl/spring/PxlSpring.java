@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
  *
  * <pre>{@code
  * List<User> users = pxlSpring.importExcel().sheet(User.class, "Users").fromMultipartFile(upload);
- * pxlSpring.exportExcel().sheet(User.class, users, "Users").toResponse(response, "보고서");
+ * pxlSpring.exportExcel().sheet(User.class, users, "Users").toResponse(response, "report");
  * pxlSpring.exportExcelZip().workbook(first).workbook(second).toResponseEntity("archive");
  * }</pre>
  *

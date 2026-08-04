@@ -240,8 +240,9 @@ public final class PxlExportSupport {
      * altogether. The {@code filename*} form is safe from that on its own because percent-encoding leaves
      * nothing dangerous behind, so this is the only place the risk exists.</p>
      *
-     * <p>Substituting rather than dropping keeps the extension and the length: {@code 보고서.xlsx} renders
-     * as {@code ___.xlsx} instead of collapsing to a bare {@code .xlsx}, so the result is never empty.</p>
+     * <p>Substituting rather than dropping keeps the extension and the length: a three-character Korean name
+     * ending in {@code .xlsx} renders as {@code ___.xlsx} instead of collapsing to a bare {@code .xlsx}, so
+     * the result is never empty.</p>
      *
      * @param filenameWithExtension the file name, extension included
      * @return an ASCII-only rendering of the same length

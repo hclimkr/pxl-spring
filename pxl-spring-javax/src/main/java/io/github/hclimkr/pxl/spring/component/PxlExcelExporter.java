@@ -44,7 +44,7 @@ import java.util.Optional;
  *
  * <pre>{@code
  * pxlSpring.exportExcel().workbook(reportDto).toResponse(response, null);   // name from @PxlWorkbook
- * pxlSpring.exportExcel().sheet(User.class, users, "Users").toResponseEntity("보고서");
+ * pxlSpring.exportExcel().sheet(User.class, users, "Users").toResponseEntity("report");
  * pxlSpring.exportExcel().poiWorkbook(workbook).toFile(file);   // written in the workbook's own format
  * }</pre>
  *
@@ -311,7 +311,7 @@ public class PxlExcelExporter {
      * nestmates. The public surface is exactly the source, option and terminal methods.</p>
      *
      * <p>Not thread-safe, and single-use per terminal call. Example:
-     * {@code pxlSpring.exportExcel().sheet(User.class, users, "Users").toResponse(response, "보고서");}</p>
+     * {@code pxlSpring.exportExcel().sheet(User.class, users, "Users").toResponse(response, "report");}</p>
      */
     public static final class Builder {
 
