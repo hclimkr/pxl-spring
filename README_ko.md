@@ -47,7 +47,7 @@ PXL Spring은 [PXL](https://github.com/hclimkr/pxl) 기반으로 **스프링에�
 <dependency>
     <groupId>io.github.hclimkr</groupId>
     <artifactId>pxl-spring-javax</artifactId>
-    <version>0.9.0</version>
+    <version>0.9.1</version>
 </dependency>
 ```
 
@@ -56,7 +56,7 @@ PXL Spring은 [PXL](https://github.com/hclimkr/pxl) 기반으로 **스프링에�
 <dependency>
     <groupId>io.github.hclimkr</groupId>
     <artifactId>pxl-spring-jakarta</artifactId>
-    <version>0.9.0</version>
+    <version>0.9.1</version>
 </dependency>
 ```
 
@@ -64,12 +64,12 @@ PXL Spring은 [PXL](https://github.com/hclimkr/pxl) 기반으로 **스프링에�
 
 ```groovy
 // javax 변형 (Java 8+)
-implementation 'io.github.hclimkr:pxl-spring-javax:0.9.0'
+implementation 'io.github.hclimkr:pxl-spring-javax:0.9.1'
 ```
 
 ```groovy
 // jakarta 변형 (Java 17+)
-implementation 'io.github.hclimkr:pxl-spring-jakarta:0.9.0'
+implementation 'io.github.hclimkr:pxl-spring-jakarta:0.9.1'
 ```
 
 ---
