@@ -44,7 +44,7 @@ class PxlExportSupportTests {
         outputStream.write('x');
 
         assertThatThrownBy(() -> PxlExportSupport.writeBufferToResponseForExportExcel(
-                outputStream, "data", PxlFileFormat.XSSF, failingBodyResponse()))
+                outputStream, "data", PxlFileFormat.XLSX, failingBodyResponse()))
                 .isInstanceOf(PxlIOException.class);
     }
 
@@ -70,7 +70,7 @@ class PxlExportSupportTests {
         outputStream.write('y');
 
         final MockHttpServletResponse response = new MockHttpServletResponse();
-        PxlExportSupport.writeBufferToResponseForExportExcel(outputStream, "data", PxlFileFormat.XSSF, response);
+        PxlExportSupport.writeBufferToResponseForExportExcel(outputStream, "data", PxlFileFormat.XLSX, response);
 
         assertThat(response.getContentLength()).isEqualTo(2);
         assertThat(response.getContentAsByteArray()).containsExactly('x', 'y');
@@ -97,7 +97,7 @@ class PxlExportSupportTests {
     @Test
     void excelFilenameWithSpaces_isPercentEncodedNotPlusEncoded() {
         final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExportExcel(
-                "my report", PxlFileFormat.XSSF, new ByteArrayOutputStream());
+                "my report", PxlFileFormat.XLSX, new ByteArrayOutputStream());
 
         assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
                 .isEqualTo("attachment; filename=\"my report.xlsx\"; filename*=UTF-8''my%20report.xlsx");
@@ -115,7 +115,7 @@ class PxlExportSupportTests {
     @Test
     void responseHeaderSetters_useTheSameEncoding() {
         final MockHttpServletResponse excelResponse = new MockHttpServletResponse();
-        PxlExportSupport.setResponseForExportExcel("my report", PxlFileFormat.HSSF, excelResponse);
+        PxlExportSupport.setResponseForExportExcel("my report", PxlFileFormat.XLS, excelResponse);
 
         assertThat(excelResponse.getHeader(HttpHeaders.CONTENT_DISPOSITION))
                 .isEqualTo("attachment; filename=\"my report.xls\"; filename*=UTF-8''my%20report.xls");
@@ -137,7 +137,7 @@ class PxlExportSupportTests {
     @Test
     void asciiFilename_isCarriedThroughUnchanged() {
         final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExportExcel(
-                "report", PxlFileFormat.XSSF, new ByteArrayOutputStream());
+                "report", PxlFileFormat.XLSX, new ByteArrayOutputStream());
 
         assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
                 .isEqualTo("attachment; filename=\"report.xlsx\"; filename*=UTF-8''report.xlsx");
@@ -146,7 +146,7 @@ class PxlExportSupportTests {
     @Test
     void nonAsciiFilename_isSubstitutedCharacterForCharacterInTheFallback() {
         final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExportExcel(
-                "보고서", PxlFileFormat.XSSF, new ByteArrayOutputStream());
+                "보고서", PxlFileFormat.XLSX, new ByteArrayOutputStream());
 
         // substituted rather than dropped, so the extension and the length survive instead of collapsing
         // to a bare ".xlsx"
@@ -157,7 +157,7 @@ class PxlExportSupportTests {
     @Test
     void quoteInFilename_cannotEndTheQuotedStringEarly() {
         final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExportExcel(
-                "a\"b\\c", PxlFileFormat.XSSF, new ByteArrayOutputStream());
+                "a\"b\\c", PxlFileFormat.XLSX, new ByteArrayOutputStream());
 
         // an unescaped quote would close filename="..." and let the rest be read as more parameters
         assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
@@ -167,7 +167,7 @@ class PxlExportSupportTests {
     @Test
     void controlCharactersInFilename_cannotSplitTheHeader() {
         final MockHttpServletResponse response = new MockHttpServletResponse();
-        PxlExportSupport.setResponseForExportExcel("a\r\nX-Evil: 1", PxlFileFormat.XSSF, response);
+        PxlExportSupport.setResponseForExportExcel("a\r\nX-Evil: 1", PxlFileFormat.XLSX, response);
 
         // header-injection guard: filename* is safe through percent-encoding, but the ASCII fallback is
         // written literally, so it is the one place a CR/LF could have broken the header apart

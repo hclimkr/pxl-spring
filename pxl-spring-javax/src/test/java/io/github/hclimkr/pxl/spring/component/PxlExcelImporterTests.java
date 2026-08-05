@@ -1,6 +1,6 @@
 package io.github.hclimkr.pxl.spring.component;
 
-import io.github.hclimkr.pxl.PxlFileFormat;
+import io.github.hclimkr.pxl.PxlExcelEngine;
 import io.github.hclimkr.pxl.exception.PxlArgumentException;
 import io.github.hclimkr.pxl.exception.PxlException;
 import io.github.hclimkr.pxl.exception.PxlIOException;
@@ -220,7 +220,7 @@ class PxlExcelImporterTests {
     void importExcelXlsExtension_roundTrips() throws PxlException, HttpMediaTypeNotSupportedException {
         // an .xls (HSSF) upload exercises the valid-.xls half of the extension check (the other tests use .xlsx)
         final PxlExportWorkbookOption hssfOption = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         pxlSpring.exportExcel().sheet(TestUser.class, users(), "Users").override(hssfOption).toStream(baos);

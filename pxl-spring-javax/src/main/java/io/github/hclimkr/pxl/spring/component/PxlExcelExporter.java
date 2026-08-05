@@ -2,6 +2,7 @@ package io.github.hclimkr.pxl.spring.component;
 
 import io.github.hclimkr.pxl.Pxl;
 import io.github.hclimkr.pxl.PxlConstants;
+import io.github.hclimkr.pxl.PxlExcelEngine;
 import io.github.hclimkr.pxl.PxlFileFormat;
 import io.github.hclimkr.pxl.builder.PxlExcelExportBuilder;
 import io.github.hclimkr.pxl.exception.PxlArgumentException;
@@ -48,9 +49,9 @@ import java.util.Optional;
  * pxlSpring.exportExcel().poiWorkbook(workbook).toFile(file);   // written in the workbook's own format
  * }</pre>
  *
- * <p>Output defaults to XLSX. An {@code override(...)} option carrying an {@code exportFileFormat} switches
- * it (e.g. to XLS), and {@code poiWorkbook(...)} writes the given workbook in its own native format — the
- * download headers are read back off that workbook, so they always match the bytes.</p>
+ * <p>Output defaults to XLSX. An {@code override(...)} option carrying an {@code exportExcelEngine} switches
+ * it (e.g. {@code HSSF}, which writes XLS), and {@code poiWorkbook(...)} writes the given workbook in its own
+ * native format — the download headers are read back off that workbook, so they always match the bytes.</p>
  *
  * <p>That builder is the nested {@link Builder}. A fluent chain never has to name it; on the rare occasion
  * you hold one in a variable, spell it {@code PxlExcelExporter.Builder}.</p>
@@ -334,7 +335,7 @@ public class PxlExcelExporter {
 
         /**
          * The {@code @PxlWorkbook} source object, kept alongside the core builder because the download name
-         * and file format fall back to what it declares.
+         * and the export engine behind the file format fall back to what it declares.
          */
         private Object workbookObject;
 
@@ -352,7 +353,7 @@ public class PxlExcelExporter {
 
         /**
          * Mirrors the option handed to {@code coreBuilder}, so {@code resolveFileFormat()} can read its export
-         * file format back. Not consulted by the raw POI form.
+         * engine back. Not consulted by the raw POI form.
          */
         private PxlExportWorkbookOption workbookOption;
 
@@ -381,7 +382,7 @@ public class PxlExcelExporter {
          *
          * <p>On the response destinations this form also supplies the download-name and file-format fallbacks:
          * a blank download name falls back to the workbook's declared name, and an option without an export
-         * file format falls back to the workbook's declared format.</p>
+         * engine falls back to the workbook's declared engine, whose file format drives the headers.</p>
          *
          * @param workbookObject the {@code @PxlWorkbook}-annotated source object
          * @return this builder
@@ -536,7 +537,7 @@ public class PxlExcelExporter {
          * trades that away, and the trade is the whole point of it, so be clear about what is given up:</p>
          * <ul>
          *   <li>Heap no longer holds the finished bytes — the reason to use this at all. Pair it with
-         *       {@code PxlFileFormat.SXSSF} to bound the workbook model too, or the model just takes the
+         *       {@code PxlExcelEngine.SXSSF} to bound the workbook model too, or the model just takes the
          *       buffer's place as the peak.</li>
          *   <li><strong>A failure part-way through cannot be taken back.</strong> The response is already
          *       committed with {@code 200 OK} and the download headers, so the client receives a truncated
@@ -635,13 +636,15 @@ public class PxlExcelExporter {
 
         /**
          * Resolves the file format driving the download headers: for the raw POI form the workbook's own
-         * format, otherwise the option's export file format, then the {@code @PxlWorkbook} declared format
-         * (workbook-object form only), then the default.
+         * format, otherwise the format written by the option's export engine, then by the
+         * {@code @PxlWorkbook} declared engine (workbook-object form only), then the default.
          *
          * <p>Reading the POI form's format back off the workbook is what keeps the extension and the body in
-         * step — the body is written in that same native format. {@code PxlFileFormat.fromPoiWorkbook} is a
-         * plain lookup that already falls back to the default for a workbook type it does not recognise; the
-         * {@code Optional} around it only guards against a future core that could return {@code null}.</p>
+         * step — the body is written in that same native format. It is {@link PxlFileFormat#fromPoiWorkbook}
+         * rather than {@link PxlExcelEngine#fromPoiWorkbook} that is asked, because a streaming-reader
+         * workbook is a reader and therefore has no engine, yet still holds XLSX bytes. That lookup already
+         * falls back to the default for a workbook type it does not recognise; the {@code Optional} around it
+         * only guards against a future core that could return {@code null}.</p>
          *
          * @return the file format for the download headers
          */
@@ -651,15 +654,15 @@ public class PxlExcelExporter {
                 return Optional.ofNullable(PxlFileFormat.fromPoiWorkbook(poiWorkbook)).orElse(PxlConstants.DEFAULT_EXPORT_FILE_FORMAT);
             }
 
-            final PxlFileFormat optionFileFormat = Optional.ofNullable(workbookOption)
-                    .flatMap(option -> Optional.ofNullable(option.getExportFileFormat()))
+            final PxlExcelEngine optionExcelEngine = Optional.ofNullable(workbookOption)
+                    .flatMap(option -> Optional.ofNullable(option.getExportExcelEngine()))
                     .orElse(null);
-            if (Objects.nonNull(optionFileFormat)) {
-                return optionFileFormat;
+            if (Objects.nonNull(optionExcelEngine)) {
+                return optionExcelEngine.getFileFormat();
             }
 
             return Objects.nonNull(workbookObject)
-                    ? PxlFileFormat.fromWorkbookObject(workbookObject.getClass())
+                    ? PxlExcelEngine.fromWorkbookObject(workbookObject.getClass()).getFileFormat()
                     : PxlConstants.DEFAULT_EXPORT_FILE_FORMAT;
         }
 

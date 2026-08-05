@@ -1,7 +1,7 @@
 package io.github.hclimkr.pxl.spring.component;
 
 import io.github.hclimkr.pxl.Pxl;
-import io.github.hclimkr.pxl.PxlFileFormat;
+import io.github.hclimkr.pxl.PxlExcelEngine;
 import io.github.hclimkr.pxl.exception.*;
 import io.github.hclimkr.pxl.option.PxlExportWorkbookOption;
 import io.github.hclimkr.pxl.option.PxlImportWorkbookOption;
@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Behavioural tests for {@link PxlExcelExporter} — round-trip export/import across every destination,
- * download headers, filename resolution/encoding, file-format switching, password protection, and the
+ * download headers, filename resolution/encoding, export-engine switching, password protection, and the
  * raw {@link Workbook} path, all driven through the {@link PxlExcelExporter.Builder} fluent API.
  *
  * <p>The builder comes from {@link PxlSpring}, the entry point the documentation guides users to. The
@@ -348,9 +348,9 @@ public class PxlExcelExporterTests {
     }
 
     @Test
-    void optionFileFormatHssf_switchesExtensionToXls() throws PxlException {
+    void optionExcelEngineHssf_switchesExtensionToXls() throws PxlException {
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
 
         final ResponseEntity<Resource> entity = pxlSpring.exportExcel()
@@ -362,14 +362,31 @@ public class PxlExcelExporterTests {
         assertThat(bodyBytes(entity)).isNotEmpty();
     }
 
-    // ----- non-null option file-format on the response destinations -----
-    // These take the option.getExportFileFormat() branch (the null-option tests above take the fallback),
-    // so the download extension is driven by the option rather than the default/workbook format.
+    @Test
+    void optionExcelEngineSxssf_keepsTheXlsxExtension() throws PxlException {
+        // the counterpart of the test above: the engine picks a writer, not a format, and the two OOXML
+        // writers produce one format - so the streaming one must not move the download off .xlsx
+        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                .exportExcelEngine(PxlExcelEngine.SXSSF)
+                .build();
+
+        final ResponseEntity<Resource> entity = pxlSpring.exportExcel()
+                .sheet(TestUser.class, users(), "Users")
+                .override(option)
+                .toResponseEntity("data");
+
+        assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).endsWith("data.xlsx");
+        assertThat(isXlsx(bodyBytes(entity))).isTrue();
+    }
+
+    // ----- non-null option engine on the response destinations -----
+    // These take the option.getExportExcelEngine() branch (the null-option tests above take the fallback),
+    // so the download extension is driven by the option rather than the default/workbook engine.
 
     @Test
     void exportSingleSheetToResponse_withHssfOption_switchesExtensionToXls() throws PxlException {
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
 
         final MockHttpServletResponse response = new MockHttpServletResponse();
@@ -389,7 +406,7 @@ public class PxlExcelExporterTests {
         workbook.setWorkbookName("Report");
         workbook.setUsers(users());
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
 
         final MockHttpServletResponse response = new MockHttpServletResponse();
@@ -405,7 +422,7 @@ public class PxlExcelExporterTests {
     @Test
     void exportMultiSheetToResponse_withHssfOption_switchesExtensionToXls() throws PxlException {
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
 
         final MockHttpServletResponse response = new MockHttpServletResponse();
@@ -424,7 +441,7 @@ public class PxlExcelExporterTests {
         workbook.setWorkbookName("Report");
         workbook.setUsers(users());
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
 
         final ResponseEntity<Resource> entity = pxlSpring.exportExcel()
@@ -439,7 +456,7 @@ public class PxlExcelExporterTests {
     @Test
     void exportMultiSheetToResponseEntity_withHssfOption_switchesExtensionToXls() throws PxlException {
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
 
         final ResponseEntity<Resource> entity = pxlSpring.exportExcel()
@@ -1027,7 +1044,7 @@ public class PxlExcelExporterTests {
     @EnumSource(Dest.class)
     void hssfOption_producesOle2BodyOnEveryDestination(final Dest dest) throws PxlException, IOException {
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
 
         final byte[] bytes = emit(pxlSpring.exportExcel()
@@ -1104,8 +1121,8 @@ public class PxlExcelExporterTests {
 
     @Test
     void poiWorkbookSxssf_announcesXlsxLikeItsXssfBase() throws PxlException, IOException {
-        // SXSSFWorkbook wraps rather than extends XSSFWorkbook, so it is its own PxlFileFormat - but it writes
-        // the same OOXML container and must therefore announce .xlsx too
+        // SXSSFWorkbook wraps rather than extends XSSFWorkbook, so it is its own PxlExcelEngine - but both
+        // engines write the same OOXML container, one PxlFileFormat, and must therefore announce .xlsx too
         try (SXSSFWorkbook workbook = new SXSSFWorkbook()) {
             workbook.createSheet("S").createRow(0).createCell(0).setCellValue("hi");
 
@@ -1139,7 +1156,7 @@ public class PxlExcelExporterTests {
     @Test
     void optionsBeforeSource_behaveTheSameAsAfter() throws PxlException {
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
 
         final ResponseEntity<Resource> optionsFirst = pxlSpring.exportExcel()
@@ -1164,10 +1181,10 @@ public class PxlExcelExporterTests {
     @Test
     void repeatedOverrideAndFilename_lastValueWins() throws PxlException {
         final PxlExportWorkbookOption hssfOption = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
         final PxlExportWorkbookOption xssfOption = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.XSSF)
+                .exportExcelEngine(PxlExcelEngine.XSSF)
                 .build();
 
         final MockHttpServletResponse response = new MockHttpServletResponse();
@@ -1201,8 +1218,8 @@ public class PxlExcelExporterTests {
     }
 
     @Test
-    void workbookObjectDeclaredHssfFormat_appliesWithoutAnyOption() throws PxlException {
-        // resolveFileFormat(): with no exportFileFormat on the option the class's own @PxlWorkbook setting
+    void workbookObjectDeclaredHssfEngine_appliesWithoutAnyOption() throws PxlException {
+        // resolveFileFormat(): with no exportExcelEngine on the option the class's own @PxlWorkbook setting
         // decides, both for the body and for the download headers
         final TestHssfWorkbook workbook = new TestHssfWorkbook();
         workbook.setWorkbookName("Declared");
@@ -1222,7 +1239,7 @@ public class PxlExcelExporterTests {
         // the raw form writes the workbook as-is, so the export option reaches neither the body nor the
         // headers - both come from the workbook itself, which is XSSF here despite the HSSF option
         final PxlExportWorkbookOption hssfOption = PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
 
         try (Workbook workbook = new XSSFWorkbook()) {

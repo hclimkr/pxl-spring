@@ -2,6 +2,7 @@ package io.github.hclimkr.pxl.spring.component;
 
 import io.github.hclimkr.pxl.Pxl;
 import io.github.hclimkr.pxl.PxlConstants;
+import io.github.hclimkr.pxl.PxlExcelEngine;
 import io.github.hclimkr.pxl.PxlFileFormat;
 import io.github.hclimkr.pxl.builder.PxlSampleExcelExportBuilder;
 import io.github.hclimkr.pxl.exception.PxlArgumentException;
@@ -295,14 +296,14 @@ public class PxlSampleExcelExporter {
         private final PxlSampleExcelExportBuilder coreBuilder;
 
         /**
-         * The {@code @PxlWorkbook} source class, kept alongside the core builder because the download file
-         * format falls back to what it declares. {@code null} for the sheet form.
+         * The {@code @PxlWorkbook} source class, kept alongside the core builder because the export engine
+         * behind the download file format falls back to what it declares. {@code null} for the sheet form.
          */
         private Class<?> workbookClass;
 
         /**
          * Mirrors the option handed to {@code coreBuilder}, so {@code resolveFileFormat()} can read its export
-         * file format back.
+         * engine back.
          */
         private PxlExportWorkbookOption workbookOption;
 
@@ -324,7 +325,7 @@ public class PxlSampleExcelExporter {
          * Generates the sample template from a class annotated with {@code @PxlWorkbook}.
          *
          * <p>On the response destinations this form also supplies the file-format fallback: an option without
-         * an export file format falls back to the class's declared format.</p>
+         * an export engine falls back to the class's declared engine, whose file format drives the headers.</p>
          *
          * @param workbookClass the {@code @PxlWorkbook}-annotated class
          * @return this builder
@@ -490,22 +491,23 @@ public class PxlSampleExcelExporter {
         }
 
         /**
-         * Resolves the file format driving the download headers: the option's export file format, then the
-         * {@code @PxlWorkbook} declared format (workbook-class form only), then the default.
+         * Resolves the file format driving the download headers: the format written by the option's export
+         * engine, then by the {@code @PxlWorkbook} declared engine (workbook-class form only), then the
+         * default.
          *
          * @return the file format for the download headers
          */
         private PxlFileFormat resolveFileFormat() {
 
-            final PxlFileFormat optionFileFormat = Optional.ofNullable(workbookOption)
-                    .flatMap(option -> Optional.ofNullable(option.getExportFileFormat()))
+            final PxlExcelEngine optionExcelEngine = Optional.ofNullable(workbookOption)
+                    .flatMap(option -> Optional.ofNullable(option.getExportExcelEngine()))
                     .orElse(null);
-            if (Objects.nonNull(optionFileFormat)) {
-                return optionFileFormat;
+            if (Objects.nonNull(optionExcelEngine)) {
+                return optionExcelEngine.getFileFormat();
             }
 
             return Objects.nonNull(workbookClass)
-                    ? PxlFileFormat.fromWorkbookObject(workbookClass)
+                    ? PxlExcelEngine.fromWorkbookObject(workbookClass).getFileFormat()
                     : PxlConstants.DEFAULT_EXPORT_FILE_FORMAT;
         }
 

@@ -2,6 +2,7 @@ package io.github.hclimkr.pxl.spring.component;
 
 import io.github.hclimkr.pxl.Pxl;
 import io.github.hclimkr.pxl.PxlConstants;
+import io.github.hclimkr.pxl.PxlExcelEngine;
 import io.github.hclimkr.pxl.PxlFileFormat;
 import io.github.hclimkr.pxl.exception.PxlArgumentException;
 import io.github.hclimkr.pxl.exception.PxlException;
@@ -276,8 +277,9 @@ public class PxlExcelZipExporter {
      * Writes each of the builder's entries as a single ZIP entry into the given archive stream.
      *
      * <p>An entry's file name comes from the builder ({@code explicit name → workbook name → Pxl{index}})
-     * and its extension from the workbook class's declared export format. A name carrying a path separator
-     * is rejected. The deflate level is picked per entry — see {@link #deflateLevelFor(PxlFileFormat)}.</p>
+     * and its extension from the format written by the workbook class's declared export engine. A name
+     * carrying a path separator is rejected. The deflate level is picked per entry — see
+     * {@link #deflateLevelFor(PxlFileFormat)}.</p>
      *
      * @param zipOutputStream the archive stream to append entries to
      * @param builder         the configured ZIP export builder (already validated)
@@ -294,7 +296,7 @@ public class PxlExcelZipExporter {
             final Object workbookObject = entry.workbookObject;
 
             final String excelFilename = entry.resolveExcelFilename(index);
-            final PxlFileFormat fileFormat = PxlFileFormat.fromWorkbookObject(workbookObject.getClass());
+            final PxlFileFormat fileFormat = PxlExcelEngine.fromWorkbookObject(workbookObject.getClass()).getFileFormat();
 
             final String entryName = excelFilename + FilenameUtils.EXTENSION_SEPARATOR_STR + fileFormat.getFilenameExtension();
 
@@ -330,8 +332,8 @@ public class PxlExcelZipExporter {
      * in exchange for skipping the pass entirely. {@code .xls} (OLE2) is not compressed, so it keeps the
      * default level, where deflate genuinely pays off.</p>
      *
-     * <p>Matched on the extension rather than the enum constant so that {@code XSSF} and {@code SXSSF} — and
-     * any future OOXML-based format — are covered by the one rule.</p>
+     * <p>Matched on the extension rather than the enum constant so that any future OOXML-based format is
+     * covered by the same rule.</p>
      *
      * @param fileFormat the entry's export format
      * @return the deflate level to apply to that entry
@@ -522,6 +524,11 @@ public class PxlExcelZipExporter {
         /**
          * Adds one archive entry for a workbook object, with an export option applied to that entry only.
          *
+         * <p>The option reaches the entry's <em>bytes</em> and nothing else. Its extension comes from the
+         * engine the workbook class declares through {@code @PxlWorkbook}, which the option does not
+         * override — so an option carrying {@code HSSF} puts OLE2 bytes inside an entry still named
+         * {@code .xlsx}. Declare the engine on the class when the extension has to follow it.</p>
+         *
          * @param workbookObject the {@code @PxlWorkbook}-annotated source object
          * @param workbookOption the export option for this entry, or {@code null}
          * @return this builder
@@ -537,6 +544,10 @@ public class PxlExcelZipExporter {
         /**
          * Adds one archive entry for a workbook object, with an export option and an entry file name applied
          * to that entry only.
+         *
+         * <p>The option reaches this entry's bytes only, exactly as in
+         * {@link #workbook(Object, PxlExportWorkbookOption)}; the name given here carries no extension, which
+         * is appended from the workbook class's declared engine.</p>
          *
          * @param workbookObject the {@code @PxlWorkbook}-annotated source object
          * @param workbookOption the export option for this entry, or {@code null}

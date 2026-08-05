@@ -1,7 +1,7 @@
 package io.github.hclimkr.pxl.spring.component;
 
 import io.github.hclimkr.pxl.Pxl;
-import io.github.hclimkr.pxl.PxlFileFormat;
+import io.github.hclimkr.pxl.PxlExcelEngine;
 import io.github.hclimkr.pxl.exception.PxlArgumentException;
 import io.github.hclimkr.pxl.exception.PxlException;
 import io.github.hclimkr.pxl.exception.PxlIOException;
@@ -591,7 +591,7 @@ class PxlExcelZipExporterTests {
     @Test
     void differingExtensions_makeTheSameBaseNameTwoDistinctEntries() throws PxlException, IOException {
         // the collision above is on the full entry name, extension included: the same base name under two
-        // declared formats is two members, not a clash
+        // declared engines is two members, not a clash
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         pxlSpring.exportExcelZip()
                 .workbook(workbook("report"))                            // -> report.xlsx
@@ -683,7 +683,7 @@ class PxlExcelZipExporterTests {
 
     @Test
     void perEntryOption_changesTheEntryBodyButNotItsExtension() throws PxlException, IOException {
-        // the entry extension comes from the workbook class's declared format, not from the per-entry
+        // the entry extension comes from the workbook class's declared engine, not from the per-entry
         // option — so an HSSF option yields OLE2 bytes still stored under a .xlsx entry name
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         pxlSpring.exportExcelZip()
@@ -724,7 +724,7 @@ class PxlExcelZipExporterTests {
 
     private static PxlExportWorkbookOption hssfOption() {
         return PxlExportWorkbookOption.builder()
-                .exportFileFormat(PxlFileFormat.HSSF)
+                .exportExcelEngine(PxlExcelEngine.HSSF)
                 .build();
     }
 

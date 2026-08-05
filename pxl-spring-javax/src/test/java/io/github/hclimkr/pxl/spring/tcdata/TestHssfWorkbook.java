@@ -1,6 +1,6 @@
 package io.github.hclimkr.pxl.spring.tcdata;
 
-import io.github.hclimkr.pxl.PxlFileFormat;
+import io.github.hclimkr.pxl.PxlExcelEngine;
 import io.github.hclimkr.pxl.annotation.PxlSheet;
 import io.github.hclimkr.pxl.annotation.PxlWorkbook;
 import io.github.hclimkr.pxl.annotation.PxlWorkbookName;
@@ -11,10 +11,10 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * Workbook-shaped DTO that declares its export format on the class itself, unlike {@link TestWorkbook},
+ * Workbook-shaped DTO that declares its export engine on the class itself, unlike {@link TestWorkbook},
  * which carries no {@code @PxlWorkbook} annotation at all.
  *
- * <p>This is what makes the exporters' "no option → the workbook's own declared format" fallback observable:
+ * <p>This is what makes the exporters' "no option → the workbook's own declared engine" fallback observable:
  * with {@code TestWorkbook} that branch and the plain default both yield XLSX, so they cannot be told
  * apart.</p>
  *
@@ -24,7 +24,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@PxlWorkbook(exportFileFormat = PxlFileFormat.HSSF)
+@PxlWorkbook(exportExcelEngine = PxlExcelEngine.HSSF)
 public class TestHssfWorkbook {
 
     @PxlWorkbookName

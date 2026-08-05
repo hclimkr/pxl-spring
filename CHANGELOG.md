@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking, through the core.** The export writer is now named by
+  `@PxlWorkbook(exportExcelEngine = ...)` and `PxlExportWorkbookOption.exportExcelEngine`,
+  which take a `PxlExcelEngine` (`HSSF` / `XSSF` / `SXSSF`), because pxl split the one
+  `PxlFileFormat` into a physical format (`XLS` / `XLSX` / `CSV`) and the POI engine that
+  writes it. Nothing in this library's own surface moved — no builder method, terminal or
+  signature changed — but the annotation and option your DTOs and calls already use are
+  renamed, so migration is `exportFileFormat` → `exportExcelEngine` plus the enum swap
+  `PxlFileFormat.HSSF` / `XSSF` / `SXSSF` → `PxlExcelEngine.…`. `PxlFileFormat` is still
+  what a download response is built from — the exporters read the extension and content
+  type off it, now reached through the engine's `getFileFormat()`, and the raw POI form
+  still reads it straight off the workbook. Requires pxl 0.9.3.
+
 - The contributing guide (`CONTRIBUTING.md` / `CONTRIBUTING_ko.md`) now states the
   repository's policy — issue reports and suggestions only, pull requests are not
   accepted — and asks for the version and artifact, the Java and Spring (or Spring Boot)

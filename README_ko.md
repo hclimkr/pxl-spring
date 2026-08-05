@@ -455,7 +455,7 @@ public ResponseEntity<Resource> downloadPoiWorkbook() throws Exception {
 
 **export 옵션 override**
 
-`override(...)`로 설정한다. 여기서는 `.xlsx` 대신 `.xls`로 다운로드하는 예제이다.
+`override(...)`로 설정한다. 여기서는 `HSSF` 엔진을 지정해 `.xlsx` 대신 `.xls`로 다운로드하는 예제이다.
 
 ```java
 @GetMapping("/employees/excel-xls")
@@ -463,7 +463,7 @@ public void downloadEmployeesAsXls(HttpServletResponse response) throws Exceptio
     List<Employee> employees = ...;
 
     PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                                                            .exportFileFormat(PxlFileFormat.HSSF)
+                                                            .exportExcelEngine(PxlExcelEngine.HSSF)
                                                             .build();
 
     pxlSpring.exportExcel()
@@ -577,7 +577,7 @@ public void downloadQuarterNamed(HttpServletResponse response) throws Exception 
     Company february = ...;
 
     PxlExportWorkbookOption hssfOption = PxlExportWorkbookOption.builder()
-                                                                .exportFileFormat(PxlFileFormat.HSSF)
+                                                                .exportExcelEngine(PxlExcelEngine.HSSF)
                                                                 .build();
 
     pxlSpring.exportExcelZip()
@@ -586,6 +586,8 @@ public void downloadQuarterNamed(HttpServletResponse response) throws Exception 
              .toResponse(response, "분기보고서");
 }
 ```
+
+엔트리 확장자는 엔트리별 옵션이 아니라 워크북 클래스가 선언한 엔진을 따른다 — 그래서 `2월보고서`는 `.xlsx`로 들어가고 그 안의 바이트만 `HSSF`(OLE2)다. 확장자까지 따라가야 하면 클래스에 엔진을 선언할 것.
 
 **압축파일을 파일이나 스트림에 저장**
 
@@ -847,6 +849,7 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 ```
 
 - 엔트리명은 지정한 이름 → 워크북명 → `Pxl{index}` 순으로 정해진다. 지정한 이름이 공백이면 없는 것으로 보고 다음 순서로 넘어간다.
+- 확장자는 워크북 클래스가 선언한 export 엔진에서 붙으며, 엔트리별 옵션은 이를 덮지 않는다 — 옵션은 바이트만 바꾼다.
 - 아카이브명은 필수다.
 
 ### `PxlExcelImporter`
@@ -920,22 +923,22 @@ R fromResources(List<Resource> csvFiles)            // 리소스 여러 개
 
 ### Export: 워크북 모델
 
-기본값인 `XSSFWorkbook`은 파일을 쓰기 시작하기도 전에 시트 전체를 메모리에 객체로 펼쳐 둔다. 이렇게 만들어진 객체 그래프는 대개 **결과 파일보다 훨씬 크다.** `SXSSF`는 같은 `.xlsx`를 만들되 최근 일정 행만 메모리에 두고 나머지는 임시 파일로 흘린다.
+기본 엔진인 `XSSF`는 파일을 쓰기 시작하기도 전에 시트 전체를 POI 객체로 펼쳐 둔다. 이렇게 만들어진 객체 그래프는 대개 **결과 파일보다 훨씬 크다.** `SXSSF` 엔진은 같은 `.xlsx`를 만들되 최근 일정 행만 메모리에 두고 나머지는 임시 파일로 흘린다.
 
 ```java
 // 워크북 클래스 단위
-@PxlWorkbook(exportFileFormat = PxlFileFormat.SXSSF, exportSXSSFRowAccessWindowSize = 100)
+@PxlWorkbook(exportExcelEngine = PxlExcelEngine.SXSSF, exportSXSSFRowAccessWindowSize = 100)
 public class Company { ... }
 
 // 또는 호출 단위
 pxlSpring.exportExcel()
         .sheet(Employee.class, employees, "Employees")
-        .override(PxlExportWorkbookOption.builder().exportFileFormat(PxlFileFormat.SXSSF).build())
+        .override(PxlExportWorkbookOption.builder().exportExcelEngine(PxlExcelEngine.SXSSF).build())
         .toResponse(response, null);
 ```
 
 - `exportSXSSFRowAccessWindowSize`가 메모리에 유지할 행 수다(지정하지 않으면 POI 기본 창 크기).
-- `SXSSF`는 `.xlsx` 전용이다. `HSSF`(`.xls`)에는 적용되지 않는다.
+- `SXSSF`는 `.xlsx` 전용이다. `HSSF` 엔진(`.xls`)에는 적용되지 않는다.
 - 너비를 자동 조정하는 열은 추적 대상이 되어야 하고, 추적되는 열은 메모리에 남는다. 자동 너비 열이 많으면 그만큼 이점이 깎인다.
 
 ### Export: 목적지
@@ -959,7 +962,7 @@ pxlSpring.exportExcel()
 ```java
 pxlSpring.exportExcel()
         .sheet(Employee.class, employees, "Employees")
-        .override(PxlExportWorkbookOption.builder().exportFileFormat(PxlFileFormat.SXSSF).build())
+        .override(PxlExportWorkbookOption.builder().exportExcelEngine(PxlExcelEngine.SXSSF).build())
         .toResponseStreaming(response, "employee-list");
 ```
 

@@ -455,7 +455,7 @@ public ResponseEntity<Resource> downloadPoiWorkbook() throws Exception {
 
 **Overriding export options**
 
-Set them with `override(...)`. Here the download comes out as `.xls` instead of `.xlsx`.
+Set them with `override(...)`. Here the `HSSF` engine makes the download come out as `.xls` instead of `.xlsx`.
 
 ```java
 @GetMapping("/employees/excel-xls")
@@ -463,7 +463,7 @@ public void downloadEmployeesAsXls(HttpServletResponse response) throws Exceptio
     List<Employee> employees = ...;
 
     PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                                                            .exportFileFormat(PxlFileFormat.HSSF)
+                                                            .exportExcelEngine(PxlExcelEngine.HSSF)
                                                             .build();
 
     pxlSpring.exportExcel()
@@ -577,7 +577,7 @@ public void downloadQuarterNamed(HttpServletResponse response) throws Exception 
     Company february = ...;
 
     PxlExportWorkbookOption hssfOption = PxlExportWorkbookOption.builder()
-                                                                .exportFileFormat(PxlFileFormat.HSSF)
+                                                                .exportExcelEngine(PxlExcelEngine.HSSF)
                                                                 .build();
 
     pxlSpring.exportExcelZip()
@@ -586,6 +586,8 @@ public void downloadQuarterNamed(HttpServletResponse response) throws Exception 
              .toResponse(response, "quarterly-report");
 }
 ```
+
+An entry's extension follows the engine the workbook class declares, not the per-entry option — so `february-report` goes in as `.xlsx` with `HSSF` (OLE2) bytes inside. Declare the engine on the class when the extension has to follow it.
 
 **Writing the zip to a file or a stream**
 
@@ -847,6 +849,7 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 ```
 
 - An entry name is resolved as the name you gave → the workbook name → `Pxl{index}`. A blank name is treated as absent, so resolution moves on to the next step.
+- Its extension is appended from the workbook class's declared export engine, which the per-entry option does not override — the option changes the bytes only.
 - The archive name is required.
 
 ### `PxlExcelImporter`
@@ -920,22 +923,22 @@ Everything below is about heap. Both directions hold a whole workbook in memory 
 
 ### Export: the workbook model
 
-`XSSFWorkbook` (the default) builds the entire sheet as an object graph before a single byte is written, and that graph is typically **far larger than the file it produces**. `SXSSF` writes the same `.xlsx` while keeping only a sliding window of rows in memory and spilling the rest to temp files.
+The default `XSSF` engine builds the entire sheet as a POI object graph before a single byte is written, and that graph is typically **far larger than the file it produces**. The `SXSSF` engine writes the same `.xlsx` while keeping only a sliding window of rows in memory and spilling the rest to temp files.
 
 ```java
 // per workbook class
-@PxlWorkbook(exportFileFormat = PxlFileFormat.SXSSF, exportSXSSFRowAccessWindowSize = 100)
+@PxlWorkbook(exportExcelEngine = PxlExcelEngine.SXSSF, exportSXSSFRowAccessWindowSize = 100)
 public class Company { ... }
 
 // or per call
 pxlSpring.exportExcel()
         .sheet(Employee.class, employees, "Employees")
-        .override(PxlExportWorkbookOption.builder().exportFileFormat(PxlFileFormat.SXSSF).build())
+        .override(PxlExportWorkbookOption.builder().exportExcelEngine(PxlExcelEngine.SXSSF).build())
         .toResponse(response, null);
 ```
 
 - `exportSXSSFRowAccessWindowSize` is how many rows stay in memory (POI's default window if unset).
-- `SXSSF` produces `.xlsx` only — it does not apply to `HSSF` (`.xls`).
+- `SXSSF` produces `.xlsx` only — it has no effect on the `HSSF` engine (`.xls`).
 - Columns using automatic width have to be tracked, and a tracked column stays in memory. Many auto-width columns eat into the saving.
 
 ### Export: the destination
@@ -959,7 +962,7 @@ All three exporters carry a dedicated final method that skips that buffer and wr
 ```java
 pxlSpring.exportExcel()
         .sheet(Employee.class, employees, "Employees")
-        .override(PxlExportWorkbookOption.builder().exportFileFormat(PxlFileFormat.SXSSF).build())
+        .override(PxlExportWorkbookOption.builder().exportExcelEngine(PxlExcelEngine.SXSSF).build())
         .toResponseStreaming(response, "employee-list");
 ```
 
