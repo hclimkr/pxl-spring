@@ -17,6 +17,13 @@ It leaves the binding to PXL and supports Java 8 and later.
 
 For PXL behavior — annotation attributes, supported types, the full set of options — refer to the [PXL documentation](https://github.com/hclimkr/pxl/blob/main/docs/reference.md).
 
+> [!WARNING]
+> **Pre-1.0: the public API is still moving.** Under Semantic Versioning a `0.y.z` release makes no compatibility
+> promise, and PXL Spring uses that room: a minor release may rename, move or remove a public type or method
+> without a deprecation cycle — several already have. A breaking change in [PXL](https://github.com/hclimkr/pxl)
+> reaches your code through this library too, since PXL is what does the binding. Pin an exact version rather
+> than a range, and read the [CHANGELOG](CHANGELOG.md) before upgrading; every such change is marked breaking.
+
 ## Table of Contents
 
 1. [Setup](#setup)
