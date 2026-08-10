@@ -11,7 +11,7 @@ import java.lang.reflect.Method;
  * <p>File-based export tests write real files under {@code target/test-outputs/} and leave them in
  * place, so they can be opened and inspected after the run (they are intentionally not deleted, and are
  * removed by {@code mvn clean} along with the rest of {@code target/}). Round-trip tests name the
- * artifact after the current test method — pass the {@link TestInfo} injected in a
+ * artifact after the current test method - pass the {@link TestInfo} injected in a
  * {@code @BeforeEach} method.</p>
  */
 public final class TestPaths {

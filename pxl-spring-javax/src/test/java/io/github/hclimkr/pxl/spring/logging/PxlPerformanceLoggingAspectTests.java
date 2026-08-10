@@ -38,15 +38,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>Three parts:</p>
  * <ul>
- *   <li><strong>The opt-in gate</strong> — that {@code pxl.performance.logging.enabled} really decides whether the
+ *   <li><strong>The opt-in gate</strong> - that {@code pxl.performance.logging.enabled} really decides whether the
  *       aspect is registered, and that the condition doing so comes from {@code spring-context} rather than
  *       Spring Boot. See {@code theGateDoesNotDependOnSpringBoot} for what went wrong when it did not.</li>
- *   <li><strong>Advice behaviour</strong> — return-value and exception pass-through, and the two lines the
+ *   <li><strong>Advice behaviour</strong> - return-value and exception pass-through, and the two lines the
  *       advice actually emits, captured off the logger: the tag prefix (tagged vs. empty-tag), the elapsed
  *       time, and both sides of the {@code LowPerformance} threshold. Asserting the prefix is also what pins
  *       {@link PxlPerformanceLogging}'s {@code value}/{@code tag} {@code @AliasFor} pair, because the aspect
  *       reads {@code tag()} while every real annotation site writes {@code value}.</li>
- *   <li><strong>Annotation placement</strong> — the invariant the whole design rests on: the twenty-nine builder
+ *   <li><strong>Annotation placement</strong> - the invariant the whole design rests on: the twenty-nine builder
  *       back-ends carry the annotation with their own class-name tag, and the fluent entry points (and the
  *       {@link PxlSpring} facade) deliberately do not, because they only construct a builder. That is why a
  *       terminal re-enters its component through the Spring proxy at all, so nothing else guards it. Like
@@ -171,8 +171,8 @@ class PxlPerformanceLoggingAspectTests {
 
     /**
      * Each component with its fluent entry point and the back-end methods that must carry the annotation.
-     * Twenty-nine back-ends in total: two per importer (one per source form — a multipart upload and a Spring
-     * {@code Resource}), five destinations per exporter — the two response shapes (buffered and streaming)
+     * Twenty-nine back-ends in total: two per importer (one per source form - a multipart upload and a Spring
+     * {@code Resource}), five destinations per exporter - the two response shapes (buffered and streaming)
      * are separate terminals, so each has its own back-end.
      */
     static Stream<Arguments> componentBackEnds() {

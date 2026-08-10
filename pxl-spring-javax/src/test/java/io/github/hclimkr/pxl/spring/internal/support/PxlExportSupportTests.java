@@ -178,7 +178,7 @@ class PxlExportSupportTests {
 
     /**
      * A servlet response whose body stream fails on every write, so writing the buffered bytes raises an
-     * {@code IOException} — the path both {@code writeBufferToResponse...} helpers translate to
+     * {@code IOException} - the path both {@code writeBufferToResponse...} helpers translate to
      * {@link PxlIOException}. The header setters remain the mock's own (they must succeed first).
      */
     private static HttpServletResponse failingBodyResponse() {

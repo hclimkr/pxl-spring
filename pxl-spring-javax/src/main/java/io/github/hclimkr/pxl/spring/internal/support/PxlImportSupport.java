@@ -17,8 +17,8 @@ import java.util.Objects;
  * deliberately not applied, because browsers and OS registries report wildly inconsistent MIME types for
  * spreadsheet and CSV files.</p>
  *
- * <p>Both import source forms are covered — a multipart upload ({@link MultipartFile}) and a Spring
- * {@link Resource} — and they differ in one way that matters here. A validated upload always has a file
+ * <p>Both import source forms are covered - a multipart upload ({@link MultipartFile}) and a Spring
+ * {@link Resource} - and they differ in one way that matters here. A validated upload always has a file
  * name, because the extension check itself is what proves it. A {@code Resource} need not: several
  * implementations ({@code ByteArrayResource} and {@code InputStreamResource} among them) return
  * {@code null} from {@link Resource#getFilename()}. Such a source is <strong>rejected</strong>, on the
@@ -34,7 +34,7 @@ import java.util.Objects;
  *
  * <p>Like {@link PxlExportSupport} this is intended to be internal, but its callers sit in a different
  * package ({@code io.github.hclimkr.pxl.spring.component}) and there is no JPMS {@code module-info} to hide
- * it, so the class and its helpers must be — and are — declared {@code public}. Treat it as internal despite
+ * it, so the class and its helpers must be - and are - declared {@code public}. Treat it as internal despite
  * the {@code public} modifier.</p>
  */
 public final class PxlImportSupport {
@@ -113,7 +113,7 @@ public final class PxlImportSupport {
      * Checks a source's file name extension against the supported set, case-insensitively.
      *
      * <p>A {@code null} file name yields a {@code null} extension, which is reported as an empty extension
-     * rather than the literal {@code "null"} — and, because that is rejected here, the callers' later use of
+     * rather than the literal {@code "null"} - and, because that is rejected here, the callers' later use of
      * the same name is safe. That is what lets both importers derive a workbook or sheet name from the file
      * name without a further {@code null} check.</p>
      *

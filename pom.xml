@@ -214,6 +214,17 @@
                     <charset>UTF-8</charset>
                     <docencoding>UTF-8</docencoding>
                     <!--
+                      pxl-spring-jakarta compiles at release 17, so its javadoc runs in module mode (module
+                      path plus patched module), and there javadoc ignores the encoding option above and reads
+                      the sources with the JVM's default charset instead. On a JDK below 18 that is the
+                      platform charset, which fails on any non-ASCII byte. Pin the JVM charset so the sources
+                      are read as UTF-8 whichever JDK runs the build. pxl-spring-javax is unaffected either
+                      way, because release 8 keeps its javadoc on the class path.
+                    -->
+                    <additionalJOptions>
+                        <additionalJOption>-J-Dfile.encoding=UTF-8</additionalJOption>
+                    </additionalJOptions>
+                    <!--
                       These annotation/servlet APIs are declared 'provided' in the modules, so the
                       javadoc tool's classpath omits them and doclint fails to resolve the imports
                       ('package ... does not exist'). jsr305 covers pxl-spring-javax

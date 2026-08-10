@@ -32,11 +32,11 @@ import java.text.Normalizer;
 import java.util.*;
 
 /**
- * Spring component that reads CSV sources — multipart uploads and Spring {@link Resource}s — into Java
+ * Spring component that reads CSV sources - multipart uploads and Spring {@link Resource}s - into Java
  * objects.
  *
  * <p>Everything is configured through the fluent builder returned by {@link #importCsv()}, which mirrors the
- * core {@code Pxl.importCsv()} shape — optionally set {@code workbookName(...)}/{@code override(...)}, pick a
+ * core {@code Pxl.importCsv()} shape - optionally set {@code workbookName(...)}/{@code override(...)}, pick a
  * parse target ({@code workbook(...)} / {@code sheet(...)}), then call {@code fromMultipartFile(...)} /
  * {@code fromMultipartFiles(...)} or {@code fromResource(...)} / {@code fromResources(...)}. The result type
  * is carried through the generics, so no cast is needed:</p>
@@ -49,7 +49,7 @@ import java.util.*;
  * }</pre>
  *
  * <p>The {@code fromResource(...)} pair is the non-HTTP half of the same operation, for the paths a Spring
- * application reads a CSV on that are not an upload — a batch job reading files off disk, an initializer
+ * application reads a CSV on that are not an upload - a batch job reading files off disk, an initializer
  * reading a classpath seed, an integration test reading a fixture. They exist so those callers need not
  * build their own core {@code Pxl} instance to get at a stream terminal.</p>
  *
@@ -62,7 +62,7 @@ import java.util.*;
  * fluent chain never has to name either; on the rare occasion you hold one in a variable, spell them
  * {@code PxlCsvImporter.Builder} and {@code PxlCsvImporter.Builder.Source<R>}.</p>
  *
- * <p>The component is stateless and safe to share across threads; the builder it hands back is not — start one
+ * <p>The component is stateless and safe to share across threads; the builder it hands back is not - start one
  * per import.</p>
  *
  * <p>Reached through {@link io.github.hclimkr.pxl.spring.PxlSpring PxlSpring}: inject that one bean and call
@@ -70,7 +70,7 @@ import java.util.*;
  *
  * <p>The {@code importCsvFrom*} methods below are the builder's execution back-ends, one per source form.
  * They are {@code public} only because Spring AOP (and {@code @Validated} method validation) can advise public
- * methods only — a terminal has to re-enter this component through its proxy for
+ * methods only - a terminal has to re-enter this component through its proxy for
  * {@link PxlPerformanceLogging} to fire. Treat them as internal and always go through
  * {@link #importCsv()}.</p>
  */
@@ -81,7 +81,7 @@ public class PxlCsvImporter {
     private static final String TAG = "PxlCsvImporter";
 
     /**
-     * The core entry point, shared with the other components — see {@link PxlCoreSupport} for why it is not
+     * The core entry point, shared with the other components - see {@link PxlCoreSupport} for why it is not
      * one instance per component.
      */
     private final Pxl pxl = PxlCoreSupport.core();
@@ -92,7 +92,7 @@ public class PxlCsvImporter {
      * <p>The builder's terminals must call back through the proxy, not through {@code this}: a plain
      * {@code this} reference bypasses the proxy, and with it {@link PxlPerformanceLogging} and {@code @Validated}.
      * {@code @Lazy} breaks the self-reference cycle, and {@code required = false} keeps plain
-     * {@code new PxlCsvImporter()} usage (outside a Spring context) working — it then falls back to
+     * {@code new PxlCsvImporter()} usage (outside a Spring context) working - it then falls back to
      * {@code this} and simply produces no performance log.</p>
      */
     @Autowired(required = false)
@@ -112,7 +112,7 @@ public class PxlCsvImporter {
     // ----- builder execution back-ends (internal; reached through the nested Builder) -----
 
     /**
-     * Reads the uploaded CSV files — one sheet per file — into whatever parse target the source step carries.
+     * Reads the uploaded CSV files - one sheet per file - into whatever parse target the source step carries.
      *
      * <p>Internal: called by {@link Builder.Source#fromMultipartFiles(List)} (and, with a single-element
      * list, by {@code fromMultipartFile(...)}).</p>
@@ -153,7 +153,7 @@ public class PxlCsvImporter {
     }
 
     /**
-     * Reads the given CSV resources — one sheet per resource — into whatever parse target the source step
+     * Reads the given CSV resources - one sheet per resource - into whatever parse target the source step
      * carries.
      *
      * <p>Internal: called by {@link Builder.Source#fromResources(List)} (and, with a single-element list, by
@@ -228,8 +228,8 @@ public class PxlCsvImporter {
      * the streams and the file names come from, and both are {@link InputStreamSource}s, so everything past
      * that point is one path. Every stream opened is closed here, whether the parse succeeded or not.</p>
      *
-     * <p>The two lists line up by construction — the caller builds {@code csvNames} by walking
-     * {@code csvSources} in order, and the loop below walks the same list again — which matters because the
+     * <p>The two lists line up by construction - the caller builds {@code csvNames} by walking
+     * {@code csvSources} in order, and the loop below walks the same list again - which matters because the
      * core's {@code fromStreams} pairs them positionally without checking their lengths.</p>
      *
      * @param source     the configured source step (already validated)
@@ -261,10 +261,10 @@ public class PxlCsvImporter {
     /**
      * Fluent builder for CSV imports, created via {@link PxlCsvImporter#importCsv()}.
      *
-     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlCsvImportBuilder} shape — optional
+     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlCsvImportBuilder} shape - optional
      * {@link #workbookName(String)}/{@link #override(PxlImportWorkbookOption)}, then a parse target
      * ({@link #workbook(Class)} or one of the {@code sheet(...)} forms) yielding a typed {@link Source}, then
-     * a terminal — and swaps the core's file/stream terminals for the Spring-facing
+     * a terminal - and swaps the core's file/stream terminals for the Spring-facing
      * {@link Source#fromMultipartFile(MultipartFile)} / {@link Source#fromMultipartFiles(List)} and
      * {@link Source#fromResource(Resource)} / {@link Source#fromResources(List)}.</p>
      *
@@ -381,7 +381,7 @@ public class PxlCsvImporter {
          * Parses a single CSV source into the requested collection type.
          *
          * <p>{@code C} binds from the {@code collectionClass} literal, and a literal such as {@code Set.class}
-         * is a {@code Class<Set>} — the raw type — so the parsed result arrives raw too. Assigning it to a
+         * is a {@code Class<Set>} - the raw type - so the parsed result arrives raw too. Assigning it to a
          * parameterized variable is therefore an unchecked conversion, and the call site needs
          * {@code @SuppressWarnings("unchecked")}. The single-argument form above has no such gap: {@code T}
          * binds to the row class there and the result is a {@code List<T>}.</p>
@@ -479,7 +479,7 @@ public class PxlCsvImporter {
             }
 
             /**
-             * Reads the uploaded CSV files — one sheet per file — and returns the parsed result.
+             * Reads the uploaded CSV files - one sheet per file - and returns the parsed result.
              *
              * <p>The {@code sheet(...)} forms accept exactly one file; passing more raises
              * {@link PxlArgumentException}.</p>
@@ -501,7 +501,7 @@ public class PxlCsvImporter {
              * Reads a single CSV resource and returns the parsed result.
              *
              * <p>The one-resource case of {@link #fromResources(List)}, and the non-HTTP counterpart of
-             * {@link #fromMultipartFile(MultipartFile)} — for a file on disk ({@code FileSystemResource}), a
+             * {@link #fromMultipartFile(MultipartFile)} - for a file on disk ({@code FileSystemResource}), a
              * packaged one ({@code ClassPathResource}), or anything else behind Spring's {@link Resource}
              * abstraction.</p>
              *
@@ -523,7 +523,7 @@ public class PxlCsvImporter {
             }
 
             /**
-             * Reads the given CSV resources — one sheet per resource — and returns the parsed result.
+             * Reads the given CSV resources - one sheet per resource - and returns the parsed result.
              *
              * <p>The non-HTTP counterpart of {@link #fromMultipartFiles(List)}, and identical to it in every
              * other respect: the {@code sheet(...)} forms accept exactly one resource, and each resource's

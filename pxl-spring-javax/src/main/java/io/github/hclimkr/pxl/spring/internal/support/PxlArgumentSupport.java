@@ -8,14 +8,14 @@ import java.util.Objects;
  * Argument guards that back up the components' Bean Validation annotations.
  *
  * <p>{@code @NotNull} and friends only fire when a call arrives through the Spring proxy. A component built
- * plainly — {@code new PxlExcelExporter()}, which is also what {@code new PxlSpring()} does, and a documented
- * way to use this library — never sees them, so without a guard here a {@code null} destination would surface
+ * plainly - {@code new PxlExcelExporter()}, which is also what {@code new PxlSpring()} does, and a documented
+ * way to use this library - never sees them, so without a guard here a {@code null} destination would surface
  * as a raw {@code NullPointerException} (or, worse, only after the whole workbook had been generated),
  * breaking the "every failure is a {@code PxlException}" contract.</p>
  *
  * <p>Call these as the <em>first</em> statement of a back-end method, so the plain path fails exactly where
- * the proxied path would: before any work is done. Through the proxy the guard is simply redundant — bean
- * validation has already rejected the call — so the two paths differ only in exception type
+ * the proxied path would: before any work is done. Through the proxy the guard is simply redundant - bean
+ * validation has already rejected the call - so the two paths differ only in exception type
  * ({@code ConstraintViolationException} vs. {@link PxlNullPointerException}).</p>
  *
  * <p>This is deliberately not a general-purpose assertion utility: the core library's own
@@ -24,7 +24,7 @@ import java.util.Objects;
  *
  * <p>Intended to be internal, but its callers sit in a different package
  * ({@code io.github.hclimkr.pxl.spring.component}) and there is no JPMS {@code module-info} to hide it, so
- * the class and its {@code static} helper must be — and are — declared {@code public}. Treat them as
+ * the class and its {@code static} helper must be - and are - declared {@code public}. Treat them as
  * internal despite the {@code public} modifier; the {@code internal.support} package name is the marker.</p>
  */
 public final class PxlArgumentSupport {

@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Behavioural tests for {@link PxlCsvExporter}, all driven through the {@link PxlCsvExporter.Builder} fluent
  * API: the records written, every destination (stream / file / response / response-entity / streaming
  * response), the download headers and their {@code .csv} extension, the sheet-name fallback for the download
- * name, the charset/delimiter/BOM options, and the guards the core terminal raises — no sheet, more than one
+ * name, the charset/delimiter/BOM options, and the guards the core terminal raises - no sheet, more than one
  * sheet, and the password refusal.
  *
  * <p>The builder comes from {@link PxlSpring}, the entry point the documentation guides users to. The
@@ -453,7 +453,7 @@ class PxlCsvExporterTests {
                 .sheet(TestUser.class, users(), "Users")
                 .toResponse(response, "data");
 
-        // Content-Disposition must be replaced, not appended — a second value would corrupt the download
+        // Content-Disposition must be replaced, not appended - a second value would corrupt the download
         assertThat(response.getHeaders(HttpHeaders.CONTENT_DISPOSITION)).hasSize(1);
         assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("data.csv");
         // Content-Type reflects the export as a single value

@@ -103,7 +103,7 @@ public class PxlPerformanceLoggingAspect {
      *
      * <p><strong>Deliberately built on {@code spring-context} alone.</strong> The obvious spelling is Spring
      * Boot's {@code @ConditionalOnExpression("${pxl.performance.logging.enabled:false}")}, and that is what this was
-     * — but it lives in {@code spring-boot-autoconfigure}, which this library declares {@code provided} and a
+     * - but it lives in {@code spring-boot-autoconfigure}, which this library declares {@code provided} and a
      * plain (non-Boot) Spring application therefore does not have. Spring reads bean metadata with ASM and
      * silently <em>drops</em> any annotation whose type will not load, so on such a classpath the condition
      * disappeared along with it: the aspect registered unconditionally, logging two INFO lines per operation
@@ -116,10 +116,10 @@ public class PxlPerformanceLoggingAspect {
      * up against the old form is arbitrary SpEL in the property value, which was never a documented use.</p>
      *
      * <p>Because the conversion is Spring's own, the accepted vocabulary is wider than the {@code true} the
-     * documentation quotes — {@code on}, {@code yes} and {@code 1} enable it too, and {@code off}, {@code no}
+     * documentation quotes - {@code on}, {@code yes} and {@code 1} enable it too, and {@code off}, {@code no}
      * and {@code 0} disable it, case-insensitively and trimmed; a blank value counts as absent. A
      * <em>malformed</em> value is not quietly taken as disabled: it fails context startup, naming the
-     * offending value. That is deliberate — {@code pxl.performance.logging.enabled=ture} silently producing no
+     * offending value. That is deliberate - {@code pxl.performance.logging.enabled=ture} silently producing no
      * logging would leave nothing to diagnose.</p>
      */
     static final class EnabledCondition implements Condition {

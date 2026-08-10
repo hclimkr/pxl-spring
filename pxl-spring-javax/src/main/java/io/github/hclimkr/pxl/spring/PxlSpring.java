@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 /**
  * Single entry point for every pxl-spring operation, mirroring the core {@code Pxl} facade.
  *
- * <p>Inject this one bean and pick the operation the same way you would on the core library — the method
+ * <p>Inject this one bean and pick the operation the same way you would on the core library - the method
  * names are identical, so a chain reads the same on both sides:</p>
  *
  * <pre>{@code
@@ -18,17 +18,17 @@ import org.springframework.stereotype.Component;
  * }</pre>
  *
  * <p>Each method just hands back the builder of the component that owns the operation, so everything those
- * components document — sources, options, terminals, validation — applies unchanged. A component scan of
+ * components document - sources, options, terminals, validation - applies unchanged. A component scan of
  * {@code io.github.hclimkr.pxl.spring} picks up this facade, the components it delegates to and the
  * performance-logging aspect in one go, because sub-packages are scanned with it.</p>
  *
- * <p>Stateless once built, and safe to share across threads — as are the components behind it. The builders it
+ * <p>Stateless once built, and safe to share across threads - as are the components behind it. The builders it
  * hands back are not: each belongs to the one operation that started it.</p>
  *
  * <p>Deliberately carries no {@code @PxlPerformanceLogging}: these methods only construct a builder, exactly
  * like the components' own start methods, so timing them would measure nothing. The work still runs inside
  * the owning component's proxied, annotated back-end, because the injected components here <em>are</em>
- * their Spring proxies — a terminal re-enters one of them, not this facade.</p>
+ * their Spring proxies - a terminal re-enters one of them, not this facade.</p>
  *
  * <p>The no-arg constructor builds plain components for use outside a Spring context (tests, plain
  * {@code new PxlSpring()}); as with the components themselves, that path simply produces no performance
@@ -82,7 +82,7 @@ public class PxlSpring {
     }
 
     /**
-     * Creates a facade over plain, unproxied components — for use outside a Spring context.
+     * Creates a facade over plain, unproxied components - for use outside a Spring context.
      */
     public PxlSpring() {
 

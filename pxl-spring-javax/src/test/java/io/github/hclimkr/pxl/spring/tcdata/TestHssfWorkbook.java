@@ -14,7 +14,7 @@ import java.util.List;
  * Workbook-shaped DTO that declares its export engine on the class itself, unlike {@link TestWorkbook},
  * which carries no {@code @PxlWorkbook} annotation at all.
  *
- * <p>This is what makes the exporters' "no option → the workbook's own declared engine" fallback observable:
+ * <p>This is what makes the exporters' "no option -> the workbook's own declared engine" fallback observable:
  * with {@code TestWorkbook} that branch and the plain default both yield XLSX, so they cannot be told
  * apart.</p>
  *

@@ -40,10 +40,10 @@ import java.util.zip.ZipOutputStream;
 /**
  * Spring component that bundles multiple workbook objects into a single ZIP archive.
  *
- * <p>Everything is configured through the fluent builder returned by {@link #exportExcelZip()} — add one
+ * <p>Everything is configured through the fluent builder returned by {@link #exportExcelZip()} - add one
  * entry per {@code workbook(...)} call, then call a terminal ({@code toStream} / {@code toFile} /
  * {@code toResponse} / {@code toResponseStreaming} / {@code toResponseEntity}); the response terminals take
- * the archive's own download file name as an argument, and it is required there — unlike an entry name it has
+ * the archive's own download file name as an argument, and it is required there - unlike an entry name it has
  * nothing to fall back to:</p>
  *
  * <pre>{@code
@@ -54,7 +54,7 @@ import java.util.zip.ZipOutputStream;
  * }</pre>
  *
  * <p>An entry's file name falls back to the workbook object name, then to {@code Pxl{index}}. It must be a
- * plain name — one carrying a path separator is rejected with {@link PxlArgumentException}, so the archive
+ * plain name - one carrying a path separator is rejected with {@link PxlArgumentException}, so the archive
  * can never hand a traversal path to whoever extracts it.</p>
  *
  * <p>The index fallback only applies when neither of the earlier two yields a name, so it does not make
@@ -65,7 +65,7 @@ import java.util.zip.ZipOutputStream;
  * <p>That builder is the nested {@link Builder}. A fluent chain never has to name it; on the rare occasion
  * you hold one in a variable, spell it {@code PxlExcelZipExporter.Builder}.</p>
  *
- * <p>The component is stateless and safe to share across threads; the builder it hands back is not — start one
+ * <p>The component is stateless and safe to share across threads; the builder it hands back is not - start one
  * per archive.</p>
  *
  * <p>Reached through {@link io.github.hclimkr.pxl.spring.PxlSpring PxlSpring}: inject that one bean and call
@@ -73,12 +73,12 @@ import java.util.zip.ZipOutputStream;
  *
  * <p>The {@code exportExcelZipTo*} methods below are the builder's execution back-ends. They are
  * {@code public} only because Spring AOP (and {@code @Validated} method validation) can advise public methods
- * only — a terminal has to re-enter this component through its proxy for {@link PxlPerformanceLogging} to fire.
+ * only - a terminal has to re-enter this component through its proxy for {@link PxlPerformanceLogging} to fire.
  * Treat them as internal and always go through {@link #exportExcelZip()}.</p>
  *
  * <p>Because those back-ends' {@code @NotNull} constraints only fire through the proxy, each one re-checks
  * its destination with {@code PxlArgumentSupport} so a plainly constructed component fails the same way at
- * the same point — see that class for why. The archive name's {@code @NotBlank} needs no such guard:
+ * the same point - see that class for why. The archive name's {@code @NotBlank} needs no such guard:
  * {@code resolveZipFilename(String)} rejects a blank one with {@link PxlArgumentException} on either path.</p>
  */
 @Validated
@@ -88,7 +88,7 @@ public class PxlExcelZipExporter {
     private static final String TAG = "PxlExcelZipExporter";
 
     /**
-     * The core entry point, shared with the other components — see {@link PxlCoreSupport} for why it is not
+     * The core entry point, shared with the other components - see {@link PxlCoreSupport} for why it is not
      * one instance per component. Used while writing the archive, one export per entry.
      */
     private final Pxl pxl = PxlCoreSupport.core();
@@ -99,7 +99,7 @@ public class PxlExcelZipExporter {
      * <p>The builder's terminals must call back through the proxy, not through {@code this}: a plain
      * {@code this} reference bypasses the proxy, and with it {@link PxlPerformanceLogging} and {@code @Validated}.
      * {@code @Lazy} breaks the self-reference cycle, and {@code required = false} keeps plain
-     * {@code new PxlExcelZipExporter()} usage (outside a Spring context) working — it then falls back to
+     * {@code new PxlExcelZipExporter()} usage (outside a Spring context) working - it then falls back to
      * {@code this} and simply produces no performance log.</p>
      */
     @Autowired(required = false)
@@ -276,9 +276,9 @@ public class PxlExcelZipExporter {
     /**
      * Writes each of the builder's entries as a single ZIP entry into the given archive stream.
      *
-     * <p>An entry's file name comes from the builder ({@code explicit name → workbook name → Pxl{index}})
+     * <p>An entry's file name comes from the builder ({@code explicit name -> workbook name -> Pxl{index}})
      * and its extension from the format written by the workbook class's declared export engine. A name
-     * carrying a path separator is rejected. The deflate level is picked per entry — see
+     * carrying a path separator is rejected. The deflate level is picked per entry - see
      * {@link #deflateLevelFor(PxlFileFormat)}.</p>
      *
      * @param zipOutputStream the archive stream to append entries to
@@ -328,7 +328,7 @@ public class PxlExcelZipExporter {
      *
      * <p>{@code .xlsx} (OOXML) <em>is</em> a deflated ZIP container, so deflating it again costs a full
      * compression pass for essentially no size gain. Those entries are written at
-     * {@link Deflater#NO_COMPRESSION}, which emits stored deflate blocks — a few bytes of framing per 64&nbsp;KB
+     * {@link Deflater#NO_COMPRESSION}, which emits stored deflate blocks - a few bytes of framing per 64&nbsp;KB
      * in exchange for skipping the pass entirely. {@code .xls} (OLE2) is not compressed, so it keeps the
      * default level, where deflate genuinely pays off.</p>
      *
@@ -352,14 +352,14 @@ public class PxlExcelZipExporter {
      * <p>The distinction matters because {@link ZipOutputStream#close()} does two things: {@code finish()},
      * which writes the central directory, and {@code Deflater.end()}, which frees the native zlib stream.
      * After a failure only the second is wanted. Finishing would hand out a <em>well-formed</em> archive
-     * that silently lacks whatever the failure prevented — an empty but perfectly valid ZIP, if the failure
-     * came before the first entry — and no consumer can tell that apart from a complete one. Left
+     * that silently lacks whatever the failure prevented - an empty but perfectly valid ZIP, if the failure
+     * came before the first entry - and no consumer can tell that apart from a complete one. Left
      * unfinished, the bytes have no central directory and so cannot be opened at all, which is what makes
      * the failure visible: a servlet response ends without its terminating chunk, and a file on disk fails
      * to open.</p>
      *
-     * <p>The given stream is never closed here — every caller owns it (the caller's own stream, the servlet
-     * stream, or a file stream closed by its own try-with-resources) — so it is shielded from the archive's
+     * <p>The given stream is never closed here - every caller owns it (the caller's own stream, the servlet
+     * stream, or a file stream closed by its own try-with-resources) - so it is shielded from the archive's
      * {@code close()}.</p>
      *
      * @param outputStream the stream to write the archive to (not closed by this method)
@@ -390,7 +390,7 @@ public class PxlExcelZipExporter {
     /**
      * Builds the complete ZIP archive into an in-memory buffer.
      *
-     * <p>The archive is finished before returning, so the buffer holds the central directory too — the
+     * <p>The archive is finished before returning, so the buffer holds the central directory too - the
      * response destinations depend on that, because they must not touch the response until the archive is
      * whole. On a failure nothing is returned and the half-built buffer is simply discarded.</p>
      *
@@ -448,21 +448,21 @@ public class PxlExcelZipExporter {
      * Fluent builder for the ZIP export destinations of {@link PxlExcelZipExporter}. Created via
      * {@link PxlExcelZipExporter#exportExcelZip()}.
      *
-     * <p>Unlike the other Spring builders there is no core {@code pxl-javax} counterpart to mirror — ZIP
-     * bundling is a pxl-spring concern — so this builder simply collects archive entries and the archive's
+     * <p>Unlike the other Spring builders there is no core {@code pxl-javax} counterpart to mirror - ZIP
+     * bundling is a pxl-spring concern - so this builder simply collects archive entries and the archive's
      * own download name, then hands them to a terminal.</p>
      *
      * <p>Each {@link #workbook(Object)} call adds one archive entry; there are no separate option methods,
      * because an entry's export option and file name are arguments of the {@code workbook(...)} overload that
-     * adds it — they mean nothing except against that one entry. Terminal methods:
+     * adds it - they mean nothing except against that one entry. Terminal methods:
      * {@link #toStream(OutputStream)}, {@link #toFile(File)}, {@link #toResponse(HttpServletResponse, String)},
      * {@link #toResponseStreaming(HttpServletResponse, String)}, {@link #toResponseEntity(String)}. Each
      * terminal delegates straight back to the enclosing component so the work still runs inside a
      * Spring-proxied, {@code @PxlPerformanceLogging}-annotated method.</p>
      *
-     * <p>Nested in the component on purpose: everything the component reads off the builder — its constructor,
+     * <p>Nested in the component on purpose: everything the component reads off the builder - its constructor,
      * the collected {@code entries} and their {@code Entry} type, {@code validateEntries()},
-     * {@code resolveZipFilename(String)} — is {@code private} and stays reachable only because the two are
+     * {@code resolveZipFilename(String)} - is {@code private} and stays reachable only because the two are
      * nestmates. The public surface is exactly the entry and terminal methods.</p>
      *
      * <p>Not thread-safe, and single-use per terminal call. Example:</p>
@@ -496,7 +496,7 @@ public class PxlExcelZipExporter {
         /**
          * Creates a builder bound to the owning component.
          *
-         * <p>Takes no {@code Pxl} — there is no core builder to seed; the component generates each entry with
+         * <p>Takes no {@code Pxl} - there is no core builder to seed; the component generates each entry with
          * its own {@code Pxl} instance while writing the archive.</p>
          *
          * @param exporter the component the terminal methods delegate back to (its AOP proxy where available)
@@ -526,7 +526,7 @@ public class PxlExcelZipExporter {
          *
          * <p>The option reaches the entry's <em>bytes</em> and nothing else. Its extension comes from the
          * engine the workbook class declares through {@code @PxlWorkbook}, which the option does not
-         * override — so an option carrying {@code HSSF} puts OLE2 bytes inside an entry still named
+         * override - so an option carrying {@code HSSF} puts OLE2 bytes inside an entry still named
          * {@code .xlsx}. Declare the engine on the class when the extension has to follow it.</p>
          *
          * @param workbookObject the {@code @PxlWorkbook}-annotated source object
@@ -604,8 +604,8 @@ public class PxlExcelZipExporter {
         /**
          * Streams the configured entries as a ZIP archive to the servlet response with download headers.
          *
-         * <p>{@code zipFilename} is required — unlike the per-entry names there is nothing to fall back to, so
-         * a blank one raises {@link PxlArgumentException}. The name is used as given — normalize it (NFC)
+         * <p>{@code zipFilename} is required - unlike the per-entry names there is nothing to fall back to, so
+         * a blank one raises {@link PxlArgumentException}. The name is used as given - normalize it (NFC)
          * upstream if needed; RFC 5987 encoding is applied when the header is written.</p>
          *
          * @param response    the servlet response to write to
@@ -633,17 +633,17 @@ public class PxlExcelZipExporter {
          * can be sent.</p>
          *
          * <p>Note where the line falls. The empty-archive and archive-name checks run before the headers, so
-         * those failures still leave the response untouched. <strong>Entry-name validation does not</strong> —
+         * those failures still leave the response untouched. <strong>Entry-name validation does not</strong> -
          * it happens per entry inside the write loop, which is after the headers have gone out. Such a failure
          * writes no body but does leave the download headers set.</p>
          *
          * <p>What a failure never produces is a readable archive: the central directory is written only once
-         * every entry is in, so a client can never mistake a failed download for a complete one — see
+         * every entry is in, so a client can never mistake a failed download for a complete one - see
          * {@code writeArchive}.</p>
          *
          * <p>There is no streaming counterpart for the other destinations: {@link #toStream(OutputStream)} and
          * {@link #toFile(File)} already write straight through, and {@link #toResponseEntity(String)} cannot,
-         * because its body is produced in full before the entity is returned — the {@link Resource} it carries
+         * because its body is produced in full before the entity is returned - the {@link Resource} it carries
          * wraps the finished bytes rather than generating them on demand.</p>
          *
          * @param response    the servlet response to write to

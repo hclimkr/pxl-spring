@@ -19,8 +19,8 @@ import static org.assertj.core.api.Assertions.*;
  * static-helper holder whose private constructor rejects reflective instantiation, and its extension
  * validators accept every supported extension case-insensitively while rejecting everything else.
  *
- * <p>Both source forms are swept, because they read the file name off different methods —
- * {@code MultipartFile.getOriginalFilename()} and {@code Resource.getFilename()} — and only the second can
+ * <p>Both source forms are swept, because they read the file name off different methods -
+ * {@code MultipartFile.getOriginalFilename()} and {@code Resource.getFilename()} - and only the second can
  * legitimately be {@code null} on a perfectly usable source. That case is rejected on purpose; see
  * {@code namelessResource_isRejected}.</p>
  */
@@ -32,7 +32,7 @@ class PxlImportSupportTests {
 
     /**
      * A resource that reports the given file name. {@link ByteArrayResource} itself reports none, so the
-     * name has to be supplied by an override — which is also what a caller holding bare bytes has to do.
+     * name has to be supplied by an override - which is also what a caller holding bare bytes has to do.
      */
     private static Resource resource(final String filename) {
         return new ByteArrayResource("x".getBytes(StandardCharsets.UTF_8)) {
@@ -104,7 +104,7 @@ class PxlImportSupportTests {
     @Test
     void blankExtension_isRejected() {
         // a name with no dot yields an empty extension, and MockMultipartFile turns a null file name into
-        // an empty one — both take the blank-extension branch
+        // an empty one - both take the blank-extension branch
         assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension(file(null)))
                 .isInstanceOf(HttpMediaTypeNotSupportedException.class);
 

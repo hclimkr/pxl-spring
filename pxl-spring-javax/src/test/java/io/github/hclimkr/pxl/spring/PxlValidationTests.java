@@ -21,14 +21,14 @@ import static io.github.hclimkr.pxl.spring.component.PxlExcelExporterTests.users
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Verifies that the {@code @Validated} bean-validation constraints on the components actually fire —
+ * Verifies that the {@code @Validated} bean-validation constraints on the components actually fire -
  * this only happens through the Spring proxy created by {@link MethodValidationPostProcessor}, so these
  * tests run inside a small application context (unlike the other, plain-instance behavioural tests).
  *
- * <p>Bean validation reaches only the back-end arguments — the <em>destination</em> a terminal passes back
+ * <p>Bean validation reaches only the back-end arguments - the <em>destination</em> a terminal passes back
  * into the component, and the download file name it passes alongside it; a terminal re-entering through the
  * proxy is what makes that work. Source arguments are collected by the fluent builder, which is a plain
- * object rather than a bean, so those are guarded by the core's own assertions instead — both halves are
+ * object rather than a bean, so those are guarded by the core's own assertions instead - both halves are
  * asserted here.</p>
  *
  * <p>The ZIP exporter's archive name is the one file name that is {@code @NotBlank} rather than nullable: it
@@ -130,7 +130,7 @@ class PxlValidationTests {
     @Test
     void nullWorkbookObject_throwsPxlNullPointer() {
         // Source arguments are collected by the fluent builder, which is a plain object rather than a Spring
-        // bean — bean validation cannot reach it, so the core builder's own assertions guard them instead.
+        // bean - bean validation cannot reach it, so the core builder's own assertions guard them instead.
         assertThatThrownBy(() ->
                 pxlExcelExporter.exportExcel().workbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
@@ -146,7 +146,7 @@ class PxlValidationTests {
     @Test
     void nullSampleDestination_violatesNotNull() {
         // same shape as nullDestination_violatesNotNull, for the sample exporter's own (builder, destination)
-        // back-ends — proves its terminals really do re-enter the component through the Spring proxy
+        // back-ends - proves its terminals really do re-enter the component through the Spring proxy
         assertThatThrownBy(() ->
                 pxlSampleExcelExporter.exportSampleExcel().sheet(TestUser.class, "Users").toStream(null))
                 .isInstanceOf(ConstraintViolationException.class);
@@ -171,7 +171,7 @@ class PxlValidationTests {
     @Test
     void nullExcelWorkbookClass_throwsPxlNullPointer() {
         // parse-target arguments are collected by the fluent builder, which is a plain object rather than a
-        // Spring bean — the core builder's own assertions guard them instead
+        // Spring bean - the core builder's own assertions guard them instead
         assertThatThrownBy(() ->
                 pxlExcelImporter.importExcel().workbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
@@ -188,7 +188,7 @@ class PxlValidationTests {
 
     @Test
     void emptyCsvFileList_violatesNotEmpty() {
-        // the back-end declares @NotEmpty List<@NotNull MultipartFile> — an empty list must be rejected
+        // the back-end declares @NotEmpty List<@NotNull MultipartFile> - an empty list must be rejected
         assertThatThrownBy(() ->
                 pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromMultipartFiles(Collections.emptyList()))
                 .isInstanceOf(ConstraintViolationException.class);
@@ -197,7 +197,7 @@ class PxlValidationTests {
     @Test
     void nullZipDestination_violatesNotNull() {
         // same shape as nullDestination_violatesNotNull, for the zip exporter's own (builder, destination)
-        // back-ends — proves its terminals really do re-enter the component through the Spring proxy
+        // back-ends - proves its terminals really do re-enter the component through the Spring proxy
         assertThatThrownBy(() ->
                 pxlExcelZipExporter.exportExcelZip().workbook(new TestWorkbook()).toStream(null))
                 .isInstanceOf(ConstraintViolationException.class);
@@ -206,7 +206,7 @@ class PxlValidationTests {
     @Test
     void nullCsvDestination_violatesNotNull() {
         // same shape as nullDestination_violatesNotNull, for the CSV exporter's own (builder, destination)
-        // back-ends — proves its terminals really do re-enter the component through the Spring proxy
+        // back-ends - proves its terminals really do re-enter the component through the Spring proxy
         assertThatThrownBy(() ->
                 pxlCsvExporter.exportCsv().sheet(TestUser.class, users(), "Users").toStream(null))
                 .isInstanceOf(ConstraintViolationException.class);
@@ -415,7 +415,7 @@ class PxlValidationTests {
     @Test
     void nullWorkbookObjectInZipEntry_throwsPxlNullPointer() {
         // the archive entries are collected by the fluent builder, which is a plain object rather than a
-        // Spring bean — the container-element constraint List<@NotNull ?> that used to guard them is gone,
+        // Spring bean - the container-element constraint List<@NotNull ?> that used to guard them is gone,
         // so the builder rejects a null entry itself.
         assertThatThrownBy(() ->
                 pxlExcelZipExporter.exportExcelZip().workbook(null))

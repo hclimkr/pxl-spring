@@ -69,8 +69,8 @@ class PxlExcelImporterTests {
     }
 
     /**
-     * An Excel upload whose {@link MultipartFile#getInputStream()} fails — used to drive the {@code IOException}
-     * → {@link PxlIOException} translation path. Its extension still validates, so the failure lands on the
+     * An Excel upload whose {@link MultipartFile#getInputStream()} fails - used to drive the {@code IOException}
+     * -> {@link PxlIOException} translation path. Its extension still validates, so the failure lands on the
      * stream read rather than the extension check.
      */
     private static MultipartFile throwingFile(final String filename) {
@@ -96,7 +96,7 @@ class PxlExcelImporterTests {
     }
 
     /**
-     * An Excel resource whose {@link Resource#getInputStream()} fails — the {@code IOException} →
+     * An Excel resource whose {@link Resource#getInputStream()} fails - the {@code IOException} ->
      * {@link PxlIOException} translation path for the resource source form. Its extension still validates, so
      * the failure lands on the stream read rather than the extension check.
      */
@@ -116,7 +116,7 @@ class PxlExcelImporterTests {
 
     @Test
     void importExcelSingleSheetAsList_roundTrips() throws PxlException, HttpMediaTypeNotSupportedException {
-        // the row-class sheet(...) form is typed List<TestUser> end-to-end — no cast at the call site
+        // the row-class sheet(...) form is typed List<TestUser> end-to-end - no cast at the call site
         final List<TestUser> result = pxlSpring.importExcel()
                 .sheet(TestUser.class, "Users")
                 .fromMultipartFile(file("users.xlsx", sheetXlsx("Users")));
@@ -167,7 +167,7 @@ class PxlExcelImporterTests {
 
     @Test
     void importExcelWorkbook_roundTrips() throws PxlException, HttpMediaTypeNotSupportedException {
-        // the workbook(...) form is typed TestWorkbook end-to-end — no cast at the call site
+        // the workbook(...) form is typed TestWorkbook end-to-end - no cast at the call site
         final TestWorkbook back = pxlSpring.importExcel()
                 .workbook(TestWorkbook.class)
                 .fromMultipartFile(file("wb.xlsx", workbookXlsx()));

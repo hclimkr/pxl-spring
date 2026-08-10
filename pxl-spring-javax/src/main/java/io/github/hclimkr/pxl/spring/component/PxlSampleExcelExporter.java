@@ -42,7 +42,7 @@ import java.util.Optional;
  * worked example of the expected format alongside the column headers.</p>
  *
  * <p>Everything is configured through the fluent builder returned by {@link #exportSampleExcel()}, which
- * mirrors the core {@code Pxl.exportSampleExcel()} shape — pick a source ({@code workbook(...)} /
+ * mirrors the core {@code Pxl.exportSampleExcel()} shape - pick a source ({@code workbook(...)} /
  * {@code sheet(...)}), optionally {@code override(...)} the option, then call a terminal
  * ({@code toStream} / {@code toFile} / {@code toResponse} / {@code toResponseStreaming} /
  * {@code toResponseEntity}); the response terminals take the download file name as an argument:</p>
@@ -58,7 +58,7 @@ import java.util.Optional;
  * <p>That builder is the nested {@link Builder}. A fluent chain never has to name it; on the rare occasion
  * you hold one in a variable, spell it {@code PxlSampleExcelExporter.Builder}.</p>
  *
- * <p>The component is stateless and safe to share across threads; the builder it hands back is not — start one
+ * <p>The component is stateless and safe to share across threads; the builder it hands back is not - start one
  * per export.</p>
  *
  * <p>Reached through {@link io.github.hclimkr.pxl.spring.PxlSpring PxlSpring}: inject that one bean and call
@@ -66,12 +66,12 @@ import java.util.Optional;
  *
  * <p>The {@code exportSampleExcelTo*} methods below are the builder's execution back-ends. They are
  * {@code public} only because Spring AOP (and {@code @Validated} method validation) can advise public methods
- * only — a terminal has to re-enter this component through its proxy for {@link PxlPerformanceLogging} to fire.
+ * only - a terminal has to re-enter this component through its proxy for {@link PxlPerformanceLogging} to fire.
  * Treat them as internal and always go through {@link #exportSampleExcel()}.</p>
  *
  * <p>Because those back-ends' {@code @NotNull} constraints only fire through the proxy, each one re-checks
  * its destination with {@code PxlArgumentSupport} so a plainly constructed component fails the same way at
- * the same point — see that class for why.</p>
+ * the same point - see that class for why.</p>
  */
 @Validated
 @Component
@@ -80,7 +80,7 @@ public class PxlSampleExcelExporter {
     private static final String TAG = "PxlSampleExcelExporter";
 
     /**
-     * The core entry point, shared with the other components — see {@link PxlCoreSupport} for why it is not
+     * The core entry point, shared with the other components - see {@link PxlCoreSupport} for why it is not
      * one instance per component.
      */
     private final Pxl pxl = PxlCoreSupport.core();
@@ -91,7 +91,7 @@ public class PxlSampleExcelExporter {
      * <p>The builder's terminals must call back through the proxy, not through {@code this}: a plain
      * {@code this} reference bypasses the proxy, and with it {@link PxlPerformanceLogging} and {@code @Validated}.
      * {@code @Lazy} breaks the self-reference cycle, and {@code required = false} keeps plain
-     * {@code new PxlSampleExcelExporter()} usage (outside a Spring context) working — it then falls back to
+     * {@code new PxlSampleExcelExporter()} usage (outside a Spring context) working - it then falls back to
      * {@code this} and simply produces no performance log.</p>
      */
     @Autowired(required = false)
@@ -250,8 +250,8 @@ public class PxlSampleExcelExporter {
      * Fluent builder for the sample-template destinations of {@link PxlSampleExcelExporter}. Created via
      * {@link PxlSampleExcelExporter#exportSampleExcel()}.
      *
-     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlSampleExcelExportBuilder} shape — source
-     * methods, then {@link #override(PxlExportWorkbookOption)}, then a terminal — and adds the Spring-facing
+     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlSampleExcelExportBuilder} shape - source
+     * methods, then {@link #override(PxlExportWorkbookOption)}, then a terminal - and adds the Spring-facing
      * destinations ({@link HttpServletResponse} / {@link ResponseEntity}) plus their download-name handling.</p>
      *
      * <p>There are two mutually exclusive source forms:</p>
@@ -266,8 +266,8 @@ public class PxlSampleExcelExporter {
      * holds the collected arguments only; each terminal delegates straight back to the enclosing component so
      * the work still runs inside a Spring-proxied, {@code @PxlPerformanceLogging}-annotated method.</p>
      *
-     * <p>Nested in the component on purpose: everything the component reads off the builder — its
-     * constructor, {@code coreBuilder}, {@code resolveFilename(String)}, {@code resolveFileFormat()} — is
+     * <p>Nested in the component on purpose: everything the component reads off the builder - its
+     * constructor, {@code coreBuilder}, {@code resolveFilename(String)}, {@code resolveFileFormat()} - is
      * {@code private} and stays reachable only because the two are nestmates. The public surface is exactly
      * the source, option and terminal methods.</p>
      *
@@ -404,7 +404,7 @@ public class PxlSampleExcelExporter {
          * Streams the configured sample template to the servlet response with download headers.
          *
          * <p>When {@code excelFilename} is blank the name falls back to {@code PxlSample}. The name is used as
-         * given — normalize it (NFC) upstream if needed; RFC 5987 encoding is applied when the header is
+         * given - normalize it (NFC) upstream if needed; RFC 5987 encoding is applied when the header is
          * written.</p>
          *
          * @param response      the servlet response to write to
@@ -433,7 +433,7 @@ public class PxlSampleExcelExporter {
          *
          * <p>Note where the line falls, because it sits further back here than on the other two exporters.
          * Only the {@code null}-destination guard runs before the headers; this builder has no source check of
-         * its own at all — "both or neither source form" is the core builder's call, made inside its own
+         * its own at all - "both or neither source form" is the core builder's call, made inside its own
          * terminal, which here is <strong>after</strong> the headers have gone out. Such a failure writes no
          * body but does leave the download headers set.</p>
          *

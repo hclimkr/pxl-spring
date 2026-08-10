@@ -36,11 +36,11 @@ import java.util.Objects;
  *
  * <p>The template is <strong>not empty</strong>: it holds a header record plus a single sample data record
  * whose fields come from each column's {@code @PxlColumn(exportSample = ...)} value, so the recipient sees a
- * worked example of the expected format alongside the column headers — and can fill it in and send it back
+ * worked example of the expected format alongside the column headers - and can fill it in and send it back
  * through {@code importCsv()}.</p>
  *
  * <p>Everything is configured through the fluent builder returned by {@link #exportSampleCsv()}, which mirrors
- * the core {@code Pxl.exportSampleCsv()} shape — pick the sheet ({@code sheet(...)}), optionally
+ * the core {@code Pxl.exportSampleCsv()} shape - pick the sheet ({@code sheet(...)}), optionally
  * {@code override(...)} the option, then call a terminal ({@code toStream} / {@code toFile} /
  * {@code toResponse} / {@code toResponseStreaming} / {@code toResponseEntity}); the response terminals take
  * the download file name as an argument:</p>
@@ -52,13 +52,13 @@ import java.util.Objects;
  * }</pre>
  *
  * <p><strong>A CSV file holds one sheet</strong>, so there is no {@code workbook(...)} form to call and the
- * terminals write a single sheet — configuring more than one fails there. The download file name defaults to
+ * terminals write a single sheet - configuring more than one fails there. The download file name defaults to
  * {@code PxlSample}, and the format is always {@code .csv}.</p>
  *
  * <p>That builder is the nested {@link Builder}. A fluent chain never has to name it; on the rare occasion
  * you hold one in a variable, spell it {@code PxlSampleCsvExporter.Builder}.</p>
  *
- * <p>The component is stateless and safe to share across threads; the builder it hands back is not — start one
+ * <p>The component is stateless and safe to share across threads; the builder it hands back is not - start one
  * per export.</p>
  *
  * <p>Reached through {@link io.github.hclimkr.pxl.spring.PxlSpring PxlSpring}: inject that one bean and call
@@ -66,12 +66,12 @@ import java.util.Objects;
  *
  * <p>The {@code exportSampleCsvTo*} methods below are the builder's execution back-ends. They are
  * {@code public} only because Spring AOP (and {@code @Validated} method validation) can advise public methods
- * only — a terminal has to re-enter this component through its proxy for {@link PxlPerformanceLogging} to fire.
+ * only - a terminal has to re-enter this component through its proxy for {@link PxlPerformanceLogging} to fire.
  * Treat them as internal and always go through {@link #exportSampleCsv()}.</p>
  *
  * <p>Because those back-ends' {@code @NotNull} constraints only fire through the proxy, each one re-checks
  * its destination with {@code PxlArgumentSupport} so a plainly constructed component fails the same way at
- * the same point — see that class for why.</p>
+ * the same point - see that class for why.</p>
  */
 @Validated
 @Component
@@ -80,7 +80,7 @@ public class PxlSampleCsvExporter {
     private static final String TAG = "PxlSampleCsvExporter";
 
     /**
-     * The core entry point, shared with the other components — see {@link PxlCoreSupport} for why it is not
+     * The core entry point, shared with the other components - see {@link PxlCoreSupport} for why it is not
      * one instance per component.
      */
     private final Pxl pxl = PxlCoreSupport.core();
@@ -91,7 +91,7 @@ public class PxlSampleCsvExporter {
      * <p>The builder's terminals must call back through the proxy, not through {@code this}: a plain
      * {@code this} reference bypasses the proxy, and with it {@link PxlPerformanceLogging} and {@code @Validated}.
      * {@code @Lazy} breaks the self-reference cycle, and {@code required = false} keeps plain
-     * {@code new PxlSampleCsvExporter()} usage (outside a Spring context) working — it then falls back to
+     * {@code new PxlSampleCsvExporter()} usage (outside a Spring context) working - it then falls back to
      * {@code this} and simply produces no performance log.</p>
      */
     @Autowired(required = false)
@@ -247,8 +247,8 @@ public class PxlSampleCsvExporter {
      * Fluent builder for the CSV sample-template destinations of {@link PxlSampleCsvExporter}. Created via
      * {@link PxlSampleCsvExporter#exportSampleCsv()}.
      *
-     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlSampleCsvExportBuilder} shape — the sheet
-     * source, then {@link #override(PxlExportWorkbookOption)}, then a terminal — and adds the Spring-facing
+     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlSampleCsvExportBuilder} shape - the sheet
+     * source, then {@link #override(PxlExportWorkbookOption)}, then a terminal - and adds the Spring-facing
      * destinations ({@link HttpServletResponse} / {@link ResponseEntity}) plus their download-name handling.</p>
      *
      * <p>There is one source form, {@link #sheet(Class, String)}, because a CSV file holds one sheet. It
@@ -261,8 +261,8 @@ public class PxlSampleCsvExporter {
      * holds the collected arguments only; each terminal delegates straight back to the enclosing component so
      * the work still runs inside a Spring-proxied, {@code @PxlPerformanceLogging}-annotated method.</p>
      *
-     * <p>Nested in the component on purpose: everything the component reads off the builder — its constructor,
-     * {@code coreBuilder}, {@code resolveFilename(String)} — is {@code private} and stays reachable only
+     * <p>Nested in the component on purpose: everything the component reads off the builder - its constructor,
+     * {@code coreBuilder}, {@code resolveFilename(String)} - is {@code private} and stays reachable only
      * because the two are nestmates. The public surface is exactly the source, option and terminal methods.</p>
      *
      * <p>Not thread-safe, and single-use per terminal call. Example:
@@ -306,7 +306,7 @@ public class PxlSampleCsvExporter {
         /**
          * Sets the sheet to write a sample for, its columns described by the given row class.
          *
-         * <p>A CSV file holds one sheet, so calling this a second time does not add one — it makes the
+         * <p>A CSV file holds one sheet, so calling this a second time does not add one - it makes the
          * terminal fail.</p>
          *
          * @param rowClass  the row class describing the columns
@@ -369,7 +369,7 @@ public class PxlSampleCsvExporter {
          * Streams the configured sample template to the servlet response with download headers.
          *
          * <p>When {@code csvFilename} is blank the name falls back to {@code PxlSample}. The name is used as
-         * given — normalize it (NFC) upstream if needed; RFC 5987 encoding is applied when the header is
+         * given - normalize it (NFC) upstream if needed; RFC 5987 encoding is applied when the header is
          * written.</p>
          *
          * @param response    the servlet response to write to
@@ -389,7 +389,7 @@ public class PxlSampleCsvExporter {
          *
          * <p>Present for consistency across the export builders rather than because templates need it, and on
          * the CSV side it is the thinnest of the five: a template is one header record and one sample record,
-         * and the core has already rendered both into memory before this writes anything — so what is saved is
+         * and the core has already rendered both into memory before this writes anything - so what is saved is
          * the download buffer, on an output measured in bytes.</p>
          *
          * <p>It still gives up what streaming always gives up: a failure part-way through cannot be taken back
@@ -397,7 +397,7 @@ public class PxlSampleCsvExporter {
          * {@code Content-Length} can be sent, so the response goes out chunked.</p>
          *
          * <p>Note where the line falls. Only the {@code null}-destination guard runs before the headers; this
-         * builder has no source check of its own — "no sheet, or more than one" is the core builder's call,
+         * builder has no source check of its own - "no sheet, or more than one" is the core builder's call,
          * made inside its own terminal, which here is <strong>after</strong> the headers have gone out. Such a
          * failure writes no body but does leave the download headers set.</p>
          *
@@ -437,7 +437,7 @@ public class PxlSampleCsvExporter {
          *
          * <p>Unlike {@link PxlCsvExporter.Builder} there is no sheet-name fallback. That one names a file
          * holding real data, where the sheet name is the best description of what is in it; a template
-         * describes a shape rather than a data set, so it is named as one — the same reasoning that leaves
+         * describes a shape rather than a data set, so it is named as one - the same reasoning that leaves
          * {@link PxlSampleExcelExporter.Builder} with only its constant.</p>
          *
          * <p>There is no file-format resolution to go with this: CSV is the only format this exporter writes,

@@ -11,13 +11,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests for the {@link PxlCoreSupport} holder. It pins down the class's own contract — a non-instantiable
- * static-helper holder handing out one stable {@link Pxl} — and, more importantly, guards the reason it
+ * Tests for the {@link PxlCoreSupport} holder. It pins down the class's own contract - a non-instantiable
+ * static-helper holder handing out one stable {@link Pxl} - and, more importantly, guards the reason it
  * exists: every component must take its core from here rather than calling {@code new Pxl()} itself, because
  * each {@code new Pxl()} bootstraps (and never closes) another bean-validation {@code ValidatorFactory}.
  *
- * <p>The sharing has no observable behaviour of its own — {@link Pxl} is immutable and every factory method
- * on it returns a fresh builder either way — so the guard has to read each component's private {@code pxl}
+ * <p>The sharing has no observable behaviour of its own - {@link Pxl} is immutable and every factory method
+ * on it returns a fresh builder either way - so the guard has to read each component's private {@code pxl}
  * field reflectively. That is also why this test class, alone among the {@code internal.support} tests,
  * reaches up into the {@code component} package; the production dependency still runs one way only
  * ({@code component} &rarr; {@code internal.support}).</p>

@@ -61,8 +61,8 @@ class PxlCsvImporterTests {
     }
 
     /**
-     * A CSV upload whose {@link MultipartFile#getInputStream()} fails — used to drive the {@code IOException}
-     * → {@link PxlIOException} translation path. Its extension still validates, so the failure lands on the
+     * A CSV upload whose {@link MultipartFile#getInputStream()} fails - used to drive the {@code IOException}
+     * -> {@link PxlIOException} translation path. Its extension still validates, so the failure lands on the
      * stream read rather than the extension check.
      */
     private static MultipartFile throwingFile(final String filename) {
@@ -76,7 +76,7 @@ class PxlCsvImporterTests {
 
     /**
      * A resource reporting the given file name. {@link ByteArrayResource} reports none of its own, and a
-     * nameless resource is refused, so the name has to be supplied by an override — which matters twice over
+     * nameless resource is refused, so the name has to be supplied by an override - which matters twice over
      * here, because a CSV's file name is also its sheet name.
      */
     private static Resource resource(final String filename, final byte[] content) {
@@ -89,7 +89,7 @@ class PxlCsvImporterTests {
     }
 
     /**
-     * A CSV resource whose {@link Resource#getInputStream()} fails — the {@code IOException} →
+     * A CSV resource whose {@link Resource#getInputStream()} fails - the {@code IOException} ->
      * {@link PxlIOException} translation path for the resource source form.
      */
     private static Resource throwingResource(final String filename) {
@@ -108,7 +108,7 @@ class PxlCsvImporterTests {
 
     @Test
     void importCsvSingleSheet_roundTrips() throws PxlException, HttpMediaTypeNotSupportedException {
-        // the row-class sheet(...) form is typed List<TestUser> end-to-end — no cast at the call site
+        // the row-class sheet(...) form is typed List<TestUser> end-to-end - no cast at the call site
         final List<TestUser> result = pxlSpring.importCsv()
                 .sheet(TestUser.class)
                 .fromMultipartFile(file("users.csv", USERS_CSV));
@@ -141,7 +141,7 @@ class PxlCsvImporterTests {
     @Test
     void importCsvWorkbook_fromSingleMultipartFile_mapsFileToNamedSheet() throws PxlException, HttpMediaTypeNotSupportedException {
         // fromMultipartFile(...) is just the single-upload spelling of fromMultipartFiles(...), so the
-        // workbook form accepts it too — the old single-file overload was sheet-only
+        // workbook form accepts it too - the old single-file overload was sheet-only
         final TestWorkbook back = pxlSpring.importCsv()
                 .workbook(TestWorkbook.class)
                 .fromMultipartFile(file("Users.csv", USERS_CSV));
@@ -336,7 +336,7 @@ class PxlCsvImporterTests {
 
     @Test
     void blankWorkbookName_isNotDerivedFromFilename() throws PxlException, HttpMediaTypeNotSupportedException {
-        // unlike the Excel importer, a CSV file name names its sheet — there is no workbook-name fallback
+        // unlike the Excel importer, a CSV file name names its sheet - there is no workbook-name fallback
         final TestWorkbook back = pxlSpring.importCsv()
                 .workbook(TestWorkbook.class)
                 .fromMultipartFile(file("Users.csv", USERS_CSV));
@@ -397,7 +397,7 @@ class PxlCsvImporterTests {
 
     @Test
     void withoutDelimiterOption_semicolonCsvDoesNotYieldTheRows() {
-        // Guards the tests above — without the option the very same upload must not produce the rows. With
+        // Guards the tests above - without the option the very same upload must not produce the rows. With
         // the default comma delimiter the whole line is one "Name;Age" cell, which either fails the parse
         // outright or matches no column; both outcomes are acceptable, binding "Alice" is not.
         final List<TestUser> parsed;

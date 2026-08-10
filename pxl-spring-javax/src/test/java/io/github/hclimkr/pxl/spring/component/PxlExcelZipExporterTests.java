@@ -202,7 +202,7 @@ class PxlExcelZipExporterTests {
 
     // ----- ZipFile (central-directory) validity -----
     // These fail if the archive bytes are captured before the ZipOutputStream is closed (missing central
-    // directory) — the streaming ZipInputStream checks above would not catch that.
+    // directory) - the streaming ZipInputStream checks above would not catch that.
 
     @Test
     void zipToResponseEntity_isValidArchiveViaZipFile() throws PxlException, IOException {
@@ -684,7 +684,7 @@ class PxlExcelZipExporterTests {
     @Test
     void perEntryOption_changesTheEntryBodyButNotItsExtension() throws PxlException, IOException {
         // the entry extension comes from the workbook class's declared engine, not from the per-entry
-        // option — so an HSSF option yields OLE2 bytes still stored under a .xlsx entry name
+        // option - so an HSSF option yields OLE2 bytes still stored under a .xlsx entry name
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         pxlSpring.exportExcelZip()
                 .workbook(workbook("hssf"), hssfOption())

@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.*;
  * Tests for the {@link PxlArgumentSupport} guard. Its real effect is covered by the component tests, which
  * pin that a plainly constructed component rejects a {@code null} destination with
  * {@link PxlNullPointerException} rather than a raw {@code NullPointerException}; this pins the class's own
- * contract — a non-instantiable static-helper holder whose guard names the offending parameter and stays out
+ * contract - a non-instantiable static-helper holder whose guard names the offending parameter and stays out
  * of the way otherwise.
  */
 class PxlArgumentSupportTests {

@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Behavioural tests for {@link PxlExcelExporter} — round-trip export/import across every destination,
+ * Behavioural tests for {@link PxlExcelExporter} - round-trip export/import across every destination,
  * download headers, filename resolution/encoding, export-engine switching, password protection, and the
  * raw {@link Workbook} path, all driven through the {@link PxlExcelExporter.Builder} fluent API.
  *
@@ -97,7 +97,7 @@ public class PxlExcelExporterTests {
     }
 
     /**
-     * The workbook's sheet names, in sheet order — so a test can assert both how many sheets were produced
+     * The workbook's sheet names, in sheet order - so a test can assert both how many sheets were produced
      * and in which order, which reimporting by name cannot show.
      */
     static List<String> sheetNames(final byte[] bytes) throws IOException {
@@ -561,7 +561,7 @@ public class PxlExcelExporterTests {
     }
 
     /**
-     * Collects every STRING cell value from the given sheet — used to assert which header labels the
+     * Collects every STRING cell value from the given sheet - used to assert which header labels the
      * i18n bundle produced, independent of the exact header row index.
      */
     private static List<String> stringCells(final byte[] bytes, final String sheetName) throws IOException {
@@ -720,7 +720,7 @@ public class PxlExcelExporterTests {
                 .sheet(TestUser.class, users(), "Users")
                 .toResponse(response, "data");
 
-        // Content-Disposition must be replaced, not appended — a second value would corrupt the download
+        // Content-Disposition must be replaced, not appended - a second value would corrupt the download
         assertThat(response.getHeaders(HttpHeaders.CONTENT_DISPOSITION)).hasSize(1);
         assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("data.xlsx");
         // Content-Type reflects the export as a single value

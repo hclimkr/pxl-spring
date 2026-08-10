@@ -33,11 +33,11 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Spring component that reads Excel sources — multipart uploads and Spring {@link Resource}s — into Java
+ * Spring component that reads Excel sources - multipart uploads and Spring {@link Resource}s - into Java
  * objects.
  *
  * <p>Everything is configured through the fluent builder returned by {@link #importExcel()}, which mirrors
- * the core {@code Pxl.importExcel()} shape — optionally set {@code workbookName(...)}/{@code override(...)},
+ * the core {@code Pxl.importExcel()} shape - optionally set {@code workbookName(...)}/{@code override(...)},
  * pick a parse target ({@code workbook(...)} / {@code sheet(...)}), then call
  * {@code fromMultipartFile(...)} or {@code fromResource(...)}. The result type is carried through the
  * generics, so no cast is needed:</p>
@@ -50,7 +50,7 @@ import java.util.Objects;
  * }</pre>
  *
  * <p>{@code fromResource(...)} is the non-HTTP half of the same operation, for the paths a Spring
- * application reads a spreadsheet on that are not an upload — a batch job reading a file off disk, an
+ * application reads a spreadsheet on that are not an upload - a batch job reading a file off disk, an
  * initializer reading a classpath seed, an integration test reading a fixture. It exists so those callers
  * need not build their own core {@code Pxl} instance to get at a stream terminal.</p>
  *
@@ -63,7 +63,7 @@ import java.util.Objects;
  * fluent chain never has to name either; on the rare occasion you hold one in a variable, spell them
  * {@code PxlExcelImporter.Builder} and {@code PxlExcelImporter.Builder.Source<R>}.</p>
  *
- * <p>The component is stateless and safe to share across threads; the builder it hands back is not — start one
+ * <p>The component is stateless and safe to share across threads; the builder it hands back is not - start one
  * per import.</p>
  *
  * <p>Reached through {@link io.github.hclimkr.pxl.spring.PxlSpring PxlSpring}: inject that one bean and call
@@ -71,7 +71,7 @@ import java.util.Objects;
  *
  * <p>The {@code importExcelFrom*} methods below are the builder's execution back-ends, one per source form.
  * They are {@code public} only because Spring AOP (and {@code @Validated} method validation) can advise public
- * methods only — a terminal has to re-enter this component through its proxy for
+ * methods only - a terminal has to re-enter this component through its proxy for
  * {@link PxlPerformanceLogging} to fire. Treat them as internal and always go through
  * {@link #importExcel()}.</p>
  */
@@ -82,7 +82,7 @@ public class PxlExcelImporter {
     private static final String TAG = "PxlExcelImporter";
 
     /**
-     * The core entry point, shared with the other components — see {@link PxlCoreSupport} for why it is not
+     * The core entry point, shared with the other components - see {@link PxlCoreSupport} for why it is not
      * one instance per component.
      */
     private final Pxl pxl = PxlCoreSupport.core();
@@ -93,7 +93,7 @@ public class PxlExcelImporter {
      * <p>The builder's terminal must call back through the proxy, not through {@code this}: a plain
      * {@code this} reference bypasses the proxy, and with it {@link PxlPerformanceLogging} and {@code @Validated}.
      * {@code @Lazy} breaks the self-reference cycle, and {@code required = false} keeps plain
-     * {@code new PxlExcelImporter()} usage (outside a Spring context) working — it then falls back to
+     * {@code new PxlExcelImporter()} usage (outside a Spring context) working - it then falls back to
      * {@code this} and simply produces no performance log.</p>
      */
     @Autowired(required = false)
@@ -213,10 +213,10 @@ public class PxlExcelImporter {
     /**
      * Fluent builder for Excel imports, created via {@link PxlExcelImporter#importExcel()}.
      *
-     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlExcelImportBuilder} shape — optional
+     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlExcelImportBuilder} shape - optional
      * {@link #workbookName(String)}/{@link #override(PxlImportWorkbookOption)}, then a parse target
      * ({@link #workbook(Class)} or one of the {@code sheet(...)} forms) yielding a typed {@link Source}, then
-     * a terminal — and swaps the core's file/stream terminals for the Spring-facing
+     * a terminal - and swaps the core's file/stream terminals for the Spring-facing
      * {@link Source#fromMultipartFile(MultipartFile)} and {@link Source#fromResource(Resource)}.</p>
      *
      * <p>The result type is carried through the generics, so no cast is needed at the call site:</p>
@@ -253,7 +253,7 @@ public class PxlExcelImporter {
         private final PxlExcelImportBuilder coreBuilder;
 
         /**
-         * Mirrors the workbook name handed to {@code coreBuilder} — the core builder exposes no getter, and
+         * Mirrors the workbook name handed to {@code coreBuilder} - the core builder exposes no getter, and
          * the terminal needs to know whether an explicit name was set before falling back to the source's file
          * name.
          */
@@ -278,7 +278,7 @@ public class PxlExcelImporter {
          * (Optional)
          *
          * <p>When blank, the name is derived from the source's file name (base name, NFC-normalized and
-         * trimmed) at terminal time — the upload's or the resource's, whichever the terminal was given.
+         * trimmed) at terminal time - the upload's or the resource's, whichever the terminal was given.
          * Ignored by the {@code sheet(...)} forms, which produce no workbook object.</p>
          *
          * @param workbookName the workbook name, or {@code null}/blank for the file-name fallback
@@ -358,7 +358,7 @@ public class PxlExcelImporter {
          * collection type.
          *
          * <p>{@code C} binds from the {@code collectionClass} literal, and a literal such as {@code Set.class}
-         * is a {@code Class<Set>} — the raw type — so the parsed result arrives raw too. Assigning it to a
+         * is a {@code Class<Set>} - the raw type - so the parsed result arrives raw too. Assigning it to a
          * parameterized variable is therefore an unchecked conversion, and the call site needs
          * {@code @SuppressWarnings("unchecked")}. The two-argument forms above have no such gap: {@code T}
          * binds to the row class there and the result is a {@code List<T>}.</p>
@@ -384,7 +384,7 @@ public class PxlExcelImporter {
          * collection type.
          *
          * <p>{@code C} binds from the {@code collectionClass} literal, and a literal such as {@code Set.class}
-         * is a {@code Class<Set>} — the raw type — so the parsed result arrives raw too. Assigning it to a
+         * is a {@code Class<Set>} - the raw type - so the parsed result arrives raw too. Assigning it to a
          * parameterized variable is therefore an unchecked conversion, and the call site needs
          * {@code @SuppressWarnings("unchecked")}. The two-argument forms above have no such gap: {@code T}
          * binds to the row class there and the result is a {@code List<T>}.</p>
@@ -429,7 +429,7 @@ public class PxlExcelImporter {
             private final PxlExcelImportBuilder.Source<R> coreSource;
 
             /**
-             * Mirrors the workbook name handed to {@code coreSource} — inherited from the enclosing builder and
+             * Mirrors the workbook name handed to {@code coreSource} - inherited from the enclosing builder and
              * replaceable here. Kept because the core exposes no getter and {@code resolveWorkbookName} has to
              * know whether an explicit name was set.
              */
@@ -495,7 +495,7 @@ public class PxlExcelImporter {
             /**
              * Reads the given Excel resource and returns the parsed result.
              *
-             * <p>The non-HTTP counterpart of {@link #fromMultipartFile(MultipartFile)} — for a file on disk
+             * <p>The non-HTTP counterpart of {@link #fromMultipartFile(MultipartFile)} - for a file on disk
              * ({@code FileSystemResource}), a packaged one ({@code ClassPathResource}), or anything else
              * behind Spring's {@link Resource} abstraction. Everything else behaves identically, the workbook
              * name included: it falls back to the resource's base file name.</p>

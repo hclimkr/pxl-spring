@@ -12,8 +12,8 @@ import javax.validation.constraints.NotBlank;
 /**
  * Row DTO exercising the pxl {@code mandatory}&rarr;{@code required} rename. The {@code name} column is
  * required (bean-validation {@code @NotBlank}) and explicitly wires the renamed
- * {@code @PxlColumn(exportColumnRequiredHeaderCellStyler = ...)} property — formerly
- * {@code exportColumnMandatoryTitleCellStyler} — while {@code age} stays optional and wires
+ * {@code @PxlColumn(exportColumnRequiredHeaderCellStyler = ...)} property - formerly
+ * {@code exportColumnMandatoryTitleCellStyler} - while {@code age} stays optional and wires
  * {@code exportColumnOptionalHeaderCellStyler}. On export the required header renders with the required
  * styler (black font) and the optional header with the optional styler (grey font). Referencing the new
  * property name here makes the test module fail to compile against a pxl version still using the old name.

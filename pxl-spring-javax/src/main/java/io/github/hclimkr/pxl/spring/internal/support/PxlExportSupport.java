@@ -19,17 +19,17 @@ import java.nio.charset.StandardCharsets;
  * Shared download response/header helpers used by the export-family components.
  *
  * <p>Purely HTTP-facing: it knows about file names, content types and response bodies, and nothing about the
- * builders or about how a workbook is produced — each component generates its own bytes and hands the
+ * builders or about how a workbook is produced - each component generates its own bytes and hands the
  * finished buffer here.</p>
  *
- * <p>File names arrive exactly as the caller gave them — nothing here normalizes them, so a caller that
- * needs NFC has to apply it upstream — and every {@code Content-Disposition} is built by one helper,
+ * <p>File names arrive exactly as the caller gave them - nothing here normalizes them, so a caller that
+ * needs NFC has to apply it upstream - and every {@code Content-Disposition} is built by one helper,
  * {@link #contentDisposition(String, String)}, which emits both the RFC 5987 {@code filename*=UTF-8''} form
  * and a plain ASCII {@code filename=} fallback.</p>
  *
  * <p>Intended to be internal, but its callers sit in a different package
  * ({@code io.github.hclimkr.pxl.spring.component}) and there is no JPMS {@code module-info} to hide it, so
- * the class and its {@code static} helpers must be — and are — declared {@code public}. Treat them as
+ * the class and its {@code static} helpers must be - and are - declared {@code public}. Treat them as
  * internal despite the {@code public} modifier; the {@code internal.support} package name is the marker.</p>
  */
 public final class PxlExportSupport {
@@ -193,7 +193,7 @@ public final class PxlExportSupport {
      * Percent-encodes a download file name for the RFC 5987 {@code filename*=UTF-8''} form.
      *
      * <p>{@link URLEncoder} produces {@code application/x-www-form-urlencoded} output, which differs from
-     * RFC 5987 in one place — a space becomes {@code +} rather than {@code %20} — so spaces are rewritten
+     * RFC 5987 in one place - a space becomes {@code +} rather than {@code %20} - so spaces are rewritten
      * afterwards.</p>
      *
      * @param filenameWithExtension the file name, extension included
@@ -211,13 +211,13 @@ public final class PxlExportSupport {
     }
 
     /**
-     * Builds the whole {@code Content-Disposition} value for a download — the single place any of them is
+     * Builds the whole {@code Content-Disposition} value for a download - the single place any of them is
      * assembled.
      *
      * <p>Both parameter forms are emitted, as RFC 6266 intends: {@code filename*} carries the real,
      * percent-encoded UTF-8 name, and {@code filename} carries an ASCII-only rendering for clients that do
      * not implement RFC 5987 (IE 11, {@code curl -OJ}, and the many scripts that simply look for
-     * {@code filename="…"}). A client that understands {@code filename*} prefers it whatever the order, so
+     * {@code filename="..."}). A client that understands {@code filename*} prefers it whatever the order, so
      * the ASCII form is written first, leaving the safe value to any parser that only reads the first
      * parameter it finds.</p>
      *
@@ -239,7 +239,7 @@ public final class PxlExportSupport {
      *
      * <p>Every character that cannot stand there becomes {@code '_'}: anything outside printable US-ASCII
      * (a Korean character, say), and the two quoted-string metacharacters {@code "} and {@code \}. That last
-     * part is not cosmetic — an unescaped quote would end the string early and let the rest of the name be
+     * part is not cosmetic - an unescaped quote would end the string early and let the rest of the name be
      * read as further header parameters, and a control character would let it break the header apart
      * altogether. The {@code filename*} form is safe from that on its own because percent-encoding leaves
      * nothing dangerous behind, so this is the only place the risk exists.</p>

@@ -38,7 +38,7 @@ import java.util.Optional;
  * Spring component that exports Java objects (or sheet-level data) to Excel.
  *
  * <p>Everything is configured through the fluent builder returned by {@link #exportExcel()}, which mirrors
- * the core {@code Pxl.exportExcel()} shape — pick a source ({@code workbook(...)} / {@code sheet(...)} /
+ * the core {@code Pxl.exportExcel()} shape - pick a source ({@code workbook(...)} / {@code sheet(...)} /
  * {@code poiWorkbook(...)}), optionally {@code override(...)} the option, then call a terminal
  * ({@code toStream} / {@code toFile} / {@code toResponse} / {@code toResponseStreaming} /
  * {@code toResponseEntity}); the response terminals take the download file name as an argument:</p>
@@ -51,25 +51,25 @@ import java.util.Optional;
  *
  * <p>Output defaults to XLSX. An {@code override(...)} option carrying an {@code exportExcelEngine} switches
  * it (e.g. {@code HSSF}, which writes XLS), and {@code poiWorkbook(...)} writes the given workbook in its own
- * native format — the download headers are read back off that workbook, so they always match the bytes.</p>
+ * native format - the download headers are read back off that workbook, so they always match the bytes.</p>
  *
  * <p>That builder is the nested {@link Builder}. A fluent chain never has to name it; on the rare occasion
  * you hold one in a variable, spell it {@code PxlExcelExporter.Builder}.</p>
  *
- * <p>The component is stateless and safe to share across threads; the builder it hands back is not — start one
+ * <p>The component is stateless and safe to share across threads; the builder it hands back is not - start one
  * per export.</p>
  *
  * <p>Reached through {@link io.github.hclimkr.pxl.spring.PxlSpring PxlSpring}: inject that one bean and call
  * {@code pxlSpring.exportExcel()}, which hands back the builder documented here.</p>
  *
  * <p>The {@code exportExcelTo*} methods below are the builder's execution back-ends. They are {@code public}
- * only because Spring AOP (and {@code @Validated} method validation) can advise public methods only — a
+ * only because Spring AOP (and {@code @Validated} method validation) can advise public methods only - a
  * terminal has to re-enter this component through its proxy for {@link PxlPerformanceLogging} to fire. Treat
  * them as internal and always go through {@link #exportExcel()}.</p>
  *
  * <p>Because those back-ends' {@code @NotNull} constraints only fire through the proxy, each one re-checks
  * its destination with {@code PxlArgumentSupport} so a plainly constructed component fails the same way at
- * the same point — see that class for why.</p>
+ * the same point - see that class for why.</p>
  */
 @Validated
 @Component
@@ -78,7 +78,7 @@ public class PxlExcelExporter {
     private static final String TAG = "PxlExcelExporter";
 
     /**
-     * The core entry point, shared with the other components — see {@link PxlCoreSupport} for why it is not
+     * The core entry point, shared with the other components - see {@link PxlCoreSupport} for why it is not
      * one instance per component.
      */
     private final Pxl pxl = PxlCoreSupport.core();
@@ -89,7 +89,7 @@ public class PxlExcelExporter {
      * <p>The builder's terminals must call back through the proxy, not through {@code this}: a plain
      * {@code this} reference bypasses the proxy, and with it {@link PxlPerformanceLogging} and {@code @Validated}.
      * {@code @Lazy} breaks the self-reference cycle, and {@code required = false} keeps plain
-     * {@code new PxlExcelExporter()} usage (outside a Spring context) working — it then falls back to
+     * {@code new PxlExcelExporter()} usage (outside a Spring context) working - it then falls back to
      * {@code this} and simply produces no performance log.</p>
      */
     @Autowired(required = false)
@@ -289,8 +289,8 @@ public class PxlExcelExporter {
      * Fluent builder for the Excel export destinations of {@link PxlExcelExporter}. Created via
      * {@link PxlExcelExporter#exportExcel()}.
      *
-     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlExcelExportBuilder} shape — source
-     * methods, then {@link #override(PxlExportWorkbookOption)}, then a terminal — and adds the Spring-facing
+     * <p>It mirrors the core {@code io.github.hclimkr.pxl.builder.PxlExcelExportBuilder} shape - source
+     * methods, then {@link #override(PxlExportWorkbookOption)}, then a terminal - and adds the Spring-facing
      * destinations ({@link HttpServletResponse} / {@link ResponseEntity}) plus their download-name handling.</p>
      *
      * <p>There are three mutually exclusive source forms:</p>
@@ -306,9 +306,9 @@ public class PxlExcelExporter {
      * holds the collected arguments only; each terminal delegates straight back to the enclosing component so
      * the work still runs inside a Spring-proxied, {@code @PxlPerformanceLogging}-annotated method.</p>
      *
-     * <p>Nested in the component on purpose: everything the component reads off the builder — its constructor,
+     * <p>Nested in the component on purpose: everything the component reads off the builder - its constructor,
      * the collected fields, {@code validateSource()}, {@code resolveFilename(String)},
-     * {@code resolveFileFormat()} — is {@code private} and stays reachable only because the two are
+     * {@code resolveFileFormat()} - is {@code private} and stays reachable only because the two are
      * nestmates. The public surface is exactly the source, option and terminal methods.</p>
      *
      * <p>Not thread-safe, and single-use per terminal call. Example:
@@ -421,7 +421,7 @@ public class PxlExcelExporter {
          * Exports an already-built raw POI {@link Workbook} as-is, without any PXL binding.
          *
          * <p>Mutually exclusive with {@link #workbook(Object)}/{@link #sheet(Class, Collection, String)}. The
-         * export option passed to {@link #override(PxlExportWorkbookOption)} does not apply to this form —
+         * export option passed to {@link #override(PxlExportWorkbookOption)} does not apply to this form -
          * nothing is bound, so there is nothing for it to override.</p>
          *
          * <p>The download headers need no configuring either: the file format is read back off the workbook
@@ -444,7 +444,7 @@ public class PxlExcelExporter {
          *
          * <p>The download headers still follow the workbook's own format, exactly as in
          * {@link #poiWorkbook(Workbook)}. Note that encryption wraps the bytes in an OLE2 container whatever
-         * the workbook type, so an encrypted XSSF workbook goes out as OLE2 bytes under a {@code .xlsx} name —
+         * the workbook type, so an encrypted XSSF workbook goes out as OLE2 bytes under a {@code .xlsx} name -
          * which is how an encrypted OOXML file is normally distributed.</p>
          *
          * @param workbook the workbook to write
@@ -514,7 +514,7 @@ public class PxlExcelExporter {
          * Streams the configured export to the servlet response with download headers.
          *
          * <p>When {@code excelFilename} is blank the name falls back to the {@code @PxlWorkbook} workbook name
-         * (workbook-object form only) and then to {@code Pxl}. The name is used as given — normalize it (NFC)
+         * (workbook-object form only) and then to {@code Pxl}. The name is used as given - normalize it (NFC)
          * upstream if needed; RFC 5987 encoding is applied when the header is written.</p>
          *
          * @param response      the servlet response to write to
@@ -536,7 +536,7 @@ public class PxlExcelExporter {
          * then writes it, which is what lets a generation failure leave the response untouched. This terminal
          * trades that away, and the trade is the whole point of it, so be clear about what is given up:</p>
          * <ul>
-         *   <li>Heap no longer holds the finished bytes — the reason to use this at all. Pair it with
+         *   <li>Heap no longer holds the finished bytes - the reason to use this at all. Pair it with
          *       {@code PxlExcelEngine.SXSSF} to bound the workbook model too, or the model just takes the
          *       buffer's place as the peak.</li>
          *   <li><strong>A failure part-way through cannot be taken back.</strong> The response is already
@@ -549,13 +549,13 @@ public class PxlExcelExporter {
          *
          * <p>Note where the line falls. {@code validateSource()} and the {@code null}-destination guard are
          * this component's own up-front checks and run before the headers, so those failures still leave the
-         * response untouched. Checks the core makes inside its own terminal — a duplicate sheet name, say — do
+         * response untouched. Checks the core makes inside its own terminal - a duplicate sheet name, say - do
          * not: they happen after the headers have gone out, so such a failure writes no body but does leave the
          * download headers set.</p>
          *
          * <p>There is no streaming counterpart for the other destinations: {@link #toStream(OutputStream)} and
          * {@link #toFile(File)} already write straight through, and {@link #toResponseEntity(String)} cannot,
-         * because its body is produced in full before the entity is returned — the {@link Resource} it carries
+         * because its body is produced in full before the entity is returned - the {@link Resource} it carries
          * wraps the finished bytes rather than generating them on demand.</p>
          *
          * @param response      the servlet response to write to
@@ -640,7 +640,7 @@ public class PxlExcelExporter {
          * {@code @PxlWorkbook} declared engine (workbook-object form only), then the default.
          *
          * <p>Reading the POI form's format back off the workbook is what keeps the extension and the body in
-         * step — the body is written in that same native format. It is {@link PxlFileFormat#fromPoiWorkbook}
+         * step - the body is written in that same native format. It is {@link PxlFileFormat#fromPoiWorkbook}
          * rather than {@link PxlExcelEngine#fromPoiWorkbook} that is asked, because a streaming-reader
          * workbook is a reader and therefore has no engine, yet still holds XLSX bytes. That lookup already
          * falls back to the default for a workbook type it does not recognise; the {@code Optional} around it

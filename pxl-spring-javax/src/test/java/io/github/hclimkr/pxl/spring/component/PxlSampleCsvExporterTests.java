@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * file / response / streaming response / response-entity), the download headers and their {@code .csv}
  * extension, the default {@code PxlSample} file name, and the guards the core terminal raises.
  *
- * <p>The template is not empty — it carries a header record plus a single sample data record populated from
+ * <p>The template is not empty - it carries a header record plus a single sample data record populated from
  * each column's {@code @PxlColumn(exportSample = ...)} value, which is what makes it round-trip through
  * {@code importCsv()} as a filled-in form.</p>
  *
