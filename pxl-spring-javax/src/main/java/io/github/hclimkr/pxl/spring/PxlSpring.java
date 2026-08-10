@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
  * List<User> users = pxlSpring.importExcel().sheet(User.class, "Users").fromMultipartFile(upload);
  * pxlSpring.exportExcel().sheet(User.class, users, "Users").toResponse(response, "report");
  * pxlSpring.exportExcelZip().workbook(first).workbook(second).toResponseEntity("archive");
+ * pxlSpring.exportCsv().sheet(User.class, users, "Users").toResponse(response, "report");
  * }</pre>
  *
  * <p>Each method just hands back the builder of the component that owns the operation, so everything those
@@ -46,6 +47,10 @@ public class PxlSpring {
 
     private final PxlExcelZipExporter excelZipExporter;
 
+    private final PxlCsvExporter csvExporter;
+
+    private final PxlSampleCsvExporter sampleCsvExporter;
+
     /**
      * Creates a facade over the given components. Spring injects the container's own (proxied) instances
      * here, which is what keeps {@code @Validated} and the performance log in place.
@@ -53,21 +58,27 @@ public class PxlSpring {
      * @param excelImporter       the Excel import component
      * @param csvImporter         the CSV import component
      * @param excelExporter       the Excel export component
-     * @param sampleExcelExporter the sample-template export component
+     * @param sampleExcelExporter the Excel sample-template export component
      * @param excelZipExporter    the ZIP export component
+     * @param csvExporter         the CSV export component
+     * @param sampleCsvExporter   the CSV sample-template export component
      */
     @Autowired
     public PxlSpring(final PxlExcelImporter excelImporter,
                      final PxlCsvImporter csvImporter,
                      final PxlExcelExporter excelExporter,
                      final PxlSampleExcelExporter sampleExcelExporter,
-                     final PxlExcelZipExporter excelZipExporter) {
+                     final PxlExcelZipExporter excelZipExporter,
+                     final PxlCsvExporter csvExporter,
+                     final PxlSampleCsvExporter sampleCsvExporter) {
 
         this.excelImporter = excelImporter;
         this.csvImporter = csvImporter;
         this.excelExporter = excelExporter;
         this.sampleExcelExporter = sampleExcelExporter;
         this.excelZipExporter = excelZipExporter;
+        this.csvExporter = csvExporter;
+        this.sampleCsvExporter = sampleCsvExporter;
     }
 
     /**
@@ -79,7 +90,9 @@ public class PxlSpring {
                 new PxlCsvImporter(),
                 new PxlExcelExporter(),
                 new PxlSampleExcelExporter(),
-                new PxlExcelZipExporter());
+                new PxlExcelZipExporter(),
+                new PxlCsvExporter(),
+                new PxlSampleCsvExporter());
     }
 
     /**
@@ -116,9 +129,9 @@ public class PxlSpring {
     }
 
     /**
-     * Starts a fluent sample template export.
+     * Starts a fluent Excel sample template export.
      *
-     * @return a new builder bound to the sample-template export component
+     * @return a new builder bound to the Excel sample-template export component
      * @see PxlSampleExcelExporter#exportSampleExcel()
      */
     public PxlSampleExcelExporter.Builder exportSampleExcel() {
@@ -135,6 +148,28 @@ public class PxlSpring {
     public PxlExcelZipExporter.Builder exportExcelZip() {
 
         return excelZipExporter.exportExcelZip();
+    }
+
+    /**
+     * Starts a fluent CSV export.
+     *
+     * @return a new builder bound to the CSV export component
+     * @see PxlCsvExporter#exportCsv()
+     */
+    public PxlCsvExporter.Builder exportCsv() {
+
+        return csvExporter.exportCsv();
+    }
+
+    /**
+     * Starts a fluent CSV sample template export.
+     *
+     * @return a new builder bound to the CSV sample-template export component
+     * @see PxlSampleCsvExporter#exportSampleCsv()
+     */
+    public PxlSampleCsvExporter.Builder exportSampleCsv() {
+
+        return sampleCsvExporter.exportSampleCsv();
     }
 
 }

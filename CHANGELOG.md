@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Export to CSV, alongside the existing Excel exports: `exportCsv()` and `exportSampleCsv()`
+  on `PxlSpring`, backed by the new components `PxlCsvExporter` and `PxlSampleCsvExporter`.
+  Both reach the same five destinations as their Excel counterparts — `toStream(...)`,
+  `toFile(...)`, `toResponse(...)`, `toResponseStreaming(...)`, `toResponseEntity(...)` —
+  and the response destinations emit `.csv` with `text/csv`. A CSV file holds one sheet, so
+  there is no `workbook(...)` form and a second `sheet(...)` call makes the final method
+  throw rather than adding a sheet.
+- The CSV download file name falls back to the sheet name before `Pxl` on `exportCsv()`,
+  since one CSV file is one sheet and that is the only name the source carries.
+  `exportSampleCsv()` keeps the plain `PxlSample` default, a template describing a shape
+  rather than a data set.
+
+### Changed
+
+- **Breaking, through the core.** `PxlFileFormat` and `PxlExcelEngine` moved from
+  `io.github.hclimkr.pxl` to `io.github.hclimkr.pxl.type`. Neither type changed otherwise,
+  so migration is the import alone. Application code feels this wherever it names either
+  enum — `@PxlWorkbook(exportExcelEngine = PxlExcelEngine.HSSF)`, an option builder, or a
+  `PxlFileFormat` reference.
+
+- **Breaking.** `PxlSpring`'s `@Autowired` constructor takes the two new components as well,
+  so an application that builds the facade by hand rather than by component scan has to pass
+  them. The documented setup — scanning `io.github.hclimkr.pxl.spring` — is unaffected, and
+  so is the no-arg constructor.
+
+- Internal: the shared download helpers in `PxlExportSupport` dropped `Excel` from their
+  names (`setResponseForExport`, `writeBufferToResponseForExport`,
+  `makeResponseEntityForExport`) now that CSV goes through the same `PxlFileFormat`-driven
+  path. They are `public` only because their callers sit in another package; treat them as
+  internal, as `internal.support` says.
+
 ## [0.9.1] - 2026-08-05
 
 Built against [pxl](https://github.com/hclimkr/pxl) 0.9.3, up from 0.9.2.

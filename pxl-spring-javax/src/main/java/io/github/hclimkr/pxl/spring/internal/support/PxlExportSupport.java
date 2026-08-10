@@ -1,7 +1,7 @@
 package io.github.hclimkr.pxl.spring.internal.support;
 
-import io.github.hclimkr.pxl.PxlFileFormat;
 import io.github.hclimkr.pxl.exception.PxlIOException;
+import io.github.hclimkr.pxl.type.PxlFileFormat;
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -40,28 +40,32 @@ public final class PxlExportSupport {
 
     /**
      * Writes the {@code Content-Disposition}/{@code Content-Type} headers and a {@code 200 OK} status
-     * for an Excel download onto the servlet response, before the body is streamed.
+     * for a spreadsheet download onto the servlet response, before the body is streamed.
+     *
+     * <p>Format-neutral: the extension and the content type come from the given {@link PxlFileFormat}, so
+     * the Excel and CSV exporters share this one helper. Only ZIP has a family of its own, that being an
+     * archive rather than a file format PXL writes.</p>
      *
      * <p>Sets no {@code Content-Length}: it does not see the body. The caller does, and
-     * {@link #writeBufferToResponseForExportExcel} sets it from the finished buffer.</p>
+     * {@link #writeBufferToResponseForExport} sets it from the finished buffer.</p>
      *
-     * @param excelFilename the file name without extension
-     * @param fileFormat    the export file format (provides extension and content type)
-     * @param response      the servlet response to configure
+     * @param filename   the file name without extension
+     * @param fileFormat the export file format (provides extension and content type)
+     * @param response   the servlet response to configure
      */
-    public static void setResponseForExportExcel(final String excelFilename,
-                                                 final PxlFileFormat fileFormat,
-                                                 final HttpServletResponse response) {
+    public static void setResponseForExport(final String filename,
+                                            final PxlFileFormat fileFormat,
+                                            final HttpServletResponse response) {
 
         response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
-                contentDisposition(excelFilename, fileFormat.getFilenameExtension()));
+                contentDisposition(filename, fileFormat.getFilenameExtension()));
         response.setContentType(fileFormat.getContentType());
 
         response.setStatus(HttpServletResponse.SC_OK);
     }
 
     /**
-     * Sets the download headers and writes the fully-built workbook bytes to the servlet response.
+     * Sets the download headers and writes the fully-built export bytes to the servlet response.
      *
      * <p>Called only after generation has succeeded, so the response - including any CORS headers added
      * upstream by a filter - is never touched on a generation failure, and no partial/download-flagged
@@ -71,20 +75,20 @@ public final class PxlExportSupport {
      * the response would go out chunked and clients could show no download progress - and the
      * {@link ResponseEntity} destinations, which set the length from the same buffer, would disagree.</p>
      *
-     * @param outputStream  the completed workbook bytes
-     * @param excelFilename the download file name
-     * @param fileFormat    the export file format (provides extension and content type)
-     * @param response      the servlet response to write to
+     * @param outputStream the completed export bytes
+     * @param filename     the download file name
+     * @param fileFormat   the export file format (provides extension and content type)
+     * @param response     the servlet response to write to
      * @throws PxlIOException if setting headers or writing the body fails
      */
-    public static void writeBufferToResponseForExportExcel(final ByteArrayOutputStream outputStream,
-                                                           final String excelFilename,
-                                                           final PxlFileFormat fileFormat,
-                                                           final HttpServletResponse response)
+    public static void writeBufferToResponseForExport(final ByteArrayOutputStream outputStream,
+                                                      final String filename,
+                                                      final PxlFileFormat fileFormat,
+                                                      final HttpServletResponse response)
             throws PxlIOException {
 
         try {
-            PxlExportSupport.setResponseForExportExcel(excelFilename, fileFormat, response);
+            PxlExportSupport.setResponseForExport(filename, fileFormat, response);
             response.setContentLength(outputStream.size());
             outputStream.writeTo(response.getOutputStream());
         } catch (IOException e) {
@@ -93,21 +97,21 @@ public final class PxlExportSupport {
     }
 
     /**
-     * Builds a {@link ResponseEntity} carrying the produced Excel bytes together with the download
+     * Builds a {@link ResponseEntity} carrying the produced export bytes together with the download
      * headers ({@code Content-Disposition}, {@code Content-Type}, content length).
      *
-     * @param excelFilename the file name without extension
-     * @param fileFormat    the export file format (provides extension and content type)
-     * @param outputStream  the buffer holding the produced workbook bytes
-     * @return a {@code 200 OK} response entity with the workbook body and download headers
+     * @param filename     the file name without extension
+     * @param fileFormat   the export file format (provides extension and content type)
+     * @param outputStream the buffer holding the produced export bytes
+     * @return a {@code 200 OK} response entity with the export body and download headers
      */
-    public static ResponseEntity<Resource> makeResponseEntityForExportExcel(final String excelFilename,
-                                                                            final PxlFileFormat fileFormat,
-                                                                            final ByteArrayOutputStream outputStream) {
+    public static ResponseEntity<Resource> makeResponseEntityForExport(final String filename,
+                                                                       final PxlFileFormat fileFormat,
+                                                                       final ByteArrayOutputStream outputStream) {
 
         final HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.CONTENT_DISPOSITION,
-                contentDisposition(excelFilename, fileFormat.getFilenameExtension()));
+                contentDisposition(filename, fileFormat.getFilenameExtension()));
         headers.set(HttpHeaders.CONTENT_TYPE, fileFormat.getContentType());
 
         return ResponseEntity.ok()

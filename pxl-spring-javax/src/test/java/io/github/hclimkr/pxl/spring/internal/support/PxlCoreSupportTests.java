@@ -51,6 +51,8 @@ class PxlCoreSupportTests {
         assertThat(coreOf(new PxlExcelExporter())).isSameAs(PxlCoreSupport.core());
         assertThat(coreOf(new PxlSampleExcelExporter())).isSameAs(PxlCoreSupport.core());
         assertThat(coreOf(new PxlExcelZipExporter())).isSameAs(PxlCoreSupport.core());
+        assertThat(coreOf(new PxlCsvExporter())).isSameAs(PxlCoreSupport.core());
+        assertThat(coreOf(new PxlSampleCsvExporter())).isSameAs(PxlCoreSupport.core());
     }
 
     /**

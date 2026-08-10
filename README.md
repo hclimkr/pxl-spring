@@ -13,7 +13,7 @@ PXL Spring provides **multipart uploads and download responses for spreadsheet-o
 It leaves the binding to PXL and supports Java 8 and later.
 
 - Import: multipart uploads (XLSX · XLS · CSV) → Java objects
-- Export: Java objects → Excel · sample Excel · ZIP download
+- Export: Java objects → Excel · sample Excel · CSV · sample CSV · ZIP download
 
 For PXL behavior — annotation attributes, supported types, the full set of options — refer to the [PXL documentation](https://github.com/hclimkr/pxl/blob/main/docs/reference.md).
 
@@ -136,6 +136,8 @@ Boot does three pieces of wiring for you that you now have to declare yourself. 
 | `pxlSpring.exportExcel()`       | Java objects → Excel (Stream/File/Response/ResponseStreaming/ResponseEntity) |
 | `pxlSpring.exportSampleExcel()` | Class → Excel carrying a single sample data row                              |
 | `pxlSpring.exportExcelZip()`    | Several workbooks → one zip                                                  |
+| `pxlSpring.exportCsv()`         | Java objects → CSV (the same five destinations)                              |
+| `pxlSpring.exportSampleCsv()`   | Class → CSV carrying a single sample data record                             |
 | `pxlSpring.importExcel()`       | Excel file → Java objects                                                    |
 | `pxlSpring.importCsv()`         | CSV file → Java objects                                                      |
 
@@ -162,6 +164,8 @@ private PxlSpring pxlSpring;
 // pxlSpring.exportExcel()
 // pxlSpring.exportSampleExcel()
 // pxlSpring.exportExcelZip()
+// pxlSpring.exportCsv()
+// pxlSpring.exportSampleCsv()
 // pxlSpring.importExcel()
 // pxlSpring.importCsv()
 ```
@@ -329,18 +333,21 @@ public int upload(@RequestParam MultipartFile file) throws Exception {
 }
 ```
 
-Every operation is handled through a single method chain like the examples above. The start method indicates the direction of the operation (export/import) and the format (Excel/sample/ZIP/CSV), then you specify the target, and it is executed in the final method.
+Every operation is handled through a single method chain like the examples above. The start method indicates the direction of the operation (export/import) and the format (Excel/CSV/sample/ZIP), then you specify the target, and it is executed in the final method.
 
 | Use case            | Method chain (start → configure → execute)                                                                                                                                                                 |
 |---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Excel export        | `pxlSpring.exportExcel()`<br/>→ `.workbook(...) / .sheet(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Sample Excel export | `pxlSpring.exportSampleExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Excel ZIP export    | `pxlSpring.exportExcelZip()`<br/>→ `.workbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
+| CSV export          | `pxlSpring.exportCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
+| Sample CSV export   | `pxlSpring.exportSampleCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Excel import        | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
 | CSV import          | `pxlSpring.importCsv()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)` / `.fromMultipartFiles(List<MultipartFile>)`                                                          |
 
 - For export, the configuration steps `.workbook(...)`, `.sheet(...)` and `.poiWorkbook(...)` are mutually exclusive — specifying more than one in a chain throws `PxlArgumentException` (as does omitting all of them).
 - For export, calling `.sheet(...)` multiple times creates multiple sheets. `exportSampleExcel()` works the same way.
+- For CSV export, one file is one sheet — there is no `.workbook(...)` to call, and a second `.sheet(...)` call does not add a sheet, it makes the final method throw `PxlArgumentException`. `exportSampleCsv()` works the same way.
 - For import, `.sheet(...)` cannot be chained consecutively. There are two ways to read multiple sheets.
     - All at once, in workbook form: passing a `@PxlWorkbook` class to `.workbook(...)` binds multiple sheets at once, one per `@PxlSheet` field.  
     - One sheet at a time: start a fresh chain per sheet and run each through `.fromMultipartFile(...)`.
@@ -603,6 +610,73 @@ public void writeQuarterArchive(File zipFile) throws Exception {
 }
 ```
 
+### `PxlCsvExporter`
+
+The same DTOs, the same options, written as CSV instead. One CSV file is one sheet, so there is only `sheet(...)`.
+
+**A sheet downloaded as a `ResponseEntity`**
+
+```java
+@GetMapping("/employees/csv")
+public ResponseEntity<Resource> downloadEmployeesCsv() throws Exception {
+    List<Employee> employees = ...;
+
+    // leave the name blank and it falls back to the sheet name, then to "Pxl"
+    return pxlSpring.exportCsv()
+                    .sheet(Employee.class, employees, "Employees")
+                    .toResponseEntity(null);   // -> Employees.csv
+}
+```
+
+**Choosing the charset, delimiter and byte order mark**
+
+Declare them on the class with `@PxlWorkbook`/`@PxlSheet`, or per call with `override(...)`. A mark is written only for UTF-8, UTF-16LE and UTF-16BE.
+
+```java
+@GetMapping("/employees/csv-legacy")
+public void downloadForExcelKorean(HttpServletResponse response) throws Exception {
+    List<Employee> employees = ...;
+
+    PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                                                            .exportCsvCharset("MS949")
+                                                            .exportCsvDelimiter(';')
+                                                            .build();
+
+    pxlSpring.exportCsv()
+             .sheet(Employee.class, employees, "Employees")
+             .override(option)
+             .toResponse(response, "employee-list");
+}
+```
+
+**Writing to a file or a stream**
+
+```java
+public void writeMonthlyCsv(File file) throws Exception {
+    List<Employee> employees = ...;
+
+    pxlSpring.exportCsv()
+             .sheet(Employee.class, employees, "Employees")
+             .toFile(file);
+}
+```
+
+What CSV cannot carry — stylers, column widths, freeze panes, the Excel engine — is ignored. `exportPassword` is the one exception: it is refused with `PxlArgumentException` rather than ignored, because CSV cannot be encrypted and writing plaintext would be a leak.
+
+### `PxlSampleCsvExporter`
+
+The CSV counterpart of `PxlSampleExcelExporter`: a header record plus one sample record filled from `@PxlColumn(exportSample=...)`, which the recipient can fill in and send back through `importCsv()`.
+
+```java
+@GetMapping("/employees/csv-sample")
+public ResponseEntity<Resource> employeeCsvSample() throws Exception {
+    // leave the name blank and it defaults to "PxlSample"
+    return pxlSpring.exportSampleCsv()
+                    .sheet(Employee.class, "Employees")
+                    .toResponseEntity(null);
+}
+```
+
 ### `PxlExcelImporter`
 
 **A single sheet uploaded**
@@ -772,6 +846,8 @@ The single bean to inject. Each method hands back the builder for that operation
 PxlExcelExporter.Builder       exportExcel()
 PxlSampleExcelExporter.Builder exportSampleExcel()
 PxlExcelZipExporter.Builder    exportExcelZip()
+PxlCsvExporter.Builder         exportCsv()
+PxlSampleCsvExporter.Builder   exportSampleCsv()
 PxlExcelImporter.Builder       importExcel()
 PxlCsvImporter.Builder         importCsv()
 ```
@@ -851,6 +927,55 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 - An entry name is resolved as the name you gave → the workbook name → `Pxl{index}`. A blank name is treated as absent, so resolution moves on to the next step.
 - Its extension is appended from the workbook class's declared export engine, which the per-entry option does not override — the option changes the bytes only.
 - The archive name is required.
+
+### `PxlCsvExporter`
+
+Writes Java objects as CSV. One CSV file is one sheet, so there is no workbook form and the final methods write a single sheet.
+
+```java
+// start
+PxlCsvExporter.Builder exportCsv()
+
+// configuration (the only form; calling it twice makes the final method throw)
+<T> sheet(Class<T> rowClass, Collection<T> rows, String sheetName)
+
+// options
+    override(PxlExportWorkbookOption option)
+
+// execution — the response destinations take the download file name as an argument (blank → sheet name → "Pxl")
+void                     toStream(OutputStream outputStream)
+void                     toFile(File csvFile)
+void                     toResponse(HttpServletResponse response, String csvFilename)
+void                     toResponseStreaming(HttpServletResponse response, String csvFilename)  // see "Size & Memory"
+ResponseEntity<Resource> toResponseEntity(String csvFilename)
+```
+
+- The charset, field delimiter and byte order mark come from `@PxlWorkbook`/`@PxlSheet` or the matching `exportCsv*` option fields, and default to UTF-8, `,` and no mark.
+- Settings CSV cannot carry are ignored, except `exportPassword`, which is refused with `PxlArgumentException`.
+
+### `PxlSampleCsvExporter`
+
+Generates a sample CSV from a row class: a header record plus a single record filled from each column's `@PxlColumn(exportSample = ...)` value.
+
+```java
+// start
+PxlSampleCsvExporter.Builder exportSampleCsv()
+
+// configuration (the only form; calling it twice makes the final method throw)
+sheet(Class<?> rowClass, String sheetName)
+
+// options
+override(PxlExportWorkbookOption option)
+
+// execution — the response destinations take the download file name as an argument (blank → "PxlSample")
+void                     toStream(OutputStream outputStream)
+void                     toFile(File csvFile)
+void                     toResponse(HttpServletResponse response, String csvFilename)
+void                     toResponseStreaming(HttpServletResponse response, String csvFilename)  // see "Size & Memory"
+ResponseEntity<Resource> toResponseEntity(String csvFilename)
+```
+
+- Unlike `PxlCsvExporter` the download name has no sheet-name fallback: a template describes a shape rather than a data set.
 
 ### `PxlExcelImporter`
 
@@ -940,6 +1065,7 @@ pxlSpring.exportExcel()
 - `exportSXSSFRowAccessWindowSize` is how many rows stay in memory (POI's default window if unset).
 - `SXSSF` produces `.xlsx` only — it has no effect on the `HSSF` engine (`.xls`).
 - Columns using automatic width have to be tracked, and a tracked column stays in memory. Many auto-width columns eat into the saving.
+- CSV has no engine and no equivalent. A CSV export renders its whole output into memory before the destination is opened — that is what keeps a codec, validation or limit failure from leaving a file behind — so treat it as having the memory profile of a non-streaming Excel export rather than as a lightweight path for very large data.
 
 ### Export: the destination
 
@@ -951,13 +1077,13 @@ Terminals differ in how much of the finished output they hold:
 | `toResponse(...)`               | one copy | buffered so a generation failure cannot emit a truncated download |
 | `toResponseEntity(...)`         | **two copies** | the buffer is copied into an exactly-sized array before the `Resource` body wraps it |
 
-For a large download prefer `toResponse(...)` over `toResponseEntity(...)`. `PxlExcelZipExporter` buffers the **whole archive** on both response destinations, so the difference grows with the number of entries.
+For a large download prefer `toResponse(...)` over `toResponseEntity(...)`. `PxlExcelZipExporter` buffers the **whole archive** on both response destinations, so the difference grows with the number of entries. On the CSV exporters the rendered output counts on top of every figure in that table, because the core produces it before any destination is touched.
 
 The buffering is deliberate: the response is only touched once the bytes are complete, so a failure mid-generation leaves the response — including any CORS headers added upstream — untouched, instead of committing `200 OK` plus a corrupt body.
 
 ### Export: `toResponseStreaming(...)`
 
-All three exporters carry a dedicated final method that skips that buffer and writes straight to the response:
+All five exporters carry a dedicated final method that skips that buffer and writes straight to the response:
 
 ```java
 pxlSpring.exportExcel()
@@ -966,7 +1092,7 @@ pxlSpring.exportExcel()
         .toResponseStreaming(response, "employee-list");
 ```
 
-Pair it with `SXSSF`. Together the two make an export cost roughly constant heap regardless of row count. For a zip it is worth the most on its own — one entry is generated and written at a time instead of the whole archive being held.
+Pair it with `SXSSF`. Together the two make an export cost roughly constant heap regardless of row count. For a zip it is worth the most on its own — one entry is generated and written at a time instead of the whole archive being held. On CSV it is worth the least: the core has already rendered the output, so this drops the download buffer and nothing more — heap still scales with the output, it just scales once instead of twice.
 
 **Know what you are giving up.** These are the reason `toResponse(...)` is the default final method:
 
@@ -994,7 +1120,7 @@ spring.servlet.multipart.max-request-size=100MB
 
 ## Performance Logging (Optional)
 
-The execution methods of the five components carry AOP-based performance logging, disabled by default.
+The execution methods of the seven components carry AOP-based performance logging, disabled by default.
 Enable it and tune the threshold with the settings below.
 
 ```properties

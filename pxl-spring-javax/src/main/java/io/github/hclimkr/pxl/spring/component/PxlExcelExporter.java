@@ -2,8 +2,6 @@ package io.github.hclimkr.pxl.spring.component;
 
 import io.github.hclimkr.pxl.Pxl;
 import io.github.hclimkr.pxl.PxlConstants;
-import io.github.hclimkr.pxl.PxlExcelEngine;
-import io.github.hclimkr.pxl.PxlFileFormat;
 import io.github.hclimkr.pxl.builder.PxlExcelExportBuilder;
 import io.github.hclimkr.pxl.exception.PxlArgumentException;
 import io.github.hclimkr.pxl.exception.PxlException;
@@ -15,6 +13,8 @@ import io.github.hclimkr.pxl.spring.internal.support.PxlArgumentSupport;
 import io.github.hclimkr.pxl.spring.internal.support.PxlCoreSupport;
 import io.github.hclimkr.pxl.spring.internal.support.PxlExportSupport;
 import io.github.hclimkr.pxl.spring.logging.PxlPerformanceLogging;
+import io.github.hclimkr.pxl.type.PxlExcelEngine;
+import io.github.hclimkr.pxl.type.PxlFileFormat;
 import io.github.hclimkr.pxl.util.PxlWorkbookUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -190,7 +190,7 @@ public class PxlExcelExporter {
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
         writeToStream(builder, outputStream);
 
-        PxlExportSupport.writeBufferToResponseForExportExcel(outputStream, resolvedFilename, fileFormat, response);
+        PxlExportSupport.writeBufferToResponseForExport(outputStream, resolvedFilename, fileFormat, response);
     }
 
     /**
@@ -221,7 +221,7 @@ public class PxlExcelExporter {
         // Headers must go out before the body, so they are set before anything can fail. Past this point the
         // response is committed and a failure cannot be taken back - that is the trade this terminal asks for,
         // and no Content-Length is possible because the size is not known yet.
-        PxlExportSupport.setResponseForExportExcel(resolvedFilename, fileFormat, response);
+        PxlExportSupport.setResponseForExport(resolvedFilename, fileFormat, response);
 
         try {
             writeToStream(builder, response.getOutputStream());
@@ -256,7 +256,7 @@ public class PxlExcelExporter {
         try {
             outputStream = new ByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
             writeToStream(builder, outputStream);
-            return PxlExportSupport.makeResponseEntityForExportExcel(resolvedFilename, fileFormat, outputStream);
+            return PxlExportSupport.makeResponseEntityForExport(resolvedFilename, fileFormat, outputStream);
         } finally {
             IOUtils.closeQuietly(outputStream);
         }

@@ -1,7 +1,7 @@
 package io.github.hclimkr.pxl.spring.internal.support;
 
-import io.github.hclimkr.pxl.PxlFileFormat;
 import io.github.hclimkr.pxl.exception.PxlIOException;
+import io.github.hclimkr.pxl.type.PxlFileFormat;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -39,11 +39,11 @@ class PxlExportSupportTests {
     }
 
     @Test
-    void writeBufferToResponseForExportExcel_whenBodyWriteFails_throwsPxlIOException() {
+    void writeBufferToResponseForExport_whenBodyWriteFails_throwsPxlIOException() {
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         outputStream.write('x');
 
-        assertThatThrownBy(() -> PxlExportSupport.writeBufferToResponseForExportExcel(
+        assertThatThrownBy(() -> PxlExportSupport.writeBufferToResponseForExport(
                 outputStream, "data", PxlFileFormat.XLSX, failingBodyResponse()))
                 .isInstanceOf(PxlIOException.class);
     }
@@ -64,13 +64,13 @@ class PxlExportSupportTests {
     // destinations, which set the length from the same buffer.
 
     @Test
-    void writeBufferToResponseForExportExcel_setsContentLengthFromTheBuffer() throws PxlIOException {
+    void writeBufferToResponseForExport_setsContentLengthFromTheBuffer() throws PxlIOException {
         final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         outputStream.write('x');
         outputStream.write('y');
 
         final MockHttpServletResponse response = new MockHttpServletResponse();
-        PxlExportSupport.writeBufferToResponseForExportExcel(outputStream, "data", PxlFileFormat.XLSX, response);
+        PxlExportSupport.writeBufferToResponseForExport(outputStream, "data", PxlFileFormat.XLSX, response);
 
         assertThat(response.getContentLength()).isEqualTo(2);
         assertThat(response.getContentAsByteArray()).containsExactly('x', 'y');
@@ -96,7 +96,7 @@ class PxlExportSupportTests {
 
     @Test
     void excelFilenameWithSpaces_isPercentEncodedNotPlusEncoded() {
-        final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExportExcel(
+        final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExport(
                 "my report", PxlFileFormat.XLSX, new ByteArrayOutputStream());
 
         assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
@@ -115,7 +115,7 @@ class PxlExportSupportTests {
     @Test
     void responseHeaderSetters_useTheSameEncoding() {
         final MockHttpServletResponse excelResponse = new MockHttpServletResponse();
-        PxlExportSupport.setResponseForExportExcel("my report", PxlFileFormat.XLS, excelResponse);
+        PxlExportSupport.setResponseForExport("my report", PxlFileFormat.XLS, excelResponse);
 
         assertThat(excelResponse.getHeader(HttpHeaders.CONTENT_DISPOSITION))
                 .isEqualTo("attachment; filename=\"my report.xls\"; filename*=UTF-8''my%20report.xls");
@@ -136,7 +136,7 @@ class PxlExportSupportTests {
 
     @Test
     void asciiFilename_isCarriedThroughUnchanged() {
-        final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExportExcel(
+        final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExport(
                 "report", PxlFileFormat.XLSX, new ByteArrayOutputStream());
 
         assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
@@ -145,7 +145,7 @@ class PxlExportSupportTests {
 
     @Test
     void nonAsciiFilename_isSubstitutedCharacterForCharacterInTheFallback() {
-        final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExportExcel(
+        final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExport(
                 "보고서", PxlFileFormat.XLSX, new ByteArrayOutputStream());
 
         // substituted rather than dropped, so the extension and the length survive instead of collapsing
@@ -156,7 +156,7 @@ class PxlExportSupportTests {
 
     @Test
     void quoteInFilename_cannotEndTheQuotedStringEarly() {
-        final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExportExcel(
+        final ResponseEntity<Resource> entity = PxlExportSupport.makeResponseEntityForExport(
                 "a\"b\\c", PxlFileFormat.XLSX, new ByteArrayOutputStream());
 
         // an unescaped quote would close filename="..." and let the rest be read as more parameters
@@ -167,7 +167,7 @@ class PxlExportSupportTests {
     @Test
     void controlCharactersInFilename_cannotSplitTheHeader() {
         final MockHttpServletResponse response = new MockHttpServletResponse();
-        PxlExportSupport.setResponseForExportExcel("a\r\nX-Evil: 1", PxlFileFormat.XLSX, response);
+        PxlExportSupport.setResponseForExport("a\r\nX-Evil: 1", PxlFileFormat.XLSX, response);
 
         // header-injection guard: filename* is safe through percent-encoding, but the ASCII fallback is
         // written literally, so it is the one place a CR/LF could have broken the header apart
