@@ -1,6 +1,7 @@
 package io.github.hclimkr.pxl.spring.component;
 
 import io.github.hclimkr.pxl.Pxl;
+import io.github.hclimkr.pxl.PxlConstants;
 import io.github.hclimkr.pxl.builder.PxlCsvExportBuilder;
 import io.github.hclimkr.pxl.exception.PxlArgumentException;
 import io.github.hclimkr.pxl.exception.PxlException;
@@ -406,11 +407,14 @@ public class PxlCsvExporter {
         /**
          * Streams the configured export straight to the servlet response, without buffering it first.
          *
-         * <p>Be clear about what this does and does not buy on the CSV side. The core renders the whole file
-         * into memory before the destination is opened - that is what keeps a codec or validation failure from
-         * leaving a half-written file behind - so this terminal drops the <em>second</em> copy (the download
-         * buffer {@link #toResponse(HttpServletResponse, String)} builds) and nothing more. Heap still scales
-         * with the output; it simply scales once instead of twice.</p>
+         * <p>Be clear about what this buys on the CSV side. The core still renders the whole file before the
+         * destination is opened - that is what keeps a codec or validation failure from leaving a half-written
+         * file behind - but it holds only the first {@link PxlConstants#EXPORT_MEMORY_THRESHOLD_OF_CSV} of that
+         * rendering in memory and spills the rest to a temporary file. So the copy this terminal drops - the
+         * download buffer {@link #toResponse(HttpServletResponse, String)} builds - is the last one that grows
+         * with the output, and streaming a large CSV costs roughly constant heap. What the spill trades for
+         * that is disk: the temporary file needs free space and is written unencrypted under
+         * {@code java.io.tmpdir}, though the core removes it before the call returns either way.</p>
          *
          * <p>What it gives up is the same trade as on the Excel exporters:</p>
          * <ul>

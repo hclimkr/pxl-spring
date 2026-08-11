@@ -36,11 +36,14 @@ asks something of a caller — the import of `PxlFileFormat` / `PxlExcelEngine` 
     MS949 export for a legacy consumer a one-line `override(...)`. What CSV cannot carry is ignored, with one
     refusal: `exportPassword` raises `PxlArgumentException` rather than being ignored, since CSV cannot be
     encrypted and writing plaintext would be a leak.
-  - **Plan for the memory.** A CSV export renders its whole output before the destination is opened — that is
-    what keeps a codec, validation or limit failure from leaving a file behind — so it has the memory profile
-    of a non-streaming Excel export, not of a lightweight bulk path. `toResponseStreaming(...)` exists on both
-    new builders for consistency, but it is worth the least here: it drops the download buffer and nothing
-    more, so heap still scales with the output, once instead of twice. See "Size & Memory" in the README.
+  - **Plan for the memory — and for the disk.** A CSV export renders its whole output before the destination
+    is opened — that is what keeps a codec, validation or limit failure from leaving a file behind — but the
+    core holds only the first 4 MiB of it in memory and continues into a temporary file under
+    `java.io.tmpdir`, removed before the call returns. So the heap it needs does not grow with the output;
+    a large export needs free disk space instead, and that temporary file is written unencrypted, which is
+    worth knowing since a CSV export refuses `exportPassword` rather than encrypting. That leaves the
+    download buffer as the last thing that grows with the output here, so `toResponseStreaming(...)` is what
+    makes a large CSV download cost roughly constant heap. See "Size & Memory" in the README.
   - **`PxlFileFormat` and `PxlExcelEngine` moved to `io.github.hclimkr.pxl.type`** *(breaking, from the core)*.
     Update the import; nothing else about either type changed. Application code feels this wherever it names
     either enum — `@PxlWorkbook(exportExcelEngine = PxlExcelEngine.HSSF)`, an option builder, a `PxlFileFormat`

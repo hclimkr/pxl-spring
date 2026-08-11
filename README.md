@@ -1072,7 +1072,7 @@ pxlSpring.exportExcel()
 - `exportSXSSFRowAccessWindowSize` is how many rows stay in memory (POI's default window if unset).
 - `SXSSF` produces `.xlsx` only — it has no effect on the `HSSF` engine (`.xls`).
 - Columns using automatic width have to be tracked, and a tracked column stays in memory. Many auto-width columns eat into the saving.
-- CSV has no engine and no equivalent. A CSV export renders its whole output into memory before the destination is opened — that is what keeps a codec, validation or limit failure from leaving a file behind — so treat it as having the memory profile of a non-streaming Excel export rather than as a lightweight path for very large data.
+- CSV has no engine, but it has an equivalent of its own. A CSV export renders its whole output before the destination is opened — that is what keeps a codec, validation or limit failure from leaving a file behind — holding the first 4 MiB (`PxlConstants.EXPORT_MEMORY_THRESHOLD_OF_CSV`) in memory and continuing into a temporary file under `java.io.tmpdir` past that, deleted before the call returns whether it succeeded or failed. So the heap a CSV export needs does not grow with its output. What a large one needs instead is free disk space, and that temporary file is written unencrypted — worth knowing, since a CSV export refuses `exportPassword` rather than encrypting.
 
 ### Export: the destination
 
@@ -1084,7 +1084,7 @@ Terminals differ in how much of the finished output they hold:
 | `toResponse(...)`               | one copy | buffered so a generation failure cannot emit a truncated download |
 | `toResponseEntity(...)`         | **two copies** | the buffer is copied into an exactly-sized array before the `Resource` body wraps it |
 
-For a large download prefer `toResponse(...)` over `toResponseEntity(...)`. `PxlExcelZipExporter` buffers the **whole archive** on both response destinations, so the difference grows with the number of entries. On the CSV exporters the rendered output counts on top of every figure in that table, because the core produces it before any destination is touched.
+For a large download prefer `toResponse(...)` over `toResponseEntity(...)`. `PxlExcelZipExporter` buffers the **whole archive** on both response destinations, so the difference grows with the number of entries. On the CSV exporters the core's rendering counts on top of every figure in that table, because it is produced before any destination is touched — but at most 4 MiB of it, the rest sitting in a temporary file rather than in heap.
 
 The buffering is deliberate: the response is only touched once the bytes are complete, so a failure mid-generation leaves the response — including any CORS headers added upstream — untouched, instead of committing `200 OK` plus a corrupt body.
 
@@ -1099,7 +1099,7 @@ pxlSpring.exportExcel()
         .toResponseStreaming(response, "employee-list");
 ```
 
-Pair it with `SXSSF`. Together the two make an export cost roughly constant heap regardless of row count. For a zip it is worth the most on its own — one entry is generated and written at a time instead of the whole archive being held. On CSV it is worth the least: the core has already rendered the output, so this drops the download buffer and nothing more — heap still scales with the output, it just scales once instead of twice.
+Pair it with `SXSSF`. Together the two make an export cost roughly constant heap regardless of row count. For a zip it is worth the most on its own — one entry is generated and written at a time instead of the whole archive being held. On CSV it is worth more than its description suggests: the core's rendering is already capped at 4 MiB, so the download buffer this drops is the last thing that grew with the output — streaming is what makes a large CSV cost roughly constant heap as well.
 
 **Know what you are giving up.** These are the reason `toResponse(...)` is the default final method:
 
