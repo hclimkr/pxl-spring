@@ -1,6 +1,6 @@
 package io.github.hclimkr.pxl.spring;
 
-import java.io.ByteArrayOutputStream;
+import org.springframework.util.FastByteArrayOutputStream;
 
 /**
  * Tuning constants shared by more than one component.
@@ -19,16 +19,18 @@ import java.io.ByteArrayOutputStream;
 public interface PxlSpringConstants {
 
     /**
-     * Initial capacity of a download body buffer.
+     * Size of the first block of a download body buffer.
      *
-     * <p>{@link ByteArrayOutputStream}'s own default is 32 bytes, so even the smallest workbook - a minimal
-     * XLSX container runs to a few kilobytes - costs a run of doubling reallocations, each copying the whole
-     * buffer. This starts above that floor so a typical small download is written into one allocation.</p>
+     * <p>The buffer is a {@link FastByteArrayOutputStream}, which holds its output as a deque of blocks and
+     * adds a block rather than growing one, so this figure is the first block's size and not a ceiling.
+     * Its own default is 256 bytes, so even the smallest workbook - a minimal XLSX container runs to a few
+     * kilobytes - would be spread over a run of little blocks. This starts above that floor so a typical
+     * small download lands in one.</p>
      *
-     * <p>Deliberately modest rather than generous: a large hint would be wasted on every small export, and
-     * with many concurrent downloads that waste is what shows up as peak heap. It does not make a large
-     * export cheap - the doublings that dominate there are the last few, which no fixed hint can avoid - so
-     * it removes the pointless churn rather than solving that case.</p>
+     * <p>Deliberately modest rather than generous: a large first block would be wasted on every small
+     * export, and with many concurrent downloads that waste is what shows up as peak heap. A large export
+     * needs no hint from here - it simply gets more blocks, at no copying cost - so this removes the churn
+     * of many small allocations rather than solving that case.</p>
      */
     int DOWNLOAD_BUFFER_INITIAL_BYTES = 32 * 1024;
 

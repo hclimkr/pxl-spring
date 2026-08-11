@@ -23,13 +23,17 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.util.FastByteArrayOutputStream;
 import org.springframework.validation.annotation.Validated;
 
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -202,7 +206,7 @@ public class PxlExcelZipExporter {
 
         // Build the whole archive in memory first; the response is only written once the archive is complete,
         // so a failure leaves the response - including any CORS headers added upstream - untouched.
-        final ByteArrayOutputStream outputStream = writeArchiveToBuffer(builder);
+        final FastByteArrayOutputStream outputStream = writeArchiveToBuffer(builder);
 
         PxlExportSupport.writeBufferToResponseForExportZip(outputStream, resolvedFilename, response);
     }
@@ -268,7 +272,7 @@ public class PxlExcelZipExporter {
 
         // Build the whole archive in memory first; the response is only written once the archive is
         // complete, so a failure leaves the response - including any CORS headers added upstream - untouched.
-        final ByteArrayOutputStream outputStream = writeArchiveToBuffer(builder);
+        final FastByteArrayOutputStream outputStream = writeArchiveToBuffer(builder);
 
         return PxlExportSupport.makeResponseEntityForExportZip(resolvedFilename, outputStream);
     }
@@ -399,10 +403,10 @@ public class PxlExcelZipExporter {
      * @throws PxlException if a workbook object is {@code null}, writing the archive fails, or a workbook
      *                      fails to export
      */
-    private ByteArrayOutputStream writeArchiveToBuffer(final Builder builder)
+    private FastByteArrayOutputStream writeArchiveToBuffer(final Builder builder)
             throws PxlException {
 
-        final ByteArrayOutputStream outputStream = new ByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
+        final FastByteArrayOutputStream outputStream = new FastByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
         writeArchive(outputStream, builder);
 
         return outputStream;

@@ -1082,9 +1082,7 @@ Terminals differ in how much of the finished output they hold:
 |---------------------------------|---|---|
 | `toStream(...)` / `toFile(...)` | none | written straight through — cheapest |
 | `toResponse(...)`               | one copy | buffered so a generation failure cannot emit a truncated download |
-| `toResponseEntity(...)`         | **two copies** | the buffer is copied into an exactly-sized array before the `Resource` body wraps it |
-
-For a large download prefer `toResponse(...)` over `toResponseEntity(...)`. `PxlExcelZipExporter` buffers the **whole archive** on both response destinations, so the difference grows with the number of entries. On the CSV exporters the core's rendering counts on top of every figure in that table, because it is produced before any destination is touched — but at most 4 MiB of it, the rest sitting in a temporary file rather than in heap.
+| `toResponseEntity(...)`         | one copy | the `Resource` body reads that same buffer rather than copying it into an array |
 
 The buffering is deliberate: the response is only touched once the bytes are complete, so a failure mid-generation leaves the response — including any CORS headers added upstream — untouched, instead of committing `200 OK` plus a corrupt body.
 

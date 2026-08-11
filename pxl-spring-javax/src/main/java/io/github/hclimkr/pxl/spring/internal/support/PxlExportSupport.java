@@ -3,14 +3,15 @@ package io.github.hclimkr.pxl.spring.internal.support;
 import io.github.hclimkr.pxl.exception.PxlIOException;
 import io.github.hclimkr.pxl.type.PxlFileFormat;
 import org.apache.commons.io.FilenameUtils;
-import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.AbstractResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.FastByteArrayOutputStream;
 
 import javax.servlet.http.HttpServletResponse;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -21,6 +22,13 @@ import java.nio.charset.StandardCharsets;
  * <p>Purely HTTP-facing: it knows about file names, content types and response bodies, and nothing about the
  * builders or about how a workbook is produced - each component generates its own bytes and hands the
  * finished buffer here.</p>
+ *
+ * <p>That buffer is a {@link FastByteArrayOutputStream} rather than a {@code ByteArrayOutputStream} because
+ * neither of the two things done with it here has to copy the output: the servlet destinations write its
+ * segments straight out with {@code writeTo(...)}, and the {@link ResponseEntity} destinations read the same
+ * segments through a {@link BufferResource}. A {@code ByteArrayOutputStream} would force
+ * {@code toByteArray()} on the entity path - a second full copy of the output, both arrays alive at once -
+ * and would also grow by doubling, copying everything written so far each time it does.</p>
  *
  * <p>File names arrive exactly as the caller gave them - nothing here normalizes them, so a caller that
  * needs NFC has to apply it upstream - and every {@code Content-Disposition} is built by one helper,
@@ -81,7 +89,7 @@ public final class PxlExportSupport {
      * @param response     the servlet response to write to
      * @throws PxlIOException if setting headers or writing the body fails
      */
-    public static void writeBufferToResponseForExport(final ByteArrayOutputStream outputStream,
+    public static void writeBufferToResponseForExport(final FastByteArrayOutputStream outputStream,
                                                       final String filename,
                                                       final PxlFileFormat fileFormat,
                                                       final HttpServletResponse response)
@@ -100,14 +108,17 @@ public final class PxlExportSupport {
      * Builds a {@link ResponseEntity} carrying the produced export bytes together with the download
      * headers ({@code Content-Disposition}, {@code Content-Type}, content length).
      *
+     * <p>The body reads the buffer where it lies - see {@link BufferResource} - so the finished output is
+     * not copied again on its way into the entity.</p>
+     *
      * @param filename     the file name without extension
      * @param fileFormat   the export file format (provides extension and content type)
-     * @param outputStream the buffer holding the produced export bytes
+     * @param outputStream the buffer holding the produced export bytes, finished and no longer written to
      * @return a {@code 200 OK} response entity with the export body and download headers
      */
     public static ResponseEntity<Resource> makeResponseEntityForExport(final String filename,
                                                                        final PxlFileFormat fileFormat,
-                                                                       final ByteArrayOutputStream outputStream) {
+                                                                       final FastByteArrayOutputStream outputStream) {
 
         final HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.CONTENT_DISPOSITION,
@@ -117,7 +128,7 @@ public final class PxlExportSupport {
         return ResponseEntity.ok()
                 .headers(headers)
                 .contentLength(outputStream.size())
-                .body(new ByteArrayResource(outputStream.toByteArray()));
+                .body(new BufferResource(outputStream));
     }
 
     /**
@@ -154,7 +165,7 @@ public final class PxlExportSupport {
      * @param response     the servlet response to write to
      * @throws PxlIOException if setting headers or writing the body fails
      */
-    public static void writeBufferToResponseForExportZip(final ByteArrayOutputStream outputStream,
+    public static void writeBufferToResponseForExportZip(final FastByteArrayOutputStream outputStream,
                                                          final String zipFilename,
                                                          final HttpServletResponse response)
             throws PxlIOException {
@@ -172,12 +183,14 @@ public final class PxlExportSupport {
      * Builds a {@link ResponseEntity} carrying the produced ZIP bytes together with the download
      * headers ({@code Content-Disposition}, {@code Content-Type}, content length).
      *
+     * <p>The body reads the buffer where it lies, as on the export side.</p>
+     *
      * @param zipFilename  the archive file name without extension
-     * @param outputStream the buffer holding the produced archive bytes
+     * @param outputStream the buffer holding the produced archive bytes, finished and no longer written to
      * @return a {@code 200 OK} response entity with the archive body and download headers
      */
     public static ResponseEntity<Resource> makeResponseEntityForExportZip(final String zipFilename,
-                                                                          final ByteArrayOutputStream outputStream) {
+                                                                          final FastByteArrayOutputStream outputStream) {
 
         final HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(zipFilename, "zip"));
@@ -186,7 +199,7 @@ public final class PxlExportSupport {
         return ResponseEntity.ok()
                 .headers(headers)
                 .contentLength(outputStream.size())
-                .body(new ByteArrayResource(outputStream.toByteArray()));
+                .body(new BufferResource(outputStream));
     }
 
     /**
@@ -264,6 +277,81 @@ public final class PxlExportSupport {
         }
 
         return fallback.toString();
+    }
+
+    /**
+     * Read-only {@link Resource} view of a finished download buffer, used as the body of the
+     * {@link ResponseEntity} destinations.
+     *
+     * <p>What it is for is the copy it avoids. A {@code ByteArrayResource} has to be handed an array, so the
+     * buffer would have to be flattened with {@code toByteArray()} - the whole output copied a second time,
+     * with both arrays alive at once - while {@link FastByteArrayOutputStream#getInputStream()} reads the
+     * segments already written. Nothing else about the response changes: {@link #contentLength()} answers
+     * the same figure the entity's {@code Content-Length} carries, which a {@code Range} request also
+     * reads.</p>
+     *
+     * <p>Deliberately not {@code InputStreamResource}, which would be the other way to wrap a stream: that
+     * one is single-use ({@code isOpen()} is {@code true}) and cannot report a length, whereas this opens a
+     * fresh view per call and stays re-readable.</p>
+     *
+     * <p>What the view rests on is that the buffer is finished before a body wraps it and is never written
+     * to again. The four export components close theirs as well, in a {@code finally} that outlives the
+     * entity they return, so a later write there fails outright rather than altering a body already handed
+     * to the framework - closing does not stop the body being read, only being changed.</p>
+     */
+    private static final class BufferResource extends AbstractResource {
+
+        /**
+         * The finished export bytes. Read through, never copied.
+         */
+        private final FastByteArrayOutputStream buffer;
+
+        private BufferResource(final FastByteArrayOutputStream buffer) {
+
+            this.buffer = buffer;
+        }
+
+        /**
+         * Opens a view over the buffer's segments. A fresh one each call, so the resource is re-readable.
+         *
+         * @return a stream over the finished export bytes
+         */
+        @Override
+        public InputStream getInputStream() {
+
+            return buffer.getInputStream();
+        }
+
+        /**
+         * @return the number of bytes written to the buffer
+         */
+        @Override
+        public long contentLength() {
+
+            return buffer.size();
+        }
+
+        /**
+         * Always exists: the bytes are held in memory, so there is nothing to look up. Overridden because
+         * {@link AbstractResource#exists()} would otherwise open and close a stream to find out.
+         *
+         * @return {@code true}
+         */
+        @Override
+        public boolean exists() {
+
+            return true;
+        }
+
+        /**
+         * @return a description naming this as an in-memory download buffer, for error messages
+         */
+        @Override
+        public String getDescription() {
+
+            return "PXL download buffer (" + buffer.size() + " bytes)";
+        }
+
     }
 
 }

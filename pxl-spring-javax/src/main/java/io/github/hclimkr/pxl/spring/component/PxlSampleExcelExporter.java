@@ -22,12 +22,12 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.util.FastByteArrayOutputStream;
 import org.springframework.validation.annotation.Validated;
 
 import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.constraints.NotNull;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -175,7 +175,7 @@ public class PxlSampleExcelExporter {
 
         // Generate fully in memory first; the response is only written once the bytes are complete, so a
         // generation failure leaves the response - including any CORS headers added upstream - untouched.
-        final ByteArrayOutputStream outputStream = new ByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
+        final FastByteArrayOutputStream outputStream = new FastByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
         builder.coreBuilder.toStream(outputStream);
 
         PxlExportSupport.writeBufferToResponseForExport(outputStream, resolvedFilename, fileFormat, response);
@@ -236,9 +236,11 @@ public class PxlSampleExcelExporter {
         final String resolvedFilename = builder.resolveFilename(excelFilename);
         final PxlFileFormat fileFormat = builder.resolveFileFormat();
 
-        ByteArrayOutputStream outputStream = null;
+        // Closed in the finally, before the entity reaches its caller: the body reads the buffer afterwards,
+        // which closing does not prevent, but a later write into a body already handed over now fails.
+        FastByteArrayOutputStream outputStream = null;
         try {
-            outputStream = new ByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
+            outputStream = new FastByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
             builder.coreBuilder.toStream(outputStream);
             return PxlExportSupport.makeResponseEntityForExport(resolvedFilename, fileFormat, outputStream);
         } finally {

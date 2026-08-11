@@ -44,6 +44,12 @@ asks something of a caller — the import of `PxlFileFormat` / `PxlExcelEngine` 
     worth knowing since a CSV export refuses `exportPassword` rather than encrypting. That leaves the
     download buffer as the last thing that grows with the output here, so `toResponseStreaming(...)` is what
     makes a large CSV download cost roughly constant heap. See "Size & Memory" in the README.
+  - **A download is held once, not twice.** `toResponseEntity(...)` used to copy the finished buffer into an
+    exactly-sized array before wrapping it as a `Resource`, so the entity destinations carried the output
+    twice; the body now reads that buffer where it lies and they cost what `toResponse(...)` costs. The
+    buffer changed with it — it grows by adding blocks rather than by reallocating one array, so the peak no
+    longer includes a transient second copy of everything written so far. Nothing in the API moves: the body
+    is still `ResponseEntity<Resource>`, which is why it could change at all.
   - **`PxlFileFormat` and `PxlExcelEngine` moved to `io.github.hclimkr.pxl.type`** *(breaking, from the core)*.
     Update the import; nothing else about either type changed. Application code feels this wherever it names
     either enum — `@PxlWorkbook(exportExcelEngine = PxlExcelEngine.HSSF)`, an option builder, a `PxlFileFormat`

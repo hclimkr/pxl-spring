@@ -79,10 +79,10 @@ public class PxlExcelExporterTests {
     /**
      * Reads a {@code toResponseEntity()} body out as bytes.
      *
-     * <p>Goes through {@link Resource#getInputStream()} rather than casting to the {@code ByteArrayResource}
-     * the exporters happen to return, so these tests keep passing if the body ever becomes file-backed.
-     * Wraps the {@code IOException} because reading an in-memory resource cannot realistically fail and
-     * declaring it would spread {@code throws} across most of the assertions here.</p>
+     * <p>Goes through {@link Resource#getInputStream()} rather than casting to whatever the exporters happen
+     * to return - today a view over the download buffer - so these tests keep passing if the body ever
+     * becomes file-backed. Wraps the {@code IOException} because reading an in-memory resource cannot
+     * realistically fail and declaring it would spread {@code throws} across most of the assertions here.</p>
      *
      * <p>Package-private, unlike {@link #isXlsx} and {@link #users}: the sample and zip test classes reuse it,
      * but they sit in this same package. Only the parent package's facade and validation tests need the wider
@@ -308,6 +308,9 @@ public class PxlExcelExporterTests {
                 .contains("attachment")
                 .contains("filename*=UTF-8''Report.xlsx");
         assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE)).isNotBlank();
+        // the body is a view over the download buffer rather than a copy of it, so the length the header
+        // carries and the length the body reads out come from two different places and must still agree
+        assertThat(entity.getHeaders().getContentLength()).isEqualTo(bodyBytes(entity).length);
         assertThat(isXlsx(bodyBytes(entity))).isTrue();
     }
 

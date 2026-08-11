@@ -196,6 +196,9 @@ class PxlCsvExporterTests {
         assertThat(entity.getStatusCode().value()).isEqualTo(200);
         assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).contains("report.csv");
         assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE)).isEqualTo("text/csv");
+        // the body is a view over the download buffer rather than a copy of it, so the length the header
+        // carries and the length the body reads out come from two different places and must still agree
+        assertThat(entity.getHeaders().getContentLength()).isEqualTo(bodyBytes(entity).length);
         assertThat(linesOf(bodyBytes(entity))).startsWith("Name,Age", "Alice,30");
     }
 

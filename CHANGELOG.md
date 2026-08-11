@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them. The documented setup — scanning `io.github.hclimkr.pxl.spring` — is unaffected, and
   so is the no-arg constructor.
 
+- A download body is held once rather than twice. `toResponseEntity(...)` used to copy the
+  finished buffer into an exactly-sized array before wrapping it as a `Resource`; the body now
+  reads that buffer where it lies, so the entity destinations cost what `toResponse(...)` costs.
+  The buffer is Spring's `FastByteArrayOutputStream` as well, which grows by adding blocks
+  instead of reallocating, so the peak no longer carries a transient second copy of everything
+  written so far. Nothing in the API moves — the body is still `ResponseEntity<Resource>`.
+
 - Internal: the shared download helpers in `PxlExportSupport` dropped `Excel` from their
   names (`setResponseForExport`, `writeBufferToResponseForExport`,
   `makeResponseEntityForExport`) now that CSV goes through the same `PxlFileFormat`-driven
