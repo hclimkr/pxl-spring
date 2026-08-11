@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-08-11
+
+Built against [pxl](https://github.com/hclimkr/pxl) 0.9.4, up from 0.9.3.
+
 ### Added
 
 - Export to CSV, alongside the existing Excel exports: `exportCsv()` and `exportSampleCsv()`
@@ -93,6 +97,7 @@ javax variant, `pxl-jakarta` for the jakarta one.
 - `PxlSpring`, one bean fronting all five entry points, with Bean Validation, RFC 5987
   download names, and opt-in AOP performance logging.
 
-[Unreleased]: https://github.com/hclimkr/pxl-spring/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/hclimkr/pxl-spring/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/hclimkr/pxl-spring/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/hclimkr/pxl-spring/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/hclimkr/pxl-spring/releases/tag/v0.9.0

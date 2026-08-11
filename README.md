@@ -54,7 +54,7 @@ Add only the variant that matches your environment to your dependencies.
 <dependency>
     <groupId>io.github.hclimkr</groupId>
     <artifactId>pxl-spring-javax</artifactId>
-    <version>0.9.1</version>
+    <version>0.9.2</version>
 </dependency>
 ```
 
@@ -63,7 +63,7 @@ Add only the variant that matches your environment to your dependencies.
 <dependency>
     <groupId>io.github.hclimkr</groupId>
     <artifactId>pxl-spring-jakarta</artifactId>
-    <version>0.9.1</version>
+    <version>0.9.2</version>
 </dependency>
 ```
 
@@ -71,12 +71,12 @@ Add only the variant that matches your environment to your dependencies.
 
 ```groovy
 // javax variant (Java 8+)
-implementation 'io.github.hclimkr:pxl-spring-javax:0.9.1'
+implementation 'io.github.hclimkr:pxl-spring-javax:0.9.2'
 ```
 
 ```groovy
 // jakarta variant (Java 17+)
-implementation 'io.github.hclimkr:pxl-spring-jakarta:0.9.1'
+implementation 'io.github.hclimkr:pxl-spring-jakarta:0.9.2'
 ```
 
 ---
