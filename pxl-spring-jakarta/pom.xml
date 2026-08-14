@@ -13,7 +13,7 @@
     <artifactId>pxl-spring-jakarta</artifactId>
 
     <name>PXL Spring (jakarta)</name>
-    <description>Multipart uploads and download responses for spreadsheet-object binding in Spring, built on PXL (jakarta.validation variant)</description>
+    <description>Spring Excel &amp; CSV Upload / Download Library Built on PXL (jakarta.validation variant)</description>
     <url>https://github.com/hclimkr/pxl-spring</url>
 
     <properties>

@@ -1,6 +1,6 @@
 **English** · [한국어](README_ko.md)
 
-PXL Spring
+PXL Spring - Spring Excel & CSV Upload / Download Library Built on PXL
 =============================
 
 [![Build](https://github.com/hclimkr/pxl-spring/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/hclimkr/pxl-spring/actions/workflows/build.yml)
@@ -12,8 +12,23 @@ PXL Spring
 PXL Spring provides **multipart uploads and download responses for spreadsheet-object binding in Spring**, built on [PXL](https://github.com/hclimkr/pxl).
 It leaves the binding to PXL and supports Java 8 and later.
 
+Turn a `MultipartFile` upload of `.xlsx`, `.xls` or `.csv` straight into a `List<Employee>`, and return a
+`List<Employee>` from a controller method as an Excel or CSV download — no `Row`/`Cell` loops, no
+`Content-Disposition` header to assemble by hand, no `byte[]` copied through the response. One injected
+bean carries every direction, in Spring Boot and in plain Spring MVC alike, and one annotated DTO drives
+both of them.
+
 - Import: multipart uploads (XLSX · XLS · CSV) → Java objects
 - Export: Java objects → Excel · sample Excel · CSV · sample CSV · ZIP download
+
+```java
+@GetMapping("/employees/excel")
+public ResponseEntity<Resource> download() throws Exception {
+    return pxlSpring.exportExcel()
+                    .sheet(Employee.class, employees, "Employees")
+                    .toResponseEntity("employee-list");
+}
+```
 
 For PXL behavior — annotation attributes, supported types, the full set of options — refer to the [PXL documentation](https://github.com/hclimkr/pxl/blob/main/docs/reference.md).
 
@@ -26,18 +41,53 @@ For PXL behavior — annotation attributes, supported types, the full set of opt
 
 ## Table of Contents
 
-1. [Setup](#setup)
-2. [Runtime Dependencies](#runtime-dependencies)
-3. [Injecting `PxlSpring`](#injecting-pxlspring)
-4. [Defining DTO Classes](#defining-dto-classes)
-5. [Usage at a Glance](#usage-at-a-glance)
-6. [API Usage](#api-usage)
-7. [API Reference](#api-reference)
-8. [Notes](#notes)
-9. [Size & Memory](#size--memory)
-10. [Performance Logging (Optional)](#performance-logging-optional)
-11. [Build & Contributing](#build--contributing)
-12. [License](#license)
+1. [Features](#features)
+2. [Setup](#setup)
+3. [Runtime Dependencies](#runtime-dependencies)
+4. [Injecting `PxlSpring`](#injecting-pxlspring)
+5. [Defining DTO Classes](#defining-dto-classes)
+6. [Usage at a Glance](#usage-at-a-glance)
+7. [API Usage](#api-usage)
+8. [API Reference](#api-reference)
+9. [Notes](#notes)
+10. [Size & Memory](#size--memory)
+11. [Performance Logging (Optional)](#performance-logging-optional)
+12. [FAQ](#faq)
+13. [Build & Contributing](#build--contributing)
+14. [License](#license)
+
+---
+
+## Features
+
+- **One bean for every direction** — inject `PxlSpring` and each operation is a method chain off it:
+  `exportExcel()`, `exportSampleExcel()`, `exportExcelZip()`, `exportCsv()`, `exportSampleCsv()`,
+  `importExcel()`, `importCsv()`.
+- **Multipart upload straight to objects** — `fromMultipartFile(...)` / `fromMultipartFiles(...)` turn an
+  upload into a `List<Employee>` or a whole workbook object, with the extension checked before parsing.
+- **Not only uploads** — `fromResource(...)` / `fromResources(...)` accept any Spring `Resource`, so batch
+  jobs, seed loaders and tests read a spreadsheet the same way without a `MultipartFile`.
+- **Five destinations per exporter** — `toStream(...)`, `toFile(...)`, `toResponse(...)`,
+  `toResponseStreaming(...)` and `toResponseEntity(...)`. Swap the final call and the same configuration
+  goes somewhere else.
+- **Download headers assembled for you** — `Content-Disposition` carries both an ASCII `filename` and an
+  RFC 5987 `filename*`, so a non-ASCII download name survives, and the content type and extension follow
+  the format actually being written.
+- **Constant heap for large downloads** — `toResponseStreaming(...)` skips the download buffer; paired with
+  the `SXSSF` engine, or with a CSV export's 4 MiB spill to a temporary file, an export costs roughly the
+  same heap whatever the row count.
+- **Several workbooks as one zip** — `exportExcelZip()` bundles one Excel entry per workbook, stores an
+  already-compressed `.xlsx` without recompressing it, and never leaves an openable archive behind when
+  the export fails.
+- **Sample templates from a class alone** — `exportSampleExcel()` / `exportSampleCsv()` produce a header
+  row plus one filled example row to hand out and collect back through the importers.
+- **Validation at the edge** — an unsupported extension is refused as `HttpMediaTypeNotSupportedException`
+  before anything is parsed, a `null` destination as `ConstraintViolationException` behind the Spring
+  proxy, and PXL's own `PxlException` covers the rest.
+- **Optional performance logging** — an AOP aspect times every execution and flags anything past a
+  threshold, off unless `pxl.performance.logging.enabled=true`.
+- **Two variants, one source** — `pxl-spring-javax` for Java 8+ on Spring 5.x / Boot 2.x, and
+  `pxl-spring-jakarta` for Java 17+ on Spring 6.x / Boot 3.x.
 
 ---
 
@@ -1136,6 +1186,61 @@ pxl.performance.logging.low-performance-in-ms=5000
 When enabled it logs method entry/exit and the elapsed time (ms), flagging `LowPerformance` past the threshold.
 
 The switch behaves the same in a Boot application and in a plain Spring one.
+
+---
+
+## FAQ
+
+**How do I return an Excel file as a download from a Spring controller?**
+Inject `PxlSpring` and finish the chain on a response destination:
+`pxlSpring.exportExcel().sheet(Employee.class, employees, "Employees").toResponseEntity("report")` hands
+back a `ResponseEntity<Resource>` with the download headers already set — see [API Usage](#api-usage).
+
+**How do I read an uploaded Excel file into a list of Java objects?**
+`pxlSpring.importExcel().sheet(Employee.class, "Employees").fromMultipartFile(file)` returns a
+`List<Employee>` with every cell already converted to the field's type. The upload's extension is validated
+first, and an `.xls` is read as readily as an `.xlsx` — see [`PxlExcelImporter`](#pxlexcelimporter).
+
+**`HttpServletResponse` or `ResponseEntity` — which one should I use?**
+Either; both hold the same single copy of the finished output. Use `toResponse(...)` when the handler
+returns `void` and `toResponseEntity(...)` when it returns a body. Reach for `toResponseStreaming(...)`
+only for large exports, and read what it gives up first — see [Size & Memory](#size--memory).
+
+**How do I export a large file without running out of memory?**
+Combine `toResponseStreaming(...)` with the `SXSSF` engine for Excel; a CSV export already caps its
+rendering at 4 MiB and spills the rest to a temporary file. On the import side,
+`@PxlWorkbook(importUsingStreamReader = true)` reads an `.xlsx` in a sliding window.
+
+**Does a non-ASCII download file name — Korean, for example — survive?**
+Yes. `Content-Disposition` is written with an RFC 5987 `filename*` alongside an ASCII `filename` fallback,
+so a client that understands the former gets the original name and one that does not gets a safe
+substitute of the same length and extension. The name is used exactly as given, so normalize it yourself
+if you need NFC.
+
+**Does it handle CSV too?**
+Yes — `exportCsv()` / `importCsv()`, with the same DTOs and annotations as Excel. One CSV file is one
+sheet, so several uploaded CSVs can be read into a single workbook object, one file per `@PxlSheet` field.
+
+**How do I let the user download several Excel files at once?**
+`exportExcelZip()` takes one `workbook(...)` call per file and bundles them into a single zip download —
+see [`PxlExcelZipExporter`](#pxlexcelzipexporter).
+
+**Can I read a spreadsheet outside a web request — in a batch job or a test?**
+Yes. `fromResource(...)` / `fromResources(...)` take any Spring `Resource`, so no `MultipartFile` and no
+HTTP is involved. The resource has to report a file name, since that is what carries the extension.
+
+**Does it work in plain Spring MVC, without Spring Boot?**
+Yes, and the performance-logging switch behaves identically. No Boot autoconfiguration is used anywhere;
+you declare a `MethodValidationPostProcessor`, `@EnableAspectJAutoProxy` and a `multipartResolver`
+yourself — see [Runtime Dependencies](#runtime-dependencies).
+
+**Nothing is being injected — what is missing?**
+Component scanning. Nothing registers itself, so `io.github.hclimkr.pxl.spring` has to be in your
+`@ComponentScan`; sub-packages come along with it — see [Injecting `PxlSpring`](#injecting-pxlspring).
+
+**Which artifact do I need, `pxl-spring-javax` or `pxl-spring-jakarta`?**
+`pxl-spring-javax` for Java 8+ on Spring 5.x / Boot 2.x, `pxl-spring-jakarta` for Java 17+ on Spring 6.x /
+Boot 3.x. They are the same library — add exactly one, and the matching `pxl` core comes in with it.
 
 ---
 

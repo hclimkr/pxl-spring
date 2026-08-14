@@ -1,6 +1,6 @@
 [English](README.md) · **한국어**
 
-PXL Spring
+PXL Spring - PXL 기반 스프링 엑셀 · CSV 업로드 · 다운로드 라이브러리
 =============================
 
 [![Build](https://github.com/hclimkr/pxl-spring/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/hclimkr/pxl-spring/actions/workflows/build.yml)
@@ -12,8 +12,23 @@ PXL Spring
 PXL Spring은 [PXL](https://github.com/hclimkr/pxl) 기반으로 **스프링에서 스프레드시트-객체 바인딩을 위한 멀티파트 업로드와 다운로드 응답**을 제공한다.
 바인딩은 PXL에 맡기고, Java 8 이상을 지원한다.
 
+`.xlsx` · `.xls` · `.csv` 멀티파트 업로드를 곧바로 `List<Employee>`로 읽고, `List<Employee>`를
+컨트롤러에서 곧바로 엑셀 · CSV 다운로드로 내려준다 — `Row`/`Cell` 순회도, 손으로 조립하는
+`Content-Disposition` 헤더도, 응답으로 복사되는 `byte[]`도 없다. 주입한 빈 하나가 스프링 부트에서도
+순수 스프링 MVC에서도 모든 방향을 담당하고, 애노테이션이 붙은 DTO 하나가 양방향을 함께
+구동한다.
+
 - Import: Multipart 업로드(XLSX · XLS · CSV) → 자바 객체
 - Export: 자바 객체 → 엑셀 · 샘플 엑셀 · CSV · 샘플 CSV · ZIP 다운로드
+
+```java
+@GetMapping("/employees/excel")
+public ResponseEntity<Resource> download() throws Exception {
+    return pxlSpring.exportExcel()
+                    .sheet(Employee.class, employees, "Employees")
+                    .toResponseEntity("employee-list");
+}
+```
 
 애노테이션 속성 · 지원 타입 · 전체 옵션 등 PXL 동작은 [PXL 문서](https://github.com/hclimkr/pxl/blob/main/docs/reference_ko.md)를 참고한다.
 
@@ -26,18 +41,53 @@ PXL Spring은 [PXL](https://github.com/hclimkr/pxl) 기반으로 **스프링에�
 
 ## 목차
 
-1. [구성](#구성)
-2. [런타임 의존성](#런타임-의존성)
-3. [`PxlSpring` 주입](#pxlspring-주입)
-4. [객체 DTO 정의](#객체-dto-정의)
-5. [한눈에 보는 사용법](#한눈에-보는-사용법)
-6. [API 사용](#api-사용)
-7. [API 레퍼런스](#api-레퍼런스)
-8. [유의 사항](#유의-사항)
-9. [크기 & 메모리](#크기--메모리)
-10. [성능 로깅 (선택)](#성능-로깅-선택)
-11. [빌드 & 기여](#빌드--기여)
-12. [라이선스](#라이선스)
+1. [주요 기능](#주요-기능)
+2. [구성](#구성)
+3. [런타임 의존성](#런타임-의존성)
+4. [`PxlSpring` 주입](#pxlspring-주입)
+5. [객체 DTO 정의](#객체-dto-정의)
+6. [한눈에 보는 사용법](#한눈에-보는-사용법)
+7. [API 사용](#api-사용)
+8. [API 레퍼런스](#api-레퍼런스)
+9. [유의 사항](#유의-사항)
+10. [크기 & 메모리](#크기--메모리)
+11. [성능 로깅 (선택)](#성능-로깅-선택)
+12. [자주 묻는 질문](#자주-묻는-질문)
+13. [빌드 & 기여](#빌드--기여)
+14. [라이선스](#라이선스)
+
+---
+
+## 주요 기능
+
+- **빈 하나로 모든 방향** — `PxlSpring`을 주입하면 각 작업이 거기서 시작하는 메서드 체인이 된다.
+  `exportExcel()`, `exportSampleExcel()`, `exportExcelZip()`, `exportCsv()`, `exportSampleCsv()`,
+  `importExcel()`, `importCsv()`.
+- **멀티파트 업로드를 곧바로 객체로** — `fromMultipartFile(...)` / `fromMultipartFiles(...)`가 업로드를
+  `List<Employee>`나 워크북 객체 하나로 만들며, 파싱하기 전에 확장자를 먼저 확인한다.
+- **업로드만이 아니다** — `fromResource(...)` / `fromResources(...)`는 스프링 `Resource`를 그대로 받으므로
+  배치 잡 · 시드 로더 · 테스트도 `MultipartFile` 없이 같은 방식으로 스프레드시트를 읽는다.
+- **Exporter마다 목적지 다섯** — `toStream(...)`, `toFile(...)`, `toResponse(...)`,
+  `toResponseStreaming(...)`, `toResponseEntity(...)`. 마지막 호출만 바꾸면 같은 구성이 다른 목적지로
+  나간다.
+- **다운로드 헤더는 라이브러리가 조립한다** — `Content-Disposition`에 ASCII `filename`과 RFC 5987
+  `filename*`을 함께 실으므로 비ASCII 다운로드 파일명이 그대로 살아남고, content type과 확장자는 실제로
+  기록되는 형식을 따라간다.
+- **대용량 다운로드에서도 일정한 Heap** — `toResponseStreaming(...)`이 다운로드 버퍼를 건너뛴다. `SXSSF`
+  엔진이나 CSV export의 4 MiB 임시 파일 분할과 함께 쓰면 행 수가 얼마든 export가 쓰는 Heap이 거의
+  일정해진다.
+- **여러 워크북을 zip 하나로** — `exportExcelZip()`이 워크북마다 엑셀 엔트리 하나를 만들어 묶는다. 이미
+  압축된 `.xlsx`는 다시 압축하지 않으며, export가 실패하면 아카이브로 열리는 파일을 남기지
+  않는다.
+- **클래스만으로 샘플 양식** — `exportSampleExcel()` / `exportSampleCsv()`가 헤더 행과 예시 값이 채워진
+  데이터 행 하나를 만들어 준다. 배포한 뒤 채워 받아 importer로 그대로 되읽을 수 있다.
+- **경계에서의 검증** — 지원하지 않는 확장자는 파싱 전에 `HttpMediaTypeNotSupportedException`으로,
+  `null` 목적지는 스프링 프록시 뒤에서 `ConstraintViolationException`으로 거절되고, 나머지는 PXL 자체의
+  `PxlException`이 담당한다.
+- **선택적 성능 로깅** — AOP 애스펙트가 모든 실행 시간을 재고 임계치를 넘으면 표시한다.
+  `pxl.performance.logging.enabled=true`로 켜지 않으면 꺼져 있다.
+- **소스 하나에서 나오는 두 변형** — Java 8+ / Spring 5.x · Boot 2.x용 `pxl-spring-javax`와
+  Java 17+ / Spring 6.x · Boot 3.x용 `pxl-spring-jakarta`.
 
 ---
 
@@ -1136,6 +1186,61 @@ pxl.performance.logging.low-performance-in-ms=5000
 활성화 시 메서드 진입/종료와 소요 시간(ms)을 로깅하며, 임계값을 초과하면 `LowPerformance`로 표시한다.
 
 이 스위치는 Boot 앱과 순수 Spring 앱에서 동일하게 동작한다.
+
+---
+
+## 자주 묻는 질문
+
+**스프링 컨트롤러에서 엑셀 파일을 다운로드로 어떻게 내려주나?**
+`PxlSpring`을 주입하고 응답 목적지로 체인을 끝낸다.
+`pxlSpring.exportExcel().sheet(Employee.class, employees, "Employees").toResponseEntity("report")`가
+다운로드 헤더까지 설정된 `ResponseEntity<Resource>`를 돌려준다 — [API 사용](#api-사용) 참고.
+
+**업로드된 엑셀 파일을 자바 객체 리스트로 어떻게 읽나?**
+`pxlSpring.importExcel().sheet(Employee.class, "Employees").fromMultipartFile(file)`을 호출하면 모든 셀이
+필드 타입으로 변환된 `List<Employee>`가 반환된다. 업로드의 확장자를 먼저 검증하며, `.xls`도 `.xlsx`와
+똑같이 읽는다 — [`PxlExcelImporter`](#pxlexcelimporter) 참고.
+
+**`HttpServletResponse`와 `ResponseEntity` 중 무엇을 쓰나?**
+어느 쪽이든 완성된 출력을 1벌 들고 있는 것은 같다. 핸들러가 `void`를 반환하면 `toResponse(...)`를,
+본문을 반환하면 `toResponseEntity(...)`를 쓴다. `toResponseStreaming(...)`은 대용량 export에만 쓰되
+무엇을 포기하는지 먼저 읽어 볼 것 — [크기 & 메모리](#크기--메모리) 참고.
+
+**메모리를 넘기지 않고 대용량 파일을 export하려면?**
+엑셀은 `toResponseStreaming(...)`과 `SXSSF` 엔진을 함께 쓴다. CSV export는 이미 렌더링을 4 MiB로 제한하고
+나머지를 임시 파일로 흘린다. Import 쪽은 `@PxlWorkbook(importUsingStreamReader = true)`가 `.xlsx`를
+슬라이딩 윈도로 읽는다.
+
+**한글처럼 비ASCII인 다운로드 파일명도 그대로 전달되나?**
+그렇다. `Content-Disposition`에 RFC 5987 `filename*`과 ASCII `filename` 폴백을 함께 기록하므로, 전자를
+이해하는 클라이언트는 원래 이름을 받고 그렇지 않은 클라이언트는 길이와 확장자가 보존된 안전한 대체
+이름을 받는다. 파일명은 준 그대로 쓰이므로 NFC 정규화가 필요하면 호출 측에서 미리 처리해야
+한다.
+
+**CSV도 지원하나?**
+`exportCsv()` / `importCsv()`로 지원하며 DTO와 애노테이션은 엑셀과 같다. CSV는 파일 하나가 시트 하나라,
+업로드된 CSV 여러 개를 `@PxlSheet` 필드마다 하나씩 묶어 워크북 객체 하나로 읽을 수 있다.
+
+**엑셀 파일 여러 개를 한 번에 내려받게 하려면?**
+`exportExcelZip()`에 파일마다 `workbook(...)`을 한 번씩 호출하면 zip 하나로 묶어 내려준다 —
+[`PxlExcelZipExporter`](#pxlexcelzipexporter) 참고.
+
+**웹 요청 밖에서 — 배치 잡이나 테스트에서 — 스프레드시트를 읽을 수 있나?**
+읽을 수 있다. `fromResource(...)` / `fromResources(...)`가 스프링 `Resource`를 받으므로 `MultipartFile`도
+HTTP도 필요 없다. 다만 확장자를 실어 오는 것이 파일명이므로 리소스는 파일명을 보고할 수 있어야 한다.
+
+**스프링 부트 없이 순수 스프링 MVC에서도 동작하나?**
+동작하며 성능 로깅 스위치도 똑같이 작동한다. Boot 자동 설정은 어디에도 쓰지 않으므로
+`MethodValidationPostProcessor` 빈과 `@EnableAspectJAutoProxy`, `multipartResolver`를 직접 선언하면
+된다 — [런타임 의존성](#런타임-의존성) 참고.
+
+**아무것도 주입되지 않는다. 무엇이 빠진 건가?**
+컴포넌트 스캔이다. 자동으로 등록되는 것이 없으므로 `io.github.hclimkr.pxl.spring`이 `@ComponentScan`에
+들어가야 한다. 하위 패키지는 함께 스캔된다 — [`PxlSpring` 주입](#pxlspring-주입) 참고.
+
+**`pxl-spring-javax`와 `pxl-spring-jakarta` 중 무엇을 쓰나?**
+Java 8+ / Spring 5.x · Boot 2.x면 `pxl-spring-javax`, Java 17+ / Spring 6.x · Boot 3.x면
+`pxl-spring-jakarta`다. 같은 라이브러리이므로 정확히 하나만 추가하면 대응하는 `pxl` 코어가 함께 따라온다.
 
 ---
 
