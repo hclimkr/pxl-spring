@@ -486,7 +486,7 @@ public class PxlCsvImporter {
              *
              * @param csvFiles the uploaded CSV files
              * @return the parsed workbook object or row collection
-             * @throws PxlException                       if {@code csvFiles} is {@code null}, a
+             * @throws PxlException                       if {@code csvFiles} is {@code null} or empty, a
              *                                            {@code sheet(...)} form is given more than one
              *                                            upload, an upload cannot be read, or parsing fails
              * @throws HttpMediaTypeNotSupportedException if any file extension is not {@code .csv}
@@ -531,7 +531,7 @@ public class PxlCsvImporter {
              *
              * @param csvFiles the CSV resources
              * @return the parsed workbook object or row collection
-             * @throws PxlException                       if {@code csvFiles} is {@code null}, a
+             * @throws PxlException                       if {@code csvFiles} is {@code null} or empty, a
              *                                            {@code sheet(...)} form is given more than one
              *                                            resource, a resource cannot be read, or parsing
              *                                            fails

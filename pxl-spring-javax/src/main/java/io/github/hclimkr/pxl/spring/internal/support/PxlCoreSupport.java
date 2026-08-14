@@ -8,9 +8,9 @@ import io.github.hclimkr.pxl.Pxl;
  * <p>{@code new Pxl()} is not cheap: its constructor bootstraps a bean-validation
  * {@code ValidatorFactory} (provider discovery, EL factory, metadata providers, {@code validation.xml}
  * parsing) and keeps only the {@code Validator} it produced, so the factory is never closed and holds its
- * metadata cache for the lifetime of the process. One instance per component would pay that five times over
- * - and {@code PxlSampleExcelExporter} would pay it for nothing at all, because
- * {@code Pxl.exportSampleExcel()} builds a sample builder that takes no validator.</p>
+ * metadata cache for the lifetime of the process. One instance per component would pay that seven times over
+ * - and the two sample exporters would pay it for nothing at all, because {@code Pxl.exportSampleExcel()} and
+ * {@code Pxl.exportSampleCsv()} build sample builders that take no validator.</p>
  *
  * <p>Sharing is safe because {@link Pxl} is immutable after construction - its only instance field is that
  * {@code Validator}, which is thread-safe and meant to be shared - and every {@code Pxl} factory method

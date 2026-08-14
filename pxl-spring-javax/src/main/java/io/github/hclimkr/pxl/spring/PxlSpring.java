@@ -7,8 +7,9 @@ import org.springframework.stereotype.Component;
 /**
  * Single entry point for every pxl-spring operation, mirroring the core {@code Pxl} facade.
  *
- * <p>Inject this one bean and pick the operation the same way you would on the core library - the method
- * names are identical, so a chain reads the same on both sides:</p>
+ * <p>Inject this one bean and pick the operation the same way you would on the core library - the six that
+ * have a core counterpart carry its name, so a chain reads the same on both sides. {@link #exportExcelZip()}
+ * is the one addition, archive bundling being a pxl-spring concern with nothing to mirror:</p>
  *
  * <pre>{@code
  * List<User> users = pxlSpring.importExcel().sheet(User.class, "Users").fromMultipartFile(upload);
