@@ -1,13 +1,13 @@
 # PXL Spring (Unreleased)
 
-Correctness release for **PXL Spring**: a ZIP entry-name collision is caught before the archive is written
-rather than surfacing from inside the zip stream, so it can be told apart from a disk failure and leaves no
-half-written file or committed response behind. Built against [PXL](https://github.com/hclimkr/pxl) 0.9.4,
-unchanged.
+Correctness release for **PXL Spring**, both changes in the ZIP exporter: an entry-name collision is caught
+before the archive is written rather than from inside the zip stream, and an entry's name now agrees with the
+bytes in it. Built against [PXL](https://github.com/hclimkr/pxl) 0.9.4, unchanged.
 
-Pre-1.0 release carrying a **breaking** change: a collision now raises `PxlArgumentException` where it used to
-raise `PxlIOException`, and two entry names differing only in case are refused where they used to produce an
-archive — see the highlight below.
+Pre-1.0 release carrying **breaking** changes: a collision raises `PxlArgumentException` where it used to
+raise `PxlIOException`, two entry names differing only in case are refused where they used to produce an
+archive, and a per-entry `exportExcelEngine` now changes the entry's extension as well as its content — see
+the highlights below.
 
 ## Highlights
 
@@ -28,4 +28,16 @@ archive — see the highlight below.
              .workbook(january, null, "january")    // both declare workbookName = "report"
              .workbook(february, null, "february")
              .toResponse(response, "quarterly-report");
+    ```
+  - **A per-entry option now names the entry too.** `exportExcelEngine` on a `workbook(object, option)` entry
+    decided that entry's bytes but not its extension, which came from the engine the workbook class declares
+    — so an `HSSF` option produced OLE2 content under a `.xlsx` name, and the archive then stored it at
+    `NO_COMPRESSION` on the assumption that it was already-deflated OOXML: uncompressed data written
+    uncompressed. The option is now asked first and the class second, the same priority
+    `PxlExcelExporter` already used, and the entry's name, its content and its deflate level all follow that
+    one answer. An option carrying no engine still falls through to the class.
+    ```java
+    pxlSpring.exportExcelZip()
+             .workbook(report, hssfOption)   // -> report.xls, OLE2 bytes, deflated
+             .toResponse(response, "archive");
     ```

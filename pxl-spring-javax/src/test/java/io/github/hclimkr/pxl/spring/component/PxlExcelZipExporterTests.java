@@ -743,12 +743,13 @@ class PxlExcelZipExporterTests {
     @ParameterizedTest
     @EnumSource(Dest.class)
     void workbookWithOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        // the two-argument workbook(object, option) overload had no coverage at all
+        // the two-argument workbook(object, option) overload had no coverage at all. The HSSF option names
+        // its entry .xls on every destination alike - the extension is resolved once, before any of them.
         final byte[] bytes = emit(pxlSpring.exportExcelZip()
                 .workbook(workbook("first"), hssfOption())
                 .workbook(workbook("second"), null), dest);
 
-        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("first.xlsx", "second.xlsx");
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("first.xls", "second.xlsx");
     }
 
     @ParameterizedTest
@@ -772,18 +773,85 @@ class PxlExcelZipExporterTests {
     // ----- per-entry export options -----
 
     @Test
-    void perEntryOption_changesTheEntryBodyButNotItsExtension() throws PxlException, IOException {
-        // the entry extension comes from the workbook class's declared engine, not from the per-entry
-        // option - so an HSSF option yields OLE2 bytes still stored under a .xlsx entry name
+    void perEntryOption_drivesTheEntryExtensionAsWellAsItsBody() throws PxlException, IOException {
+        // The option decides the bytes, so it decides the extension - it is asked before the workbook class's
+        // declared engine, the same priority PxlExcelExporter.resolveFileFormat() uses. It used to be asked
+        // second, which put OLE2 bytes under a .xlsx entry name.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         pxlSpring.exportExcelZip()
                 .workbook(workbook("hssf"), hssfOption())
                 .workbook(workbook("xssf"))
                 .toStream(baos);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("hssf.xlsx", "xssf.xlsx");
-        assertThat(isXlsx(entryBytes(baos.toByteArray(), "hssf.xlsx"))).isFalse();
+        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("hssf.xls", "xssf.xlsx");
+        assertThat(isXlsx(entryBytes(baos.toByteArray(), "hssf.xls"))).isFalse();
         assertThat(isXlsx(entryBytes(baos.toByteArray(), "xssf.xlsx"))).isTrue();
+    }
+
+    @Test
+    void perEntryOption_overridesADeclaredEngineInEitherDirection() throws PxlException, IOException {
+        // the other way round: a class declaring HSSF, turned back into XLSX by its entry's option
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .workbook(new TestHssfWorkbook("declared-hssf", users()), xssfOption())
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("declared-hssf.xlsx");
+        assertThat(isXlsx(entryBytes(baos.toByteArray(), "declared-hssf.xlsx"))).isTrue();
+    }
+
+    @Test
+    void anOptionCarryingNoEngine_leavesTheExtensionToTheClass() throws PxlException, IOException {
+        // only an exportExcelEngine takes over; an option without one falls through to the class declaration,
+        // which is what keeps the null branch of resolveFileFormat honest
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .workbook(workbook("xssf-class"), PxlExportWorkbookOption.builder().build())
+                .workbook(new TestHssfWorkbook("hssf-class", users()), PxlExportWorkbookOption.builder().build())
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+                .containsExactly("xssf-class.xlsx", "hssf-class.xls");
+    }
+
+    @Test
+    void anOptionDrivenXlsEntry_isCompressedAsTheOle2ItActuallyIs() throws PxlException, IOException {
+        // deflateLevelFor reads the same resolved format, so the compression follows the bytes that are
+        // written. While the extension came from the class, this entry was OLE2 stored at NO_COMPRESSION -
+        // uncompressed data written uncompressed, the worst of both.
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .workbook(workbook("ole2"), hssfOption())
+                .toStream(baos);
+
+        final File tmp = writeTempZip(baos.toByteArray());
+        try (ZipFile zipFile = new ZipFile(tmp)) {
+            final ZipEntry xls = zipFile.getEntry("ole2.xls");
+            assertThat(xls.getCompressedSize()).isLessThan(xls.getSize());
+        } finally {
+            tmp.delete();
+        }
+    }
+
+    @Test
+    void theOptionDrivenExtension_feedsTheDuplicateCheck() throws PxlException, IOException {
+        // the duplicate check compares whole entry names, so whichever extension the option resolves to is
+        // part of that comparison. One base name under two engines is two members...
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .workbook(workbook("report"))                   // -> report.xlsx
+                .workbook(workbook("report"), hssfOption())     // -> report.xls
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+                .containsExactly("report.xlsx", "report.xls");
+
+        // ...and two classes that declare different engines collide once an option lines their formats up
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .workbook(workbook("report"))                                        // -> report.xlsx
+                .workbook(new TestHssfWorkbook("report", users()), xssfOption())     // -> report.xlsx too
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
     }
 
     @Test
@@ -815,6 +883,12 @@ class PxlExcelZipExporterTests {
     private static PxlExportWorkbookOption hssfOption() {
         return PxlExportWorkbookOption.builder()
                 .exportExcelEngine(PxlExcelEngine.HSSF)
+                .build();
+    }
+
+    private static PxlExportWorkbookOption xssfOption() {
+        return PxlExportWorkbookOption.builder()
+                .exportExcelEngine(PxlExcelEngine.XSSF)
                 .build();
     }
 

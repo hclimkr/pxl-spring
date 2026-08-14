@@ -285,11 +285,12 @@ public class PxlExcelZipExporter {
      * Writes each of the builder's entries as a single ZIP entry into the given archive stream.
      *
      * <p>An entry's file name comes from the builder ({@code explicit name -> workbook name -> Pxl{index}})
-     * and its extension from the format written by the workbook class's declared export engine - the same
-     * {@code Entry.resolveEntryName} the builder's validation already ran, so the two cannot disagree about
-     * what a given entry is called. A name carrying a path separator is rejected. Duplicates are not checked
-     * here: {@code Builder.validateEntries} has rejected them before this method is reached. The deflate level
-     * is picked per entry - see {@link #deflateLevelFor(PxlFileFormat)}.</p>
+     * and its extension from the format the entry is actually written in - its own option's export engine,
+     * else the one its workbook class declares. The name is the same {@code Entry.resolveEntryName} the
+     * builder's validation already ran, so the two cannot disagree about what a given entry is called. A name
+     * carrying a path separator is rejected. Duplicates are not checked here: {@code Builder.validateEntries}
+     * has rejected them before this method is reached. The deflate level is picked per entry from that same
+     * format - see {@link #deflateLevelFor(PxlFileFormat)}.</p>
      *
      * @param zipOutputStream the archive stream to append entries to
      * @param builder         the configured ZIP export builder (already validated)
@@ -532,10 +533,10 @@ public class PxlExcelZipExporter {
         /**
          * Adds one archive entry for a workbook object, with an export option applied to that entry only.
          *
-         * <p>The option reaches the entry's <em>bytes</em> and nothing else. Its extension comes from the
-         * engine the workbook class declares through {@code @PxlWorkbook}, which the option does not
-         * override - so an option carrying {@code HSSF} puts OLE2 bytes inside an entry still named
-         * {@code .xlsx}. Declare the engine on the class when the extension has to follow it.</p>
+         * <p>An {@code exportExcelEngine} in the option decides the entry's extension as well as its bytes,
+         * taking precedence over the engine the workbook class declares through {@code @PxlWorkbook} - so an
+         * option carrying {@code HSSF} produces an entry named {@code .xls} holding OLE2 bytes. Extension and
+         * content cannot disagree, and the entry is compressed as what it actually is.</p>
          *
          * @param workbookObject the {@code @PxlWorkbook}-annotated source object
          * @param workbookOption the export option for this entry, or {@code null}
@@ -553,9 +554,9 @@ public class PxlExcelZipExporter {
          * Adds one archive entry for a workbook object, with an export option and an entry file name applied
          * to that entry only.
          *
-         * <p>The option reaches this entry's bytes only, exactly as in
+         * <p>The option drives this entry's bytes and extension exactly as in
          * {@link #workbook(Object, PxlExportWorkbookOption)}; the name given here carries no extension, which
-         * is appended from the workbook class's declared engine.</p>
+         * is appended from the format that option - or, failing that, the workbook class - resolves to.</p>
          *
          * <p>Entry names have to come out distinct, ignoring case. Nothing is checked at this call - the
          * fallbacks are only resolved once the archive is written - so a collision surfaces from the terminal,
@@ -786,7 +787,7 @@ public class PxlExcelZipExporter {
 
             /**
              * Resolves the name this entry takes inside the archive: its file name plus the extension of the
-             * format its workbook class declares.
+             * format it is written in - see {@link #resolveFileFormat()}.
              *
              * <p>The one place that answer is worked out. {@code validateEntries} asks for it to find
              * collisions and {@code writeEntries} asks for it to name the {@link ZipEntry}, so the name a
@@ -803,15 +804,28 @@ public class PxlExcelZipExporter {
             }
 
             /**
-             * Resolves the format this entry is written in, from the export engine its workbook class
-             * declares. The per-entry option is deliberately not consulted: it reaches the bytes only, so the
-             * extension follows the class - see {@link Builder#workbook(Object, PxlExportWorkbookOption)}.
+             * Resolves the format this entry is written in: the engine carried by its own export option, else
+             * the one its workbook class declares through {@code @PxlWorkbook}.
+             *
+             * <p>The option comes first because it is what decides the bytes - the core is handed the same
+             * option when the entry is generated, so asking the class instead would name the entry after a
+             * format it is not written in. Same priority as {@code PxlExcelExporter.Builder.resolveFileFormat}
+             * for the equivalent single-workbook export; the two are deliberately alike.</p>
+             *
+             * <p>{@code deflateLevelFor} reads this answer too, so the compression choice follows the bytes
+             * that are actually written rather than the ones the class would have produced.</p>
              *
              * @return the entry's file format
              */
             private PxlFileFormat resolveFileFormat() {
 
-                return PxlExcelEngine.fromWorkbookObject(workbookObject.getClass()).getFileFormat();
+                final PxlExcelEngine optionExcelEngine = Objects.nonNull(workbookOption)
+                        ? workbookOption.getExportExcelEngine()
+                        : null;
+
+                return Objects.nonNull(optionExcelEngine)
+                        ? optionExcelEngine.getFileFormat()
+                        : PxlExcelEngine.fromWorkbookObject(workbookObject.getClass()).getFileFormat();
             }
 
             /**

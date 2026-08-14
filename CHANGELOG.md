@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same base name written by two different engines (`report.xlsx` and `report.xls`) is still
   two members.
 
+- **Breaking.** A per-entry export option's `exportExcelEngine` now sets that ZIP entry's
+  extension, not just its bytes, taking precedence over the engine the workbook class declares
+  — so `workbook(report, hssfOption)` produces `report.xls` where it used to produce
+  `report.xlsx` holding OLE2 bytes. The deflate level follows the same answer, so such an entry
+  is compressed instead of being stored as if it were already-deflated OOXML.
+
 ## [0.9.2] - 2026-08-11
 
 Built against [pxl](https://github.com/hclimkr/pxl) 0.9.4, up from 0.9.3.

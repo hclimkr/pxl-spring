@@ -651,7 +651,7 @@ public void downloadQuarterNamed(HttpServletResponse response) throws Exception 
 }
 ```
 
-An entry's extension follows the engine the workbook class declares, not the per-entry option — so `february-report` goes in as `.xlsx` with `HSSF` (OLE2) bytes inside. Declare the engine on the class when the extension has to follow it.
+An entry's extension follows the engine that entry is actually written with — the per-entry option first, then the engine the workbook class declares — so `february-report` goes in as `february-report.xls`, its name and its bytes agreeing. The deflate level is picked from the same answer, so an `.xls` entry is compressed rather than stored the way an already-deflated `.xlsx` is.
 
 **Writing the zip to a file or a stream**
 
@@ -982,7 +982,7 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 ```
 
 - An entry name is resolved as the name you gave → the workbook name → `Pxl{index}`. A blank name is treated as absent, so resolution moves on to the next step.
-- Its extension is appended from the workbook class's declared export engine, which the per-entry option does not override — the option changes the bytes only.
+- Its extension is appended from the format the entry is written in: the per-entry option's export engine, else the one the workbook class declares. Name, bytes and deflate level all follow that one answer.
 - The archive name is required.
 
 ### `PxlCsvExporter`
