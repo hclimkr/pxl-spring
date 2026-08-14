@@ -21,10 +21,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.io.*;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -474,10 +471,12 @@ class PxlExcelZipExporterTests {
 
     @Test
     void streamingSetsHeadersBeforeEntryNamesAreValidated() {
-        // Entry names are resolved inside writeEntries, which on the streaming path runs *after* the headers
-        // have gone out. So a rejected name still throws and still writes no body, but the download headers
-        // are already on the response - that is the documented cost of streaming, not a bug to assert away.
-        // The buffered path (the default) has no such window: it validates while writing to a buffer.
+        // The path-separator check on an entry name sits inside writeEntries, which on the streaming path runs
+        // *after* the headers have gone out. So a rejected name still throws and still writes no body, but the
+        // download headers are already on the response - that is the documented cost of streaming, not a bug
+        // to assert away. The buffered path (the default) has no such window: it validates while writing to a
+        // buffer. Not every entry-name failure lands here: duplicates are caught by validateEntries, which
+        // runs before the headers on either path - see duplicateEntryNames_areRejectedBeforeHeadersGoOut.
         //
         // "no body" is not free: it holds because writeArchive finishes the archive only once every entry is
         // in. Closing the ZipOutputStream as the exception unwound would emit the end-of-central-directory
@@ -573,19 +572,110 @@ class PxlExcelZipExporterTests {
                 .isInstanceOf(PxlArgumentException.class);
     }
 
+    // ----- duplicate entry names -----
+    // The Pxl{index} fallback applies only when neither an explicit name nor a workbook name is there, so two
+    // instances of the same workbook class - the ordinary case - resolve to the same entry name.
+    // validateEntries rejects that up front; left to ZipOutputStream.putNextEntry it would have surfaced
+    // mid-write as a ZipException wrapped in PxlIOException, indistinguishable from a disk failure.
+
     @Test
-    void duplicateEntryNames_failWithAnOpaquePxlIOException() {
-        // Characterization rather than endorsement (issue C-1). The Pxl{index} fallback applies only when
-        // neither an explicit name nor a workbook name is there, so two instances of the same workbook class
-        // - the ordinary case - resolve to the same entry name. ZipOutputStream.putNextEntry rejects the
-        // second with ZipException, which comes out wrapped as PxlIOException, so the caller cannot tell a
-        // name clash from a disk failure. Pinned here so replacing it with an up-front check (or an automatic
-        // suffix) stays a deliberate change.
+    void duplicateEntryNames_throwPxlArgumentNamingTheOffender() {
         assertThatThrownBy(() -> pxlSpring.exportExcelZip()
                 .workbook(workbook("same"))
                 .workbook(workbook("same"))
                 .toStream(new ByteArrayOutputStream()))
-                .isInstanceOf(PxlIOException.class);
+                .isInstanceOf(PxlArgumentException.class)
+                // the message carries the resolved entry name, extension included - that is what would have
+                // been written, and it is the whole point of failing here instead of inside the zip stream
+                .hasMessageContaining("same.xlsx");
+    }
+
+    @Test
+    void duplicateEntryNames_areComparedAcrossEveryNameSource() {
+        // the check compares resolved names, not one source against itself: an explicit name on one entry and
+        // a workbook-name fallback on another collide just the same
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .workbook(workbook("report"))                       // fallback  -> report.xlsx
+                .workbook(workbook("other"), null, "report")        // explicit  -> report.xlsx
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
+    }
+
+    @Test
+    void entryNamesDifferingOnlyInCase_areRejectedToo() {
+        // Stricter than ZipOutputStream on purpose: it compares exactly, so both would go into the archive,
+        // and extracting them on a case-insensitive file system (Windows, macOS by default) would silently
+        // overwrite one with the other.
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .workbook(workbook("Report"))
+                .workbook(workbook("report"))
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
+    }
+
+    @Test
+    void theCaseFoldDoesNotFollowTheDefaultLocale() throws Exception {
+        // Turkish is the reason the fold names Locale.ROOT: there 'I' lower-cases to the dotless 'ı', so
+        // "FILE" and "file" would fold apart and the collision would slip through on a Turkish JVM only.
+        final Locale previous = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("tr", "TR"));
+
+            assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                    .workbook(workbook("FILE"))
+                    .workbook(workbook("file"))
+                    .toStream(new ByteArrayOutputStream()))
+                    .isInstanceOf(PxlArgumentException.class);
+        } finally {
+            Locale.setDefault(previous);
+        }
+    }
+
+    @Test
+    void duplicateEntryNames_areRejectedBeforeTheFileIsCreated() {
+        // What hoisting the check into validateEntries buys: the file destination fails before opening its
+        // FileOutputStream, so no unreadable leftover is on disk at all. Contrast
+        // failedExportToFile_leavesNothingOpenableAsAnArchive, where the later path check does leave one.
+        final File zipFile = TestPaths.exportFile(testInfo, ".zip");
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .workbook(workbook("same"))
+                .workbook(workbook("same"))
+                .toFile(zipFile))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(zipFile).doesNotExist();
+    }
+
+    @Test
+    void duplicateEntryNames_areRejectedBeforeHeadersGoOut() {
+        // The other half of the same win: on the streaming path validateEntries runs before
+        // setResponseForExportZip, so this failure leaves no download headers behind - unlike the
+        // path-separator check, which is inside the write loop (streamingSetsHeadersBeforeEntryNamesAreValidated).
+        final MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .workbook(workbook("same"))
+                .workbook(workbook("same"))
+                .toResponseStreaming(response, "archive"))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).isNull();
+        assertThat(response.getContentAsByteArray()).isEmpty();
+    }
+
+    @Test
+    void anExplicitNameSeparatesWorkbooksDeclaringTheSameName() throws PxlException, IOException {
+        // the documented way out of the collision, pinned so the advice in the workbook(...) javadoc keeps
+        // working
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .workbook(workbook("same"), null, "january")
+                .workbook(workbook("same"), null, "february")
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+                .containsExactly("january.xlsx", "february.xlsx");
     }
 
     @Test

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking.** A ZIP entry-name collision is rejected before anything is written, as
+  `PxlArgumentException` naming the offending entry, where it used to surface mid-write as
+  `PxlIOException` — the same exception a disk failure produces, so callers could not tell the
+  two apart. The check runs in the builder's up-front validation, which every destination
+  calls first, so `toFile(...)` no longer creates a file it cannot finish and
+  `toResponseStreaming(...)` no longer commits the download headers before failing. Entry
+  names are still resolved the same way (`explicit name` → `@PxlWorkbook` workbook name →
+  `Pxl{index}`); give colliding entries an explicit name through
+  `workbook(object, option, name)`.
+
+- **Breaking.** Two ZIP entries whose names differ only in case are now refused as well. They
+  used to go into the archive as distinct members, because `ZipOutputStream` compares names
+  exactly — but extracting them on a case-insensitive file system (Windows, macOS by default)
+  silently overwrites one with the other. Names are compared whole, extension included, so the
+  same base name written by two different engines (`report.xlsx` and `report.xls`) is still
+  two members.
+
 ## [0.9.2] - 2026-08-11
 
 Built against [pxl](https://github.com/hclimkr/pxl) 0.9.4, up from 0.9.3.
