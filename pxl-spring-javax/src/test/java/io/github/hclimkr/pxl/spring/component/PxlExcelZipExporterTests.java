@@ -437,6 +437,33 @@ class PxlExcelZipExporterTests {
     }
 
     @Test
+    void aDotInTheEntryBaseName_doesNotFoolTheDeflateLevel() throws PxlException, IOException {
+        // The level is read back off the finished entry name, so the caller's own base name now reaches the
+        // extension parser - it did not while the level came straight from the format. A base name carrying
+        // dots ("2026.01") is ordinary, and everything after the last one is what decides here, so both
+        // entries must be treated exactly as the plain-named ones above.
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .workbook(workbook("ignored"), null, "2026.01")                          // -> 2026.01.xlsx
+                .workbook(new TestHssfWorkbook("ignored", users()), null, "2026.02")     // -> 2026.02.xls
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+                .containsExactly("2026.01.xlsx", "2026.02.xls");
+
+        final File tmp = writeTempZip(baos.toByteArray());
+        try (ZipFile zipFile = new ZipFile(tmp)) {
+            final ZipEntry xlsx = zipFile.getEntry("2026.01.xlsx");
+            assertThat(xlsx.getCompressedSize()).isGreaterThan(xlsx.getSize());
+
+            final ZipEntry xls = zipFile.getEntry("2026.02.xls");
+            assertThat(xls.getCompressedSize()).isLessThan(xls.getSize());
+        } finally {
+            tmp.delete();
+        }
+    }
+
+    @Test
     void nullDestinationOnPlainComponent_throwsPxlNullPointerNotRawNpe() {
         // this component is a plain instance, so @NotNull never fires (no Spring proxy). Through a proxy the
         // same calls raise ConstraintViolationException - that half is pinned by PxlValidationTests.

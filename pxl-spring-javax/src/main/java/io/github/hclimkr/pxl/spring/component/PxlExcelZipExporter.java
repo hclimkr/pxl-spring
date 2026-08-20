@@ -289,8 +289,7 @@ public class PxlExcelZipExporter {
      * same {@code Entry.resolveEntryName} the builder's validation already ran, so the two cannot disagree
      * about what a given entry is called. A name carrying a path separator is rejected. Duplicates are not
      * checked here: {@code Builder.validateEntries} has rejected them before this method is reached. The
-     * deflate level is picked per entry from the format that entry writes itself in - see
-     * {@link #deflateLevelFor(PxlFileFormat)}.</p>
+     * deflate level is picked per entry from that same name - see {@link #deflateLevelFor(String)}.</p>
      *
      * @param zipOutputStream the archive stream to append entries to
      * @param builder         the configured ZIP export builder (already validated)
@@ -317,7 +316,7 @@ public class PxlExcelZipExporter {
             }
 
             try {
-                zipOutputStream.setLevel(deflateLevelFor(entry.resolveFileFormat()));
+                zipOutputStream.setLevel(deflateLevelFor(entryName));
                 zipOutputStream.putNextEntry(new ZipEntry(entryName));
                 entry.writeBody(zipOutputStream, pxl);
                 zipOutputStream.closeEntry();
@@ -328,7 +327,7 @@ public class PxlExcelZipExporter {
     }
 
     /**
-     * Picks the deflate level for an entry of the given format.
+     * Picks the deflate level for the entry about to be written, from the name it is written under.
      *
      * <p>{@code .xlsx} (OOXML) <em>is</em> a deflated ZIP container, so deflating it again costs a full
      * compression pass for essentially no size gain. Those entries are written at
@@ -336,15 +335,23 @@ public class PxlExcelZipExporter {
      * in exchange for skipping the pass entirely. {@code .xls} (OLE2) is not compressed, so it keeps the
      * default level, where deflate genuinely pays off.</p>
      *
-     * <p>Matched on the extension rather than the enum constant so that any future OOXML-based format is
-     * covered by the same rule.</p>
+     * <p>Asking the name rather than the entry keeps this method from having to know what an entry is made
+     * of, and the three answers still come from one: the format an entry writes itself in decides its
+     * extension, and the extension decides the level. An entry cannot end up named as one thing, written as
+     * another and compressed as a third.</p>
      *
-     * @param fileFormat the entry's export format
+     * <p>Only what follows the last dot counts, so a base name carrying dots of its own ({@code 2026.01})
+     * changes nothing - the caller's name reaches this parser, which it did not while the level came
+     * straight from the format. No case folding is needed either: the extension is never caller-written,
+     * since every kind appends its own through {@code Entry.withExtension}, so what comes back out here is
+     * exactly the constant that went in.</p>
+     *
+     * @param entryName the entry's name inside the archive, extension included
      * @return the deflate level to apply to that entry
      */
-    private static int deflateLevelFor(final PxlFileFormat fileFormat) {
+    private static int deflateLevelFor(final String entryName) {
 
-        return PxlConstants.FILENAME_EXTENSION_XLSX.equals(fileFormat.getFilenameExtension())
+        return PxlConstants.FILENAME_EXTENSION_XLSX.equals(FilenameUtils.getExtension(entryName))
                 ? Deflater.NO_COMPRESSION
                 : Deflater.DEFAULT_COMPRESSION;
     }
@@ -771,8 +778,9 @@ public class PxlExcelZipExporter {
          * {@link #withExtension(String, PxlFileFormat)}, so no kind spells it out again.</p>
          *
          * <p>Private throughout: instances are created only by the enclosing builder and read only by
-         * {@link PxlExcelZipExporter}, a nestmate of both. The methods below are package-private only
-         * because an abstract method cannot be {@code private}.</p>
+         * {@link PxlExcelZipExporter}, a nestmate of both. The methods below are package-private rather than
+         * {@code private} only because an abstract method cannot be {@code private}, and the helper matches
+         * them; the type declaring them is itself {@code private}, so nothing is reachable from outside.</p>
          */
         private abstract static class Entry {
 
@@ -783,16 +791,6 @@ public class PxlExcelZipExporter {
              * @return the entry name, extension included
              */
             abstract String resolveEntryName(int index);
-
-            /**
-             * Resolves the format this entry's body is actually written in.
-             *
-             * <p>{@code deflateLevelFor} reads this answer, so the compression choice follows the bytes that
-             * are actually written rather than the ones the source would have produced by default.</p>
-             *
-             * @return the entry's file format
-             */
-            abstract PxlFileFormat resolveFileFormat();
 
             /**
              * Writes this entry's body into the open archive stream.
@@ -809,6 +807,10 @@ public class PxlExcelZipExporter {
 
             /**
              * Appends a format's extension to an entry's base file name.
+             *
+             * <p>The one place a format becomes an extension. {@code deflateLevelFor} reads that extension
+             * back off the finished name, so a kind that spelled the extension out itself could be
+             * compressed as something it is not.</p>
              *
              * @param filename   the entry file name without extension
              * @param fileFormat the format this entry is written in
@@ -875,10 +877,13 @@ public class PxlExcelZipExporter {
              * format it is not written in. Same priority as {@code PxlExcelExporter.Builder.resolveFileFormat}
              * for the equivalent single-workbook export; the two are deliberately alike.</p>
              *
+             * <p>This answer reaches the deflate level too, by way of the extension it puts on the entry
+             * name - see {@code deflateLevelFor}. So the compression follows the bytes that are actually
+             * written rather than the ones the class would have produced.</p>
+             *
              * @return the entry's file format
              */
-            @Override
-            PxlFileFormat resolveFileFormat() {
+            private PxlFileFormat resolveFileFormat() {
 
                 final PxlExcelEngine optionExcelEngine = Objects.nonNull(workbookOption)
                         ? workbookOption.getExportExcelEngine()
