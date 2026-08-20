@@ -20,6 +20,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.io.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,6 +42,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>The builder comes from {@link PxlSpring}, the entry point the documentation guides users to. The
  * facade hands back this component's own builder, so what is exercised here is still the component.</p>
+ *
+ * <p>The last section is different in kind: an archive entry is a polymorphic type, and the two properties
+ * that split rests on - one shared entry list, and entry types that stay private nestmates - produce no
+ * behaviour of their own while a single kind exists, so they are pinned reflectively.</p>
  */
 class PxlExcelZipExporterTests {
 
@@ -878,6 +884,80 @@ class PxlExcelZipExporterTests {
         assertThat(contentDisposition).doesNotContain("보고서모음").contains("%");
         // the ZIP entry name is not a header, so it keeps its Korean characters
         assertThat(centralDirectoryEntryNames(bodyBytes(entity))).containsExactly("사용자.xlsx");
+    }
+
+    // ----- entry kinds (structure) -----
+    // An archive entry answers for itself: Builder.Entry is abstract, and a kind of source decides both what
+    // its entry is called and how its body is written. That buys nothing on its own - with one kind the
+    // behaviour is exactly what it was - so what is worth guarding is the shape the split depends on, the way
+    // PxlCoreSupportTests guards the shared core it cannot observe either.
+
+    @Test
+    void theBuilderKeepsExactlyOneEntryCollection() {
+        // validateEntries walks one list, which is what makes the duplicate-name check whole: every entry is
+        // compared against every other entry regardless of what it is made of. Kept in a list per kind
+        // instead, the check would run within each list only and a name colliding across two kinds would go
+        // straight into the archive - the collision the check exists to catch.
+        final List<Field> collectionFields = new ArrayList<>();
+        for (final Field field : PxlExcelZipExporter.Builder.class.getDeclaredFields()) {
+            if (!field.isSynthetic()
+                    && !Modifier.isStatic(field.getModifiers())
+                    && Collection.class.isAssignableFrom(field.getType())) {
+                collectionFields.add(field);
+            }
+        }
+
+        assertThat(collectionFields).extracting(Field::getName).containsExactly("entries");
+    }
+
+    @Test
+    void everyEntryKind_staysAPrivateNestmateOfTheBuilder() {
+        // The component reads an entry without a single getter only because the two are nestmates. Publishing
+        // a kind - or moving it to its own file - would put an implementation type on the builder's surface,
+        // which is meant to be the configuration and terminal methods and nothing else.
+        final Class<?> entryType = nestedTypeOfBuilder("Entry");
+
+        assertThat(Modifier.isAbstract(entryType.getModifiers())).as("Entry is abstract").isTrue();
+        assertThat(Modifier.isPrivate(entryType.getModifiers())).as("Entry is private").isTrue();
+        assertThat(Modifier.isStatic(entryType.getModifiers())).as("Entry is static").isTrue();
+
+        final List<Class<?>> kinds = new ArrayList<>();
+        for (final Class<?> nested : PxlExcelZipExporter.Builder.class.getDeclaredClasses()) {
+            if (!nested.isSynthetic() && !nested.equals(entryType) && entryType.isAssignableFrom(nested)) {
+                kinds.add(nested);
+            }
+        }
+
+        assertThat(kinds).as("at least one entry kind").isNotEmpty();
+
+        for (final Class<?> kind : kinds) {
+            final int modifiers = kind.getModifiers();
+
+            assertThat(Modifier.isPrivate(modifiers)).as("%s is private", kind.getSimpleName()).isTrue();
+            assertThat(Modifier.isStatic(modifiers)).as("%s is static", kind.getSimpleName()).isTrue();
+
+            // a kind that can actually be added to an archive is a leaf: left open to subclassing it could
+            // hand its own naming down to a kind that must not share it
+            if (!Modifier.isAbstract(modifiers)) {
+                assertThat(Modifier.isFinal(modifiers)).as("%s is final", kind.getSimpleName()).isTrue();
+            }
+        }
+    }
+
+    /**
+     * Looks up one of the builder's nested types by simple name.
+     *
+     * @param simpleName the nested type's simple name
+     * @return the nested type
+     */
+    private static Class<?> nestedTypeOfBuilder(final String simpleName) {
+        for (final Class<?> nested : PxlExcelZipExporter.Builder.class.getDeclaredClasses()) {
+            if (nested.getSimpleName().equals(simpleName)) {
+                return nested;
+            }
+        }
+
+        throw new AssertionError("PxlExcelZipExporter.Builder declares no nested type named " + simpleName);
     }
 
     private static PxlExportWorkbookOption hssfOption() {

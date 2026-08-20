@@ -284,13 +284,13 @@ public class PxlExcelZipExporter {
     /**
      * Writes each of the builder's entries as a single ZIP entry into the given archive stream.
      *
-     * <p>An entry's file name comes from the builder ({@code explicit name -> workbook name -> Pxl{index}})
-     * and its extension from the format the entry is actually written in - its own option's export engine,
-     * else the one its workbook class declares. The name is the same {@code Entry.resolveEntryName} the
-     * builder's validation already ran, so the two cannot disagree about what a given entry is called. A name
-     * carrying a path separator is rejected. Duplicates are not checked here: {@code Builder.validateEntries}
-     * has rejected them before this method is reached. The deflate level is picked per entry from that same
-     * format - see {@link #deflateLevelFor(PxlFileFormat)}.</p>
+     * <p>This loop knows nothing about what an entry is made of: each {@code Builder.Entry} names itself and
+     * writes its own body, so a new kind of source is added without touching anything here. The name is the
+     * same {@code Entry.resolveEntryName} the builder's validation already ran, so the two cannot disagree
+     * about what a given entry is called. A name carrying a path separator is rejected. Duplicates are not
+     * checked here: {@code Builder.validateEntries} has rejected them before this method is reached. The
+     * deflate level is picked per entry from the format that entry writes itself in - see
+     * {@link #deflateLevelFor(PxlFileFormat)}.</p>
      *
      * @param zipOutputStream the archive stream to append entries to
      * @param builder         the configured ZIP export builder (already validated)
@@ -304,27 +304,22 @@ public class PxlExcelZipExporter {
 
         for (int index = 0; index < builder.entries.size(); index++) {
             final Builder.Entry entry = builder.entries.get(index);
-            final Object workbookObject = entry.workbookObject;
 
-            final PxlFileFormat fileFormat = entry.resolveFileFormat();
             final String entryName = entry.resolveEntryName(index);
 
             // A ZipEntry name may legally hold a path, and this one can come from application data, so an
             // unchecked separator would put a traversal path inside an archive we hand out. getName strips
             // everything up to the last '/' or '\' (and any drive prefix), so a name that survives it
-            // unchanged carries no path. Only separators matter: the extension is always appended, so a bare
-            // ".." can never come out as ".." here.
+            // unchanged carries no path. Only separators matter: every kind of entry ends its name with its
+            // format's extension, so a bare ".." can never come out as ".." here.
             if (!entryName.equals(FilenameUtils.getName(entryName))) {
                 throw new PxlArgumentException("entry file name must not carry a path: '" + entryName + "'");
             }
 
             try {
-                zipOutputStream.setLevel(deflateLevelFor(fileFormat));
+                zipOutputStream.setLevel(deflateLevelFor(entry.resolveFileFormat()));
                 zipOutputStream.putNextEntry(new ZipEntry(entryName));
-                pxl.exportExcel()
-                        .workbook(workbookObject)
-                        .override(entry.workbookOption)
-                        .toStream(zipOutputStream);
+                entry.writeBody(zipOutputStream, pxl);
                 zipOutputStream.closeEntry();
             } catch (IOException e) {
                 throw new PxlIOException(e);
@@ -472,7 +467,9 @@ public class PxlExcelZipExporter {
      * <p>Nested in the component on purpose: everything the component reads off the builder - its constructor,
      * the collected {@code entries} and their {@code Entry} type, {@code validateEntries()},
      * {@code resolveZipFilename(String)} - is {@code private} and stays reachable only because the two are
-     * nestmates. The public surface is exactly the entry and terminal methods.</p>
+     * nestmates. The public surface is exactly the entry and terminal methods. The one exception is inside
+     * {@code Entry}, whose own methods are package-private because an abstract method cannot be
+     * {@code private}; it widens nothing, since the type declaring them is itself {@code private}.</p>
      *
      * <p>Not thread-safe, and single-use per terminal call. Example:</p>
      *
@@ -499,6 +496,11 @@ public class PxlExcelZipExporter {
         /**
          * The collected archive entries, in the order they will be written. Read directly by the enclosing
          * component while it writes the archive.
+         *
+         * <p>One list holds every kind of entry, and that is what makes {@code validateEntries} whole: it
+         * compares each entry against every other one regardless of what they are made of. Kept in a list per
+         * kind instead, the duplicate check would run within each list only and a name colliding across two
+         * kinds would go into the archive unnoticed.</p>
          */
         private final List<Entry> entries = new ArrayList<>();
 
@@ -579,7 +581,7 @@ public class PxlExcelZipExporter {
                 throw new PxlNullPointerException("workbookObject must not be null");
             }
 
-            this.entries.add(new Entry(workbookObject, workbookOption, excelFilename));
+            this.entries.add(new WorkbookEntry(workbookObject, workbookOption, excelFilename));
             return this;
         }
 
@@ -754,13 +756,79 @@ public class PxlExcelZipExporter {
         }
 
         /**
-         * One archive member: the workbook object to export, its optional per-entry export option, and its
-         * optional entry file name.
+         * One archive member, whatever it is made of: it names itself and writes its own body.
+         *
+         * <p>Abstract rather than a single struct with a nullable field per kind of source, so that
+         * {@code writeEntries} never has to ask what kind of entry it is holding and adding a kind cannot
+         * change how the existing ones behave.</p>
+         *
+         * <p>{@link #resolveEntryName(int)} is declared here rather than computed here because a kind decides
+         * for itself what its name falls back to when none was given. What must stay true is not the formula
+         * but the <strong>single call site</strong>: {@code validateEntries} asks an entry for its name to
+         * find collisions and {@code writeEntries} asks the same entry for it to name the {@link ZipEntry},
+         * so the name a collision was reported for is the name that would have been written. The part every
+         * kind does share - the format's extension on the end - lives in
+         * {@link #withExtension(String, PxlFileFormat)}, so no kind spells it out again.</p>
          *
          * <p>Private throughout: instances are created only by the enclosing builder and read only by
-         * {@link PxlExcelZipExporter}, a nestmate of both.</p>
+         * {@link PxlExcelZipExporter}, a nestmate of both. The methods below are package-private only
+         * because an abstract method cannot be {@code private}.</p>
          */
-        private static final class Entry {
+        private abstract static class Entry {
+
+            /**
+             * Resolves the name this entry takes inside the archive, extension included.
+             *
+             * @param index the entry's zero-based index in the archive
+             * @return the entry name, extension included
+             */
+            abstract String resolveEntryName(int index);
+
+            /**
+             * Resolves the format this entry's body is actually written in.
+             *
+             * <p>{@code deflateLevelFor} reads this answer, so the compression choice follows the bytes that
+             * are actually written rather than the ones the source would have produced by default.</p>
+             *
+             * @return the entry's file format
+             */
+            abstract PxlFileFormat resolveFileFormat();
+
+            /**
+             * Writes this entry's body into the open archive stream.
+             *
+             * <p>Called once the archive stream is positioned on this entry, so it writes bytes and nothing
+             * else - it neither opens nor closes the entry, and never closes the archive stream.</p>
+             *
+             * @param outputStream the open archive stream, positioned on this entry
+             * @param pxl          the shared core entry point, handed in so an entry holds no core instance
+             *                     of its own
+             * @throws PxlException if generating or writing this entry's bytes fails
+             */
+            abstract void writeBody(OutputStream outputStream, Pxl pxl) throws PxlException;
+
+            /**
+             * Appends a format's extension to an entry's base file name.
+             *
+             * @param filename   the entry file name without extension
+             * @param fileFormat the format this entry is written in
+             * @return the entry name, extension included
+             */
+            final String withExtension(final String filename,
+                                       final PxlFileFormat fileFormat) {
+
+                return filename
+                        + FilenameUtils.EXTENSION_SEPARATOR_STR
+                        + fileFormat.getFilenameExtension();
+            }
+
+        }
+
+        /**
+         * An archive member built from a {@code @PxlWorkbook}-annotated object: the object to export, its
+         * optional per-entry export option, and its optional entry file name.
+         */
+        private static final class WorkbookEntry extends Entry {
 
             private final Object workbookObject;
 
@@ -776,9 +844,9 @@ public class PxlExcelZipExporter {
              * @param excelFilename  the entry file name without extension, or {@code null}/blank for the
              *                       fallback
              */
-            private Entry(final Object workbookObject,
-                          final PxlExportWorkbookOption workbookOption,
-                          final String excelFilename) {
+            private WorkbookEntry(final Object workbookObject,
+                                  final PxlExportWorkbookOption workbookOption,
+                                  final String excelFilename) {
 
                 this.workbookObject = workbookObject;
                 this.workbookOption = workbookOption;
@@ -789,18 +857,13 @@ public class PxlExcelZipExporter {
              * Resolves the name this entry takes inside the archive: its file name plus the extension of the
              * format it is written in - see {@link #resolveFileFormat()}.
              *
-             * <p>The one place that answer is worked out. {@code validateEntries} asks for it to find
-             * collisions and {@code writeEntries} asks for it to name the {@link ZipEntry}, so the name a
-             * collision was reported for is the name that would have been written.</p>
-             *
              * @param index the entry's zero-based index in the archive
              * @return the entry name, extension included
              */
-            private String resolveEntryName(final int index) {
+            @Override
+            String resolveEntryName(final int index) {
 
-                return resolveExcelFilename(index)
-                        + FilenameUtils.EXTENSION_SEPARATOR_STR
-                        + resolveFileFormat().getFilenameExtension();
+                return withExtension(resolveExcelFilename(index), resolveFileFormat());
             }
 
             /**
@@ -812,12 +875,10 @@ public class PxlExcelZipExporter {
              * format it is not written in. Same priority as {@code PxlExcelExporter.Builder.resolveFileFormat}
              * for the equivalent single-workbook export; the two are deliberately alike.</p>
              *
-             * <p>{@code deflateLevelFor} reads this answer too, so the compression choice follows the bytes
-             * that are actually written rather than the ones the class would have produced.</p>
-             *
              * @return the entry's file format
              */
-            private PxlFileFormat resolveFileFormat() {
+            @Override
+            PxlFileFormat resolveFileFormat() {
 
                 final PxlExcelEngine optionExcelEngine = Objects.nonNull(workbookOption)
                         ? workbookOption.getExportExcelEngine()
@@ -826,6 +887,24 @@ public class PxlExcelZipExporter {
                 return Objects.nonNull(optionExcelEngine)
                         ? optionExcelEngine.getFileFormat()
                         : PxlExcelEngine.fromWorkbookObject(workbookObject.getClass()).getFileFormat();
+            }
+
+            /**
+             * Exports the workbook object straight into the archive stream, applying this entry's own option.
+             *
+             * @param outputStream the open archive stream, positioned on this entry
+             * @param pxl          the shared core entry point
+             * @throws PxlException if the workbook fails to export
+             */
+            @Override
+            void writeBody(final OutputStream outputStream,
+                           final Pxl pxl)
+                    throws PxlException {
+
+                pxl.exportExcel()
+                        .workbook(workbookObject)
+                        .override(workbookOption)
+                        .toStream(outputStream);
             }
 
             /**
