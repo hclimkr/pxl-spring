@@ -517,27 +517,20 @@ class PxlExcelZipExporterTests {
     }
 
     @Test
-    void streamingSetsHeadersBeforeEntryNamesAreValidated() {
-        // The path-separator check on an entry name sits inside writeEntries, which on the streaming path runs
-        // *after* the headers have gone out. So a rejected name still throws and still writes no body, but the
-        // download headers are already on the response - that is the documented cost of streaming, not a bug
-        // to assert away. The buffered path (the default) has no such window: it validates while writing to a
-        // buffer. Not every entry-name failure lands here: duplicates are caught by validateEntries, which
-        // runs before the headers on either path - see duplicateEntryNames_areRejectedBeforeHeadersGoOut.
-        //
-        // "no body" is not free: it holds because writeArchive finishes the archive only once every entry is
-        // in. Closing the ZipOutputStream as the exception unwound would emit the end-of-central-directory
-        // record even with zero entries written, handing the client a well-formed *empty* archive.
+    void pathCarryingEntryName_isRejectedBeforeHeadersGoOut() {
+        // The path check moved into validateEntries, which every terminal calls first, so it now runs before
+        // the headers on the streaming path too - the response is left untouched on either path. It used to
+        // sit inside the write loop, where a rejected name still wrote no body but left the download headers
+        // committed; that window is gone for every check this builder makes itself.
         final MockHttpServletResponse streamed = new MockHttpServletResponse();
 
         assertThatThrownBy(() -> pxlSpring.exportExcelZip()
                 .workbook(workbook("first"), null, "sub/report")
-
                 .toResponseStreaming(streamed, "archive"))
                 .isInstanceOf(PxlArgumentException.class);
 
         assertThat(streamed.getContentAsByteArray()).isEmpty();
-        assertThat(streamed.getHeader(HttpHeaders.CONTENT_DISPOSITION)).isNotNull();
+        assertThat(streamed.getHeader(HttpHeaders.CONTENT_DISPOSITION)).isNull();
 
         final MockHttpServletResponse buffered = new MockHttpServletResponse();
 
@@ -548,6 +541,43 @@ class PxlExcelZipExporterTests {
 
         assertThat(buffered.getContentAsByteArray()).isEmpty();
         assertThat(buffered.getHeader(HttpHeaders.CONTENT_DISPOSITION)).isNull();
+    }
+
+    @Test
+    void pathCarryingEntryName_isRejectedBeforeTheFileIsCreated() {
+        // the other half of the same move: the file destination fails before opening its FileOutputStream, so
+        // nothing is left on disk at all. It used to leave an unreadable half-archive behind.
+        final File zipFile = TestPaths.exportFile(testInfo, ".zip");
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .workbook(workbook("first"), null, "sub/report")
+                .toFile(zipFile))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(zipFile).doesNotExist();
+    }
+
+    @Test
+    void streamingStillCommitsHeadersBeforeACoreLevelFailure() {
+        // What the move does not buy back: the streaming window is still real, because generating an entry
+        // happens after the headers have gone out and only the core can tell that it will fail. This is the
+        // documented cost of the terminal, and it must stay observable - if it ever stops being, the
+        // toResponseStreaming javadoc is the thing to fix, not this test.
+        //
+        // "no body" is not free either: it holds because writeArchive finishes the archive only once every
+        // entry is in. Closing the ZipOutputStream as the exception unwound would emit the
+        // end-of-central-directory record even with zero entries written, handing the client a well-formed
+        // *empty* archive.
+        final MockHttpServletResponse streamed = new MockHttpServletResponse();
+
+        // TestBadNameWorkbook fails while the core resolves its export metadata, i.e. inside writeBody
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .workbook(new TestBadNameWorkbook(1), null, "a")
+                .toResponseStreaming(streamed, "archive"))
+                .isInstanceOf(PxlException.class);
+
+        assertThat(streamed.getContentAsByteArray()).isEmpty();
+        assertThat(streamed.getHeader(HttpHeaders.CONTENT_DISPOSITION)).isNotNull();
     }
 
     @Test
@@ -597,12 +627,16 @@ class PxlExcelZipExporterTests {
         // finishes only once every entry is in, so a failure leaves bytes with no central directory; were it
         // finished on the way out instead, this would be a valid, empty ZIP that every tool reports as a
         // perfectly fine export of nothing.
+        //
+        // The trigger has to be a failure the builder cannot see coming, now that both of its own entry-name
+        // checks run before the file is opened: TestBadNameWorkbook fails while the core resolves its export
+        // metadata, which is inside writeBody and therefore inside the open archive.
         final File zipFile = TestPaths.exportFile(testInfo, ".zip");
 
         assertThatThrownBy(() -> pxlSpring.exportExcelZip()
-                .workbook(workbook("first"), null, "sub/report")
+                .workbook(new TestBadNameWorkbook(1), null, "a")
                 .toFile(zipFile))
-                .isInstanceOf(PxlArgumentException.class);
+                .isInstanceOf(PxlException.class);
 
         assertThat(zipFile).exists();
         assertThatThrownBy(() -> centralDirectoryEntryNames(Files.readAllBytes(zipFile.toPath())))
@@ -681,8 +715,10 @@ class PxlExcelZipExporterTests {
     @Test
     void duplicateEntryNames_areRejectedBeforeTheFileIsCreated() {
         // What hoisting the check into validateEntries buys: the file destination fails before opening its
-        // FileOutputStream, so no unreadable leftover is on disk at all. Contrast
-        // failedExportToFile_leavesNothingOpenableAsAnArchive, where the later path check does leave one.
+        // FileOutputStream, so no unreadable leftover is on disk at all. The path check now sits beside it
+        // and buys the same - see pathCarryingEntryName_isRejectedBeforeTheFileIsCreated. What still leaves
+        // a leftover is a core-level failure, which nothing up front can foresee
+        // (failedExportToFile_leavesNothingOpenableAsAnArchive).
         final File zipFile = TestPaths.exportFile(testInfo, ".zip");
 
         assertThatThrownBy(() -> pxlSpring.exportExcelZip()
@@ -697,8 +733,9 @@ class PxlExcelZipExporterTests {
     @Test
     void duplicateEntryNames_areRejectedBeforeHeadersGoOut() {
         // The other half of the same win: on the streaming path validateEntries runs before
-        // setResponseForExportZip, so this failure leaves no download headers behind - unlike the
-        // path-separator check, which is inside the write loop (streamingSetsHeadersBeforeEntryNamesAreValidated).
+        // setResponseForExportZip, so this failure leaves no download headers behind. Every check this
+        // builder makes itself is now on that side of the line; what is not is a core-level failure
+        // (streamingStillCommitsHeadersBeforeACoreLevelFailure).
         final MockHttpServletResponse response = new MockHttpServletResponse();
 
         assertThatThrownBy(() -> pxlSpring.exportExcelZip()
@@ -1768,7 +1805,7 @@ class PxlExcelZipExporterTests {
 
     @Test
     void pathCarryingEntryName_isRejectedForEveryKind() throws IOException {
-        // the guard is in the write loop, which never asks what an entry is made of - so a new kind is
+        // the guard is in validateEntries, whose loop never asks what an entry is made of - so a new kind is
         // covered by construction. Pinned anyway, because the archive would otherwise hand out a traversal
         // path.
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {

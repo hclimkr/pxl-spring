@@ -68,8 +68,8 @@ import java.util.zip.ZipOutputStream;
  * <p>An entry's file name falls back to the name its source carries - the workbook object name for
  * {@code workbook(...)}, the sheet name for the two CSV kinds - and then, for the kinds whose source carries
  * none, to an index-suffixed default ({@code Pxl{index}}, or {@code PxlSample{index}} for a sample template).
- * It must be a plain name - one carrying a path separator is rejected with {@link PxlArgumentException}, so
- * the archive can never hand a traversal path to whoever extracts it.</p>
+ * It must be a plain name - one carrying a path separator is rejected with {@link PxlArgumentException}
+ * before any byte is written, so the archive can never hand a traversal path to whoever extracts it.</p>
  *
  * <p>The index fallback only applies when no earlier step yields a name, so it does not make names unique:
  * two entries built from the same workbook class, both relying on the same declared workbook name, resolve to
@@ -146,8 +146,8 @@ public class PxlExcelZipExporter {
      * @param builder      the configured ZIP export builder
      * @param outputStream the destination stream (not closed by this method)
      * @throws PxlException if {@code builder} or {@code outputStream} is {@code null}, the builder has no
-     *                      entry, two entries resolve to the same file name, or writing or finishing the
-     *                      archive fails
+     *                      entry, an entry name carries a path or collides with another, or writing or
+     *                      finishing the archive fails
      */
     @PxlPerformanceLogging(TAG)
     public void exportExcelZipToStream(@NotNull final Builder builder,
@@ -171,8 +171,8 @@ public class PxlExcelZipExporter {
      * @param builder the configured ZIP export builder
      * @param zipFile the destination ZIP file
      * @throws PxlException if {@code builder} or {@code zipFile} is {@code null}, the builder has no entry,
-     *                      two entries resolve to the same file name, the file cannot be opened, or writing
-     *                      or finishing the archive fails
+     *                      an entry name carries a path or collides with another, the file cannot be opened,
+     *                      or writing or finishing the archive fails
      */
     @PxlPerformanceLogging(TAG)
     public void exportExcelZipToFile(@NotNull final Builder builder,
@@ -204,8 +204,8 @@ public class PxlExcelZipExporter {
      * @param response    the servlet response to write to
      * @param zipFilename the archive file name without extension; required
      * @throws PxlException if {@code builder} or {@code response} is {@code null}, the builder has no entry,
-     *                      two entries resolve to the same file name, {@code zipFilename} is blank, or writing
-     *                      the archive or response fails
+     *                      an entry name carries a path or collides with another, {@code zipFilename} is
+     *                      blank, or writing the archive or response fails
      */
     @PxlPerformanceLogging(TAG)
     public void exportExcelZipToResponse(@NotNull final Builder builder,
@@ -236,8 +236,8 @@ public class PxlExcelZipExporter {
      * @param response    the servlet response to write to
      * @param zipFilename the archive file name without extension; required
      * @throws PxlException if {@code builder} or {@code response} is {@code null}, the builder has no entry,
-     *                      two entries resolve to the same file name, {@code zipFilename} is blank, or writing
-     *                      the archive or response fails
+     *                      an entry name carries a path or collides with another, {@code zipFilename} is
+     *                      blank, or writing the archive or response fails
      */
     @PxlPerformanceLogging(TAG)
     public void exportExcelZipToResponseStreaming(@NotNull final Builder builder,
@@ -273,8 +273,9 @@ public class PxlExcelZipExporter {
      * @param builder     the configured ZIP export builder
      * @param zipFilename the archive file name without extension; required
      * @return the response entity carrying the archive bytes
-     * @throws PxlException if {@code builder} is {@code null}, the builder has no entry, two entries resolve
-     *                      to the same file name, {@code zipFilename} is blank, or building the response fails
+     * @throws PxlException if {@code builder} is {@code null}, the builder has no entry, an entry name
+     *                      carries a path or collides with another, {@code zipFilename} is blank, or
+     *                      building the response fails
      */
     @PxlPerformanceLogging(TAG)
     public ResponseEntity<Resource> exportExcelZipToResponseEntity(@NotNull final Builder builder,
@@ -298,15 +299,16 @@ public class PxlExcelZipExporter {
      * <p>This loop knows nothing about what an entry is made of: each {@code Builder.Entry} names itself and
      * writes its own body, so a new kind of source is added without touching anything here. The name is the
      * same {@code Entry.resolveEntryName} the builder's validation already ran, so the two cannot disagree
-     * about what a given entry is called. A name carrying a path separator is rejected. Duplicates are not
-     * checked here: {@code Builder.validateEntries} has rejected them before this method is reached. The
-     * deflate level is picked per entry from that same name - see {@link #deflateLevelFor(String)}.</p>
+     * about what a given entry is called. Nothing about that name is checked here - {@code
+     * Builder.validateEntries} has rejected both a duplicate and a path-carrying one before this method is
+     * reached. The deflate level is picked per entry from that same name - see
+     * {@link #deflateLevelFor(String)}.</p>
      *
      * @param zipOutputStream the archive stream to append entries to
      * @param builder         the configured ZIP export builder (already validated)
      * @throws PxlException if a workbook object is {@code null} (the builder rejects those up front, so this
-     *                      only surfaces the core builder's own guard), an entry name carries a path,
-     *                      writing an entry fails, or a workbook fails to export
+     *                      only surfaces the core builder's own guard), writing an entry fails, or an entry
+     *                      fails to export
      */
     private void writeEntries(final ZipOutputStream zipOutputStream,
                               final Builder builder)
@@ -316,15 +318,6 @@ public class PxlExcelZipExporter {
             final Builder.Entry entry = builder.entries.get(index);
 
             final String entryName = entry.resolveEntryName(index);
-
-            // A ZipEntry name may legally hold a path, and this one can come from application data, so an
-            // unchecked separator would put a traversal path inside an archive we hand out. getName strips
-            // everything up to the last '/' or '\' (and any drive prefix), so a name that survives it
-            // unchanged carries no path. Only separators matter: every kind of entry ends its name with its
-            // format's extension, so a bare ".." can never come out as ".." here.
-            if (!entryName.equals(FilenameUtils.getName(entryName))) {
-                throw new PxlArgumentException("entry file name must not carry a path: '" + entryName + "'");
-            }
 
             try {
                 zipOutputStream.setLevel(deflateLevelFor(entryName));
@@ -388,8 +381,8 @@ public class PxlExcelZipExporter {
      *
      * @param outputStream the stream to write the archive to (not closed by this method)
      * @param builder      the configured ZIP export builder (already validated)
-     * @throws PxlException if a workbook object is {@code null}, an entry name carries a path, writing the
-     *                      archive fails, or a workbook fails to export
+     * @throws PxlException if a workbook object is {@code null}, writing the archive fails, or an entry
+     *                      fails to export
      */
     private void writeArchive(final OutputStream outputStream,
                               final Builder builder)
@@ -956,8 +949,8 @@ public class PxlExcelZipExporter {
          * archive is left unfinished, so what was written cannot be opened as one.</p>
          *
          * @param outputStream the destination stream (not closed by this method)
-         * @throws PxlException if {@code outputStream} is {@code null}, no entry was added, two entries
-         *                      resolve to the same file name, or writing the archive fails
+         * @throws PxlException if {@code outputStream} is {@code null}, no entry was added, an entry name
+         *                      carries a path or collides with another, or writing the archive fails
          */
         public void toStream(final OutputStream outputStream)
                 throws PxlException {
@@ -969,8 +962,8 @@ public class PxlExcelZipExporter {
          * Writes the configured entries as a ZIP archive to the given file.
          *
          * @param zipFile the destination ZIP file
-         * @throws PxlException if {@code zipFile} is {@code null}, no entry was added, two entries resolve to
-         *                      the same file name, or writing the archive fails
+         * @throws PxlException if {@code zipFile} is {@code null}, no entry was added, an entry name carries
+         *                      a path or collides with another, or writing the archive fails
          */
         public void toFile(final File zipFile)
                 throws PxlException {
@@ -987,9 +980,9 @@ public class PxlExcelZipExporter {
          *
          * @param response    the servlet response to write to
          * @param zipFilename the archive file name without extension; required
-         * @throws PxlException if {@code response} is {@code null}, no entry was added, two entries resolve to
-         *                      the same file name, {@code zipFilename} is blank, or writing the archive or
-         *                      response fails
+         * @throws PxlException if {@code response} is {@code null}, no entry was added, an entry name carries
+         *                      a path or collides with another, {@code zipFilename} is blank, or writing the
+         *                      archive or response fails
          */
         public void toResponse(final HttpServletResponse response,
                                final String zipFilename)
@@ -1010,11 +1003,12 @@ public class PxlExcelZipExporter {
          * leaves a truncated archive already on the wire under {@code 200 OK}, and no {@code Content-Length}
          * can be sent.</p>
          *
-         * <p>Note where the line falls. The empty-archive, duplicate-entry-name and archive-name checks all
-         * run before the headers, so those failures still leave the response untouched. <strong>The
-         * path-separator check on an entry name does not</strong> - it happens per entry inside the write
-         * loop, which is after the headers have gone out, as does every core-level failure. Such a failure
-         * writes no body but does leave the download headers set.</p>
+         * <p>Note where the line falls. <strong>Every check this builder makes itself runs before the
+         * headers</strong> - the empty archive, an entry name carrying a path, a duplicate entry name and the
+         * archive name - so those failures still leave the response untouched. What does not is anything the
+         * core raises while an entry is being generated: a workbook whose export metadata will not resolve, a
+         * CSV entry given a password. Those happen inside the write loop, after the headers have gone out, so
+         * such a failure writes no body but does leave the download headers set.</p>
          *
          * <p>What a failure never produces is a readable archive: the central directory is written only once
          * every entry is in, so a client can never mistake a failed download for a complete one - see
@@ -1027,9 +1021,9 @@ public class PxlExcelZipExporter {
          *
          * @param response    the servlet response to write to
          * @param zipFilename the archive file name without extension; required
-         * @throws PxlException if {@code response} is {@code null}, no entry was added, two entries resolve to
-         *                      the same file name, {@code zipFilename} is blank, or writing the archive or
-         *                      response fails
+         * @throws PxlException if {@code response} is {@code null}, no entry was added, an entry name carries
+         *                      a path or collides with another, {@code zipFilename} is blank, or writing the
+         *                      archive or response fails
          */
         public void toResponseStreaming(final HttpServletResponse response,
                                         final String zipFilename)
@@ -1045,7 +1039,7 @@ public class PxlExcelZipExporter {
          *
          * @param zipFilename the archive file name without extension; required
          * @return the response entity carrying the archive bytes
-         * @throws PxlException if no entry was added, two entries resolve to the same file name,
+         * @throws PxlException if no entry was added, an entry name carries a path or collides with another,
          *                      {@code zipFilename} is blank, or building the response fails
          */
         public ResponseEntity<Resource> toResponseEntity(final String zipFilename)
@@ -1058,25 +1052,37 @@ public class PxlExcelZipExporter {
         // private: the component is this class's nestmate, so nothing here needs to be exposed.
 
         /**
-         * Rejects an archive with no members, and one whose members would collide by name. Called by every
-         * terminal before any work is done.
+         * Rejects an archive with no members, one whose members carry a path in their name, and one whose
+         * members would collide by name. Called by every terminal before any work is done.
          *
-         * <p><strong>The name check belongs here rather than in {@code writeEntries} because here it is still
-         * early enough to matter.</strong> Every terminal calls this first, so a collision fails before the
-         * file destination has created its file and before the streaming destination has sent its download
-         * headers - neither of which can be taken back once writing has begun. Left to
-         * {@link ZipOutputStream#putNextEntry}, the same collision would surface mid-write as a
-         * {@link ZipException} wrapped in {@link PxlIOException}, indistinguishable from a disk failure.</p>
+         * <p><strong>Both name checks belong here rather than in {@code writeEntries} because here they are
+         * still early enough to matter.</strong> Every terminal calls this first, so either failure comes
+         * before the file destination has created its file and before the streaming destination has sent its
+         * download headers - neither of which can be taken back once writing has begun. The loop resolves
+         * each entry's name once and both checks read that one value, so what is reported is what would have
+         * been written.</p>
          *
-         * <p>Comparison is on the whole entry name, extension included, so the same base name written by two
-         * different engines ({@code report.xlsx} and {@code report.xls}) stays two distinct members. It
-         * <strong>ignores case</strong>, which is stricter than {@code ZipOutputStream} - that one compares
-         * exactly, so it would let {@code Report.xlsx} and {@code report.xlsx} both into the archive, and
-         * extracting them on a case-insensitive file system (Windows, macOS by default) would silently
-         * overwrite one with the other. Folding with {@link Locale#ROOT} keeps the fold from following the
-         * default locale, where {@code I} does not lower-case to {@code i}.</p>
+         * <p><strong>The path check.</strong> A {@link ZipEntry} name may legally hold a path, and this one
+         * can come from application data - a workbook name or a sheet name the application filled in - so an
+         * unchecked separator would put a traversal path inside an archive we hand out.
+         * {@link FilenameUtils#getName} strips everything up to the last {@code '/'} or {@code '\'} (and any
+         * drive prefix), so a name that survives it unchanged carries no path. Only separators matter: every
+         * kind of entry ends its name with its format's extension, so a bare {@code ".."} can never come out
+         * as {@code ".."} here.</p>
          *
-         * @throws PxlArgumentException if no entry was added, or two entries resolve to the same file name
+         * <p><strong>The duplicate check.</strong> Comparison is on the whole entry name, extension included,
+         * so the same base name written by two different engines ({@code report.xlsx} and {@code report.xls})
+         * stays two distinct members. It <strong>ignores case</strong>, which is stricter than
+         * {@code ZipOutputStream} - that one compares exactly, so it would let {@code Report.xlsx} and
+         * {@code report.xlsx} both into the archive, and extracting them on a case-insensitive file system
+         * (Windows, macOS by default) would silently overwrite one with the other. Folding with
+         * {@link Locale#ROOT} keeps the fold from following the default locale, where {@code I} does not
+         * lower-case to {@code i}. Left to {@link ZipOutputStream#putNextEntry}, the same collision would
+         * surface mid-write as a {@link ZipException} wrapped in {@link PxlIOException}, indistinguishable
+         * from a disk failure.</p>
+         *
+         * @throws PxlArgumentException if no entry was added, an entry name carries a path, or two entries
+         *                              resolve to the same file name
          */
         private void validateEntries()
                 throws PxlArgumentException {
@@ -1089,6 +1095,10 @@ public class PxlExcelZipExporter {
 
             for (int index = 0; index < entries.size(); index++) {
                 final String entryName = entries.get(index).resolveEntryName(index);
+
+                if (!entryName.equals(FilenameUtils.getName(entryName))) {
+                    throw new PxlArgumentException("entry file name must not carry a path: '" + entryName + "'");
+                }
 
                 if (!seenEntryNames.add(entryName.toLowerCase(Locale.ROOT))) {
                     throw new PxlArgumentException("duplicate entry file name: '" + entryName + "'");

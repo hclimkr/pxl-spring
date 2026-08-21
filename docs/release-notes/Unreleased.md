@@ -61,6 +61,15 @@ the highlights below.
              .sampleCsvSheet(Employee.class, "Upload form")      // Upload form.csv
              .toResponse(response, "employee-bundle");
     ```
+  - **So does a path-carrying one.** The check that keeps a traversal path out of an archive we hand out ran
+    per entry inside the write loop, which is the one place it could not help: `toFile(...)` had created a
+    file it could not finish, and `toResponseStreaming(...)` had already committed the download headers. It
+    now sits beside the duplicate check in the builder's up-front validation, which every destination calls
+    first — same exception, same message, earlier. `toFile(...)` leaves nothing on disk and
+    `toResponseStreaming(...)` leaves the response untouched. That makes the rule simple to state: **every
+    check the ZIP builder makes itself runs before the headers.** What still lands after them is a failure
+    the core raises while generating an entry — a workbook whose export metadata will not resolve, a CSV
+    entry given a password — which is the trade `toResponseStreaming(...)` exists to make, not an oversight.
   - **A duplicate ZIP entry name fails before anything is written.** Entry names resolve as
     `explicit name` → `@PxlWorkbook` workbook name → `Pxl{index}`, and the index fallback applies only when
     neither of the first two yields a name — so two instances of the same workbook class, the ordinary case,

@@ -40,6 +40,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A ZIP entry name carrying a path separator is now rejected before anything is written, alongside
+  the duplicate-name check it belongs with. It used to be checked per entry inside the write loop,
+  which meant `toFile(...)` had already created a file it could not finish and
+  `toResponseStreaming(...)` had already committed the download headers. The exception and its
+  message are unchanged — only the point of failure is earlier, so `toFile(...)` now leaves nothing
+  on disk and `toResponseStreaming(...)` leaves the response untouched. Every check the ZIP builder
+  makes itself now runs before the headers; what still lands after them is a failure the core
+  raises while generating an entry, which is the trade `toResponseStreaming(...)` asks for.
+
 - **Breaking.** A ZIP entry-name collision is rejected before anything is written, as
   `PxlArgumentException` naming the offending entry, where it used to surface mid-write as
   `PxlIOException` — the same exception a disk failure produces, so callers could not tell the
