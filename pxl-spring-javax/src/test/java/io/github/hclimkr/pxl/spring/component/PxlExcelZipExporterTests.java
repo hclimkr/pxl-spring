@@ -19,14 +19,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 
 import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -43,10 +46,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * {@link PxlExcelZipExporter.Builder} fluent API: bundling several Excel workbooks into one ZIP across every
  * entry kind, entry form and destination, entry naming (provided name &rarr; workbook name &rarr; index
  * fallback), per-entry export options, and archive validity via {@link ZipFile} (reads the central directory,
- * not just streamed local headers). Three kinds of source reach an entry - a {@code @PxlWorkbook}-annotated
- * object, a raw POI {@link Workbook}, and a sample template generated from a class - and the invariants that
- * hold them together (one resolved name per entry, an extension that follows the bytes, a duplicate check
- * spanning every kind) are pinned across all of them.
+ * not just streamed local headers). Five kinds of source reach an entry - a {@code @PxlWorkbook}-annotated
+ * object, a raw POI {@link Workbook}, a sample template generated from a class, and the two CSV equivalents -
+ * and the invariants that hold them together (one resolved name per entry, an extension that follows the
+ * bytes, a duplicate check spanning every kind) are pinned across all of them.
+ *
+ * <p>CSV expectations that depend on encoding are asserted on the raw entry bytes rather than on a decoded
+ * string: decoding first would absorb a byte order mark into U+FEFF and hide whether one was written.</p>
  *
  * <p>The builder comes from {@link PxlSpring}, the entry point the documentation guides users to. The
  * facade hands back this component's own builder, so what is exercised here is still the component.</p>
@@ -1261,12 +1267,391 @@ class PxlExcelZipExporterTests {
                 .isInstanceOf(PxlNullPointerException.class);
     }
 
+    // ----- CSV entries -----
+    // The two kinds whose bytes are not a workbook at all. They have no format to resolve - CSV is the only
+    // thing they write - and no index-suffixed default either, because a sheet name is required and so always
+    // there to fall back on.
+
+    /**
+     * The entry's records, split on the CRLF the CSV writer emits - the same helper
+     * {@code PxlCsvExporterTests} uses. Only for record-level assertions; anything encoding-sensitive is
+     * asserted on the raw bytes instead, since decoding absorbs a byte order mark into U+FEFF.
+     */
+    private static List<String> linesOf(final byte[] csvBytes) {
+        return Arrays.asList(new String(csvBytes, StandardCharsets.UTF_8).split("\r\n", -1));
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void csvSheetWithoutOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        // no entry name given: the sheet name is the fallback, and there is no index-suffixed default behind
+        // it because a CSV entry cannot be added without one
+        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users")
+                .csvSheet(TestUser.class, users(), "Admins"), dest);
+
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Users.csv", "Admins.csv");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void csvSheetWithOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        // an option changes the bytes here, never the extension - CSV is all this kind writes, so even an
+        // exportExcelEngine in it leaves the name alone
+        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users", semicolonOption())
+                .csvSheet(TestUser.class, users(), "Admins", hssfOption()), dest);
+
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Users.csv", "Admins.csv");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void csvSheetWithOptionAndName_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users", null, "a")
+                .csvSheet(TestUser.class, users(), "Users", null, "b"), dest);
+
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("a.csv", "b.csv");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void sampleCsvSheetWithoutOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+                .sampleCsvSheet(TestUser.class, "Users")
+                .sampleCsvSheet(TestRequiredUser.class, "Required"), dest);
+
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Users.csv", "Required.csv");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void sampleCsvSheetWithOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+                .sampleCsvSheet(TestUser.class, "Users", semicolonOption())
+                .sampleCsvSheet(TestUser.class, "Admins", null), dest);
+
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Users.csv", "Admins.csv");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void sampleCsvSheetWithOptionAndName_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+                .sampleCsvSheet(TestUser.class, "Users", null, "form-a")
+                .sampleCsvSheet(TestUser.class, "Users", null, "form-b"), dest);
+
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("form-a.csv", "form-b.csv");
+    }
+
+    @Test
+    void blankEntryNameOnACsvEntry_fallsBackToTheSheetName() throws PxlException, IOException {
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users", null, "  ")
+                .sampleCsvSheet(TestUser.class, "Forms", null, "  ")
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("Users.csv", "Forms.csv");
+    }
+
+    @Test
+    void csvEntryBytes_carryTheRecordsThatWentIn() throws PxlException, IOException {
+        // Distinct rows per entry, so this also pins that each entry opens its own core builder: shared, the
+        // second entry would carry the first one's rows, which the entry names could never show.
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users")
+                .csvSheet(TestUser.class, Collections.singletonList(new TestUser("Carol", 41)), "Admins")
+                .sampleCsvSheet(TestUser.class, "Forms")
+                .toStream(baos);
+
+        final byte[] archive = baos.toByteArray();
+        assertThat(linesOf(entryBytes(archive, "Users.csv")))
+                .containsExactly("Name,Age", "Alice,30", "Bob,25", "");
+        assertThat(linesOf(entryBytes(archive, "Admins.csv")))
+                .containsExactly("Name,Age", "Carol,41", "");
+        // the template is not empty: @PxlColumn(exportSample = ...) fills the one sample record
+        assertThat(linesOf(entryBytes(archive, "Forms.csv")))
+                .containsExactly("Name,Age", "Alice,30", "");
+    }
+
+    @Test
+    void csvEntryContent_isReadableCsv_andRoundTrips() throws PxlException, IOException, HttpMediaTypeNotSupportedException {
+        // The counterpart of zipEntryContent_isReadableXlsx_andRoundTrips: what came out of the archive is a
+        // CSV this library reads back, not merely bytes that split on CRLF the way we expected. A
+        // FileSystemResource because importCsv refuses a resource with no file name - there would be no
+        // extension to check.
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users")
+                .toStream(baos);
+
+        final File extracted = TestPaths.exportFile(testInfo, ".csv");
+        Files.write(extracted.toPath(), entryBytes(baos.toByteArray(), "Users.csv"));
+
+        final List<TestUser> back = pxlSpring.importCsv()
+                .sheet(TestUser.class)
+                .fromResource(new FileSystemResource(extracted));
+
+        assertThat(back).extracting(TestUser::getName).containsExactly("Alice", "Bob");
+        assertThat(back).extracting(TestUser::getAge).containsExactly(30, 25);
+    }
+
+    @Test
+    void emptyRowsOnACsvEntry_stillWriteTheHeader() throws PxlException, IOException {
+        // an export with nothing in it is ordinary - a report for a quiet month - and it must still produce a
+        // well-formed member rather than an empty one
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, Collections.<TestUser>emptyList(), "Users")
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("Users.csv");
+        assertThat(linesOf(entryBytes(baos.toByteArray(), "Users.csv"))).containsExactly("Name,Age", "");
+    }
+
+    @Test
+    void csvEntryNames_carryNoIndexUnlikeTheSampleDefaults() throws PxlException, IOException {
+        // The mirror of sampleEntryDefault_isPxlSampleIndexRatherThanPxlIndex. Two kinds append the entry
+        // index to their default because their source may carry no name; the CSV pair never does, because a
+        // sheet name is required and is therefore always there to take. Placed last on purpose - at index 2 an
+        // appended index would be visible.
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .workbook(workbook(null))
+                .sampleWorkbook(TestWorkbook.class)
+                .csvSheet(TestUser.class, users(), "Users")
+                .sampleCsvSheet(TestUser.class, "Forms")
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+                .containsExactly("Pxl0.xlsx", "PxlSample1.xlsx", "Users.csv", "Forms.csv");
+    }
+
+    @Test
+    void aPasswordOnACsvEntry_isRefusedByTheCoreMidWrite() {
+        // CSV cannot be encrypted, and the core refuses the option rather than ignoring it. That refusal
+        // happens inside writeBody, so unlike the builder's own guards it lands in the middle of the write
+        // loop - the file is already open by then, which is exactly why the archive is never finished after a
+        // failure: what stays on disk cannot be opened as one.
+        final PxlExportWorkbookOption passwordOption = PxlExportWorkbookOption.builder()
+                .exportPassword("secret")
+                .build();
+
+        final File zipFile = TestPaths.exportFile(testInfo, ".zip");
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users", passwordOption)
+                .toFile(zipFile))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(zipFile).exists();
+        assertThatThrownBy(() -> centralDirectoryEntryNames(Files.readAllBytes(zipFile.toPath())))
+                .isInstanceOf(IOException.class);
+
+        // the sample kind refuses it on the same terms
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .sampleCsvSheet(TestUser.class, "Forms", passwordOption)
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
+    }
+
+    @Test
+    void csvEntryBytes_carryTheBom() throws PxlException, IOException {
+        // Asserted on the raw bytes, never on a decoded string: decoding first absorbs the mark into U+FEFF
+        // and hides whether one was written at all. The mark is per entry, so the second one must not have it.
+        final PxlExportWorkbookOption bomOption = PxlExportWorkbookOption.builder()
+                .exportCsvBom(Boolean.TRUE)
+                .build();
+
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Marked", bomOption)
+                .csvSheet(TestUser.class, users(), "Plain")
+                .toStream(baos);
+
+        final byte[] archive = baos.toByteArray();
+        assertThat(entryBytes(archive, "Marked.csv")).startsWith((byte) 0xEF, (byte) 0xBB, (byte) 0xBF);
+        assertThat(entryBytes(archive, "Plain.csv")).startsWith((byte) 'N');
+    }
+
+    @Test
+    void csvEntryOption_reachesTheBytesWithoutTouchingTheName() throws PxlException, IOException {
+        // The CSV kinds have no format axis, so the whole of what an option does here is inside the body -
+        // which makes it worth pinning that it arrives at all, and that the entry is still named .csv.
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users", semicolonOption())
+                .sampleCsvSheet(TestUser.class, "Forms", semicolonOption())
+                .toStream(baos);
+
+        final byte[] archive = baos.toByteArray();
+        assertThat(centralDirectoryEntryNames(archive)).containsExactly("Users.csv", "Forms.csv");
+        assertThat(linesOf(entryBytes(archive, "Users.csv"))).startsWith("Name;Age", "Alice;30");
+        assertThat(linesOf(entryBytes(archive, "Forms.csv"))).startsWith("Name;Age", "Alice;30");
+    }
+
+    @Test
+    void anExcelEngineOption_doesNotChangeACsvEntry() throws PxlException, IOException {
+        // resolveFileFormat does not exist on these kinds, so an exportExcelEngine has nothing to act on -
+        // the same promise PxlSampleCsvExporter.excelEngineOption_doesNotChangeTheCsvExtension makes
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users", hssfOption())
+                .sampleCsvSheet(TestUser.class, "Forms", hssfOption())
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("Users.csv", "Forms.csv");
+    }
+
+    /**
+     * Enough rows for deflate to have something to work with. A three-record CSV comes out of the compressor
+     * larger than it went in - true of any encoder on a few dozen bytes, and it would say nothing about which
+     * level was picked.
+     */
+    private static List<TestUser> manyUsers() {
+        final List<TestUser> rows = new ArrayList<>();
+        for (int index = 0; index < 200; index++) {
+            rows.add(new TestUser("User" + index, 20 + (index % 50)));
+        }
+        return rows;
+    }
+
+    @Test
+    void csvEntriesAreCompressed_whileXlsxIsNot() throws PxlException, IOException {
+        // The level is read off the entry name, so a .csv entry needed no code of its own: it is not .xlsx,
+        // therefore it is deflated - and text deflates well, which is what makes the contrast visible.
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, manyUsers(), "Users")
+                .workbook(workbook("ooxml"))
+                .toStream(baos);
+
+        final File tmp = writeTempZip(baos.toByteArray());
+        try (ZipFile zipFile = new ZipFile(tmp)) {
+            final ZipEntry csv = zipFile.getEntry("Users.csv");
+            assertThat(csv.getCompressedSize()).isLessThan(csv.getSize());
+
+            final ZipEntry xlsx = zipFile.getEntry("ooxml.xlsx");
+            assertThat(xlsx.getCompressedSize()).isGreaterThan(xlsx.getSize());
+        } finally {
+            tmp.delete();
+        }
+    }
+
+    @Test
+    void twoCsvEntriesUnderOneSheetName_collide() throws PxlException, IOException {
+        // With no index-suffixed default there is nothing to make unnamed entries unique, so the ordinary
+        // case - the same sheet name twice - is a collision, rejected before anything is written...
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users")
+                .csvSheet(TestUser.class, users(), "Users")
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class)
+                .hasMessageContaining("Users.csv");
+
+        // ...and an explicit name is the documented way out, exactly as for the workbook kinds
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users", null, "january")
+                .csvSheet(TestUser.class, users(), "Users", null, "february")
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+                .containsExactly("january.csv", "february.csv");
+    }
+
+    @Test
+    void aCsvEntryAndAnExcelEntry_shareABaseNameWithoutColliding() throws PxlException, IOException {
+        // the comparison is on the whole name, and .csv is simply another extension in it
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        pxlSpring.exportExcelZip()
+                .workbook(workbook("report"))                                   // -> report.xlsx
+                .csvSheet(TestUser.class, users(), "ignored", null, "report")   // -> report.csv
+                .toStream(baos);
+
+        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+                .containsExactly("report.xlsx", "report.csv");
+    }
+
+    @Test
+    void pathCarryingSheetName_isRejectedToo() {
+        // the sheet name is a name source like the workbook name, so it reaches the path check as well -
+        // the counterpart of pathCarryingWorkbookName_isRejectedToo
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "sub/Users")
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .sampleCsvSheet(TestUser.class, "sub/Forms")
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
+    }
+
+    @Test
+    void nullCsvEntrySource_throwsPxlNullPointer() {
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(null, users(), "Users"))
+                .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, null, "Users"))
+                .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, users(), null))
+                .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(null, "Users"))
+                .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(TestUser.class, null))
+                .isInstanceOf(PxlNullPointerException.class);
+    }
+
+    @Test
+    void blankCsvSheetName_throwsPxlArgumentAtTheCallThatAddsTheEntry() {
+        // Rejected here rather than by the core inside writeBody, for two reasons: by then the file
+        // destination has created its file and the streaming one has sent its headers, and validateEntries
+        // reads this value as the entry's name long before the core would see it. Every arity guards it.
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, users(), "  "))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, users(), "  ", null))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, users(), "  ", null, "a"))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(TestUser.class, "  "))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(TestUser.class, "  ", null))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(TestUser.class, "  ", null, "a"))
+                .isInstanceOf(PxlArgumentException.class);
+    }
+
+    @Test
+    void aBlankSheetNameFailsBeforeTheFileIsCreated() {
+        // what guarding at the call site buys, in the same terms as the duplicate check: nothing is on disk
+        final File zipFile = TestPaths.exportFile(testInfo, ".zip");
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "  ")
+                .toFile(zipFile))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(zipFile).doesNotExist();
+    }
+
     @Test
     void eachEntryKindNamesItselfAfterTheBytesItWrites() throws PxlException, IOException {
         // The extension follows the format the entry actually writes itself in, whichever kind resolves it:
         // a bound entry asks its option then its class, a raw one asks the workbook, a sample one its option
-        // then its class. All three end up named after the bytes inside them, which is what the magic-byte
-        // assertions check.
+        // then its class, and the two CSV kinds do not resolve anything - CSV is all they write. All five end
+        // up named after the bytes inside them, which is what the magic-byte assertions check.
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
             pxlSpring.exportExcelZip()
@@ -1276,12 +1661,14 @@ class PxlExcelZipExporterTests {
                     .poiWorkbook(hssf, null, "raw-ole2")                      // -> raw-ole2.xls
                     .sampleWorkbook(TestWorkbook.class, null, "sample")       // -> sample.xlsx
                     .sampleWorkbook(TestWorkbook.class, hssfOption(), "sample-ole2")   // -> sample-ole2.xls
+                    .csvSheet(TestUser.class, users(), "text")                // -> text.csv
+                    .sampleCsvSheet(TestUser.class, "text-sample")            // -> text-sample.csv
                     .toStream(baos);
 
             final byte[] archive = baos.toByteArray();
             assertThat(centralDirectoryEntryNames(archive))
                     .containsExactly("bound.xlsx", "bound-ole2.xls", "raw.xlsx", "raw-ole2.xls",
-                            "sample.xlsx", "sample-ole2.xls");
+                            "sample.xlsx", "sample-ole2.xls", "text.csv", "text-sample.csv");
 
             assertThat(isXlsx(entryBytes(archive, "bound.xlsx"))).isTrue();
             assertThat(isXlsx(entryBytes(archive, "bound-ole2.xls"))).isFalse();
@@ -1289,6 +1676,9 @@ class PxlExcelZipExporterTests {
             assertThat(isXlsx(entryBytes(archive, "raw-ole2.xls"))).isFalse();
             assertThat(isXlsx(entryBytes(archive, "sample.xlsx"))).isTrue();
             assertThat(isXlsx(entryBytes(archive, "sample-ole2.xls"))).isFalse();
+            // the CSV pair is neither container: plain text, so it starts with the header record
+            assertThat(entryBytes(archive, "text.csv")).startsWith((byte) 'N');
+            assertThat(entryBytes(archive, "text-sample.csv")).startsWith((byte) 'N');
         }
     }
 
@@ -1336,6 +1726,14 @@ class PxlExcelZipExporterTests {
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class)
                 .hasMessageContaining("form.xlsx");
+
+        // the CSV pair collides on its own terms: a sheet-name fallback against an explicit name
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "Users")                     // fallback -> Users.csv
+                .sampleCsvSheet(TestUser.class, "ignored", null, "Users")       // explicit -> Users.csv too
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class)
+                .hasMessageContaining("Users.csv");
     }
 
     @Test
@@ -1384,6 +1782,16 @@ class PxlExcelZipExporterTests {
                 .sampleWorkbook(TestWorkbook.class, null, "sub/form")
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .csvSheet(TestUser.class, users(), "ignored", null, "sub/text")
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                .sampleCsvSheet(TestUser.class, "ignored", null, "sub/text")
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
     }
 
     @Test
@@ -1394,12 +1802,14 @@ class PxlExcelZipExporterTests {
             pxlSpring.exportExcelZip()
                     .poiWorkbook(xssf, null, "one")
                     .workbook(workbook("two"))
-                    .sampleWorkbook(TestWorkbook.class, null, "three")
-                    .workbook(workbook("ignored"), null, "four")
+                    .csvSheet(TestUser.class, users(), "ignored", null, "three")
+                    .sampleWorkbook(TestWorkbook.class, null, "four")
+                    .sampleCsvSheet(TestUser.class, "ignored", null, "five")
+                    .workbook(workbook("ignored"), null, "six")
                     .toStream(baos);
 
             assertThat(centralDirectoryEntryNames(baos.toByteArray()))
-                    .containsExactly("one.xlsx", "two.xlsx", "three.xlsx", "four.xlsx");
+                    .containsExactly("one.xlsx", "two.xlsx", "three.csv", "four.xlsx", "five.csv", "six.xlsx");
         }
     }
 
@@ -1486,6 +1896,16 @@ class PxlExcelZipExporterTests {
     private static PxlExportWorkbookOption xssfOption() {
         return PxlExportWorkbookOption.builder()
                 .exportExcelEngine(PxlExcelEngine.XSSF)
+                .build();
+    }
+
+    /**
+     * A CSV option whose effect shows up in the bytes rather than the entry name - the CSV kinds have no
+     * format to switch, so this is what an option reaching them looks like.
+     */
+    private static PxlExportWorkbookOption semicolonOption() {
+        return PxlExportWorkbookOption.builder()
+                .exportCsvDelimiter(';')
                 .build();
     }
 

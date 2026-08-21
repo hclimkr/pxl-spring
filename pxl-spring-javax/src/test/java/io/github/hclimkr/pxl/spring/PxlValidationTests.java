@@ -437,5 +437,27 @@ class PxlValidationTests {
         assertThatThrownBy(() ->
                 pxlExcelZipExporter.exportExcelZip().sampleWorkbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() ->
+                pxlExcelZipExporter.exportExcelZip().csvSheet(TestUser.class, users(), null))
+                .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() ->
+                pxlExcelZipExporter.exportExcelZip().sampleCsvSheet(null, "Users"))
+                .isInstanceOf(PxlNullPointerException.class);
+    }
+
+    @Test
+    void blankSheetNameOnAZipCsvEntry_throwsPxlArgument() {
+        // the third shape a configuration argument can fail in - not a violation and not a null, but the
+        // core's own PxlArgumentException, raised by the builder at the call that adds the entry so that it
+        // beats the file and the headers
+        assertThatThrownBy(() ->
+                pxlExcelZipExporter.exportExcelZip().csvSheet(TestUser.class, users(), "  "))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() ->
+                pxlExcelZipExporter.exportExcelZip().sampleCsvSheet(TestUser.class, "  "))
+                .isInstanceOf(PxlArgumentException.class);
     }
 }

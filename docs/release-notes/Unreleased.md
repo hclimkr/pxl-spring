@@ -1,9 +1,10 @@
 # PXL Spring (Unreleased)
 
 A release about the ZIP exporter. An entry-name collision is caught before the archive is written rather than
-from inside the zip stream, an entry's name now agrees with the bytes in it, and an archive can hold two more
-kinds of member: a raw POI workbook you built yourself, and a sample template generated from a class. Built
-against [PXL](https://github.com/hclimkr/pxl) 0.9.4, unchanged.
+from inside the zip stream, an entry's name now agrees with the bytes in it, and an archive can hold every
+kind of output this library produces rather than one: a raw POI workbook you built yourself, a sample
+template, a CSV sheet, and a CSV template. Built against [PXL](https://github.com/hclimkr/pxl) 0.9.4,
+unchanged.
 
 Pre-1.0 release carrying **breaking** changes: a collision raises `PxlArgumentException` where it used to
 raise `PxlIOException`, two entry names differing only in case are refused where they used to produce an
@@ -42,6 +43,23 @@ the highlights below.
              .sampleWorkbook(EmployeeForm.class, null, "employees")
              .sampleWorkbook(DepartmentForm.class, null, "departments")
              .toResponseEntity("upload-forms");
+    ```
+  - **A ZIP entry can be CSV.** `csvSheet(rowClass, rows, sheetName)` writes a row collection into the
+    archive as a `.csv` member and `sampleCsvSheet(rowClass, sheetName)` a CSV template, both with the same
+    option and entry-name overloads as every other kind — so "the spreadsheet plus the same data as CSV", or
+    a set of CSV upload forms, is one chain instead of several downloads. One CSV file is one sheet, so each
+    call adds a member rather than a sheet to a shared one. These two write `.csv` and nothing else, which is
+    why they have no format to resolve: an option's `exportExcelEngine` means nothing to them, while its
+    charset, field delimiter and byte order mark do. Naming works the other way round from the Excel sample
+    entries — a sheet name is required, so an unnamed entry always has one to take and needs no
+    index-suffixed default; the flip side is that two entries under one sheet name collide, rejected before
+    anything is written. A blank sheet name is refused at the call that adds the entry, not mid-write.
+    ```java
+    pxlSpring.exportExcelZip()
+             .workbook(report)                                   // report.xlsx
+             .csvSheet(Employee.class, employees, "Employees")   // Employees.csv
+             .sampleCsvSheet(Employee.class, "Upload form")      // Upload form.csv
+             .toResponse(response, "employee-bundle");
     ```
   - **A duplicate ZIP entry name fails before anything is written.** Entry names resolve as
     `explicit name` → `@PxlWorkbook` workbook name → `Pxl{index}`, and the index fallback applies only when

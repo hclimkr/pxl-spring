@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instance, so there is no workbook name to read: an unnamed entry falls straight to
   `PxlSample{index}` — with the index, unlike `PxlSampleExcelExporter`'s bare `PxlSample`, because
   entries share an archive and must come out distinct.
+- CSV can go into a ZIP archive as well, completing the set: `exportExcelZip().csvSheet(rowClass,
+  rows, sheetName)` writes a row collection as a `.csv` member and
+  `sampleCsvSheet(rowClass, sheetName)` a CSV template, each with the same option and entry-name
+  overloads as the other kinds — so "the spreadsheet plus the same data as CSV", or a set of CSV
+  upload forms, is one chain. One CSV file is one sheet, so every call adds a member rather than a
+  sheet. These two always write `.csv`, so an option's `exportExcelEngine` means nothing to them;
+  what it does carry is the charset, field delimiter and byte order mark. An unnamed entry takes
+  its sheet name, which is required — there is no index-suffixed default behind it, so two entries
+  under one sheet name collide and are rejected before anything is written. A blank or `null` sheet
+  name is refused at the call that adds the entry rather than mid-write.
 
 ### Changed
 

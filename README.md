@@ -396,7 +396,7 @@ Every operation is handled through a single method chain like the examples above
 |---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Excel export        | `pxlSpring.exportExcel()`<br/>→ `.workbook(...) / .sheet(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Sample Excel export | `pxlSpring.exportSampleExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
-| Excel ZIP export    | `pxlSpring.exportExcelZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
+| Excel ZIP export    | `pxlSpring.exportExcelZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...) / .csvSheet(...) / .sampleCsvSheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | CSV export          | `pxlSpring.exportCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Sample CSV export   | `pxlSpring.exportSampleCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Excel import        | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
@@ -682,6 +682,23 @@ public ResponseEntity<Resource> downloadUploadForms() throws Exception {
                     .sampleWorkbook(EmployeeForm.class, null, "employees")
                     .sampleWorkbook(DepartmentForm.class, null, "departments")
                     .toResponseEntity("upload-forms");   // -> upload-forms.zip
+}
+```
+
+**Mixing CSV into the archive**
+
+`csvSheet(...)` and `sampleCsvSheet(...)` put what `exportCsv()` / `exportSampleCsv()` produce into the same archive. One CSV file is one sheet, so each call adds one entry, and the sheet name is what an unnamed entry is called. The charset, delimiter and byte order mark come from that entry's option.
+
+```java
+@GetMapping("/employees/bundle")
+public void downloadBundle(HttpServletResponse response) throws Exception {
+    List<Employee> employees = ...;
+
+    pxlSpring.exportExcelZip()
+             .workbook(report)                                        // report.xlsx
+             .csvSheet(Employee.class, employees, "Employees")        // Employees.csv
+             .sampleCsvSheet(Employee.class, "Upload form")           // Upload form.csv
+             .toResponse(response, "employee-bundle");
 }
 ```
 
@@ -994,7 +1011,7 @@ ResponseEntity<Resource> toResponseEntity(String excelFilename)
 
 ### `PxlExcelZipExporter`
 
-Turns several Excel workbooks into one entry each and bundles them into a single zip.
+Turns several spreadsheets into one entry each and bundles them into a single zip.
 
 ```java
 // start
@@ -1010,6 +1027,12 @@ poiWorkbook(Workbook workbook, String password, String excelFilename)
 sampleWorkbook(Class<?> workbookClass)                                                       // a sample template
 sampleWorkbook(Class<?> workbookClass, PxlExportWorkbookOption option)
 sampleWorkbook(Class<?> workbookClass, PxlExportWorkbookOption option, String excelFilename)
+<T> csvSheet(Class<T> rowClass, Collection<T> rows, String sheetName)                        // rows as CSV
+<T> csvSheet(Class<T> rowClass, Collection<T> rows, String sheetName, PxlExportWorkbookOption option)
+<T> csvSheet(Class<T> rowClass, Collection<T> rows, String sheetName, PxlExportWorkbookOption option, String csvFilename)
+sampleCsvSheet(Class<?> rowClass, String sheetName)                                          // a CSV template
+sampleCsvSheet(Class<?> rowClass, String sheetName, PxlExportWorkbookOption option)
+sampleCsvSheet(Class<?> rowClass, String sheetName, PxlExportWorkbookOption option, String csvFilename)
 
 // execution — the response destinations take the archive file name as an argument (required)
 void                     toStream(OutputStream outputStream)
@@ -1023,6 +1046,7 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 - Its extension is appended from the format the entry is written in: the per-entry option's export engine, else the one the workbook class declares. Name, bytes and deflate level all follow that one answer.
 - With `poiWorkbook(...)` nothing is bound, so there is no per-entry option and no workbook name: the extension comes from the workbook's own type and an unnamed entry falls straight to `Pxl{index}`. Encryption keeps that extension, exactly as on `PxlExcelExporter`.
 - `sampleWorkbook(...)` takes an option like `workbook(...)`, but is given a class rather than an instance, so there is no workbook name to read: an unnamed entry falls straight to `PxlSample{index}`. The index is what keeps unnamed entries apart — `PxlSampleExcelExporter` needs none, since it names a single download.
+- The two CSV forms always write `.csv`, so an option's `exportExcelEngine` means nothing to them; what it does carry is the charset, delimiter and byte order mark. An unnamed entry takes the sheet name, which is required — so there is no index-suffixed default, and two entries under one sheet name collide. Name them.
 - The archive name is required.
 
 ### `PxlCsvExporter`

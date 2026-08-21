@@ -42,15 +42,15 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Spring component that bundles several Excel workbooks into a single ZIP archive.
+ * Spring component that bundles several spreadsheets into a single ZIP archive.
  *
  * <p>Everything is configured through the fluent builder returned by {@link #exportExcelZip()} - add one
  * entry per call ({@code workbook(...)} for a {@code @PxlWorkbook}-annotated object, {@code poiWorkbook(...)}
  * for a raw POI {@link Workbook} you built yourself, {@code sampleWorkbook(...)} for a sample template
- * generated from a class), then call a terminal ({@code toStream} / {@code toFile} / {@code toResponse} /
- * {@code toResponseStreaming} / {@code toResponseEntity}); the response terminals take the archive's own
- * download file name as an argument, and it is required there - unlike an entry name it has nothing to fall
- * back to:</p>
+ * generated from a class, {@code csvSheet(...)} / {@code sampleCsvSheet(...)} for the CSV equivalents), then
+ * call a terminal ({@code toStream} / {@code toFile} / {@code toResponse} / {@code toResponseStreaming} /
+ * {@code toResponseEntity}); the response terminals take the archive's own download file name as an argument,
+ * and it is required there - unlike an entry name it has nothing to fall back to:</p>
  *
  * <pre>{@code
  * pxlSpring.exportExcelZip()
@@ -58,14 +58,18 @@ import java.util.zip.ZipOutputStream;
  *         .workbook(februaryReport, option, "February")
  *         .poiWorkbook(alreadyBuilt, null, "raw")
  *         .sampleWorkbook(UploadForm.class, null, "template")
+ *         .csvSheet(Employee.class, employees, "Employees")
  *         .toResponse(response, "quarterly-report");
  * }</pre>
  *
- * <p>An entry's file name falls back to the workbook object name - only a {@code workbook(...)} entry has one,
- * so the other kinds fall straight through - and then to an index-suffixed default ({@code Pxl{index}}, or
- * {@code PxlSample{index}} for a sample template). It must be a plain name - one carrying a path separator is
- * rejected with {@link PxlArgumentException}, so the archive can never hand a traversal path to whoever
- * extracts it.</p>
+ * <p>An archive holds whatever mix of those it is given; the name says {@code Excel} because that is what it
+ * was built for and the start method is public API, not because a CSV member is an afterthought.</p>
+ *
+ * <p>An entry's file name falls back to the name its source carries - the workbook object name for
+ * {@code workbook(...)}, the sheet name for the two CSV kinds - and then, for the kinds whose source carries
+ * none, to an index-suffixed default ({@code Pxl{index}}, or {@code PxlSample{index}} for a sample template).
+ * It must be a plain name - one carrying a path separator is rejected with {@link PxlArgumentException}, so
+ * the archive can never hand a traversal path to whoever extracts it.</p>
  *
  * <p>The index fallback only applies when no earlier step yields a name, so it does not make names unique:
  * two entries built from the same workbook class, both relying on the same declared workbook name, resolve to
@@ -339,8 +343,10 @@ public class PxlExcelZipExporter {
      * <p>{@code .xlsx} (OOXML) <em>is</em> a deflated ZIP container, so deflating it again costs a full
      * compression pass for essentially no size gain. Those entries are written at
      * {@link Deflater#NO_COMPRESSION}, which emits stored deflate blocks - a few bytes of framing per 64&nbsp;KB
-     * in exchange for skipping the pass entirely. {@code .xls} (OLE2) is not compressed, so it keeps the
-     * default level, where deflate genuinely pays off.</p>
+     * in exchange for skipping the pass entirely. Everything else - {@code .xls} (OLE2) and {@code .csv} text
+     * alike - is uncompressed to begin with and keeps the default level, where deflate genuinely pays off.
+     * Only one extension is on the compressed side, so it is a comparison rather than a set; make it a set
+     * when a second one turns up.</p>
      *
      * <p>Asking the name rather than the entry keeps this method from having to know what an entry is made
      * of, and the three answers still come from one: the format an entry writes itself in decides its
@@ -470,9 +476,10 @@ public class PxlExcelZipExporter {
      * bundling is a pxl-spring concern - so this builder simply collects archive entries and the archive's
      * own download name, then hands them to a terminal.</p>
      *
-     * <p>Each {@link #workbook(Object)}, {@link #poiWorkbook(Workbook)} or {@link #sampleWorkbook(Class)} call
-     * adds one archive entry; there are no separate option methods, because an entry's export option and file
-     * name are arguments of the overload that adds it - they mean nothing except against that one entry.
+     * <p>Each {@link #workbook(Object)}, {@link #poiWorkbook(Workbook)}, {@link #sampleWorkbook(Class)},
+     * {@link #csvSheet(Class, Collection, String)} or {@link #sampleCsvSheet(Class, String)} call adds one
+     * archive entry; there are no separate option methods, because an entry's export option and file name are
+     * arguments of the overload that adds it - they mean nothing except against that one entry.
      * Terminal methods:
      * {@link #toStream(OutputStream)}, {@link #toFile(File)}, {@link #toResponse(HttpServletResponse, String)},
      * {@link #toResponseStreaming(HttpServletResponse, String)}, {@link #toResponseEntity(String)}. Each
@@ -494,6 +501,7 @@ public class PxlExcelZipExporter {
      *         .workbook(februaryReport, option, "February")
      *         .poiWorkbook(alreadyBuilt, null, "raw")
      *         .sampleWorkbook(UploadForm.class, null, "template")
+     *         .csvSheet(Employee.class, employees, "Employees")
      *         .toResponse(response, "quarterly-report");
      * }</pre>
      */
@@ -748,6 +756,196 @@ public class PxlExcelZipExporter {
             return this;
         }
 
+        /**
+         * Adds one archive entry holding a row collection written as CSV - what {@code PxlCsvExporter}
+         * produces on its own.
+         *
+         * <p>One CSV file is one sheet, so this adds one member per call rather than one sheet to a shared
+         * one, and {@code sheetName} names both the sheet and, unless overridden, the entry.</p>
+         *
+         * @param rowClass  the row class
+         * @param rows      the row objects for this entry
+         * @param sheetName the sheet name; must not be blank
+         * @param <T>       the row type
+         * @return this builder
+         * @throws PxlNullPointerException if {@code rowClass}, {@code rows} or {@code sheetName} is
+         *                                 {@code null}
+         * @throws PxlArgumentException    if {@code sheetName} is blank
+         */
+        public <T> Builder csvSheet(final Class<T> rowClass,
+                                    final Collection<T> rows,
+                                    final String sheetName)
+                throws PxlNullPointerException, PxlArgumentException {
+
+            return csvSheet(rowClass, rows, sheetName, null, null);
+        }
+
+        /**
+         * Adds one CSV entry, with an export option applied to that entry only.
+         *
+         * <p>The option is where a CSV entry's charset, field delimiter and byte order mark come from
+         * ({@code exportCsv*}); an {@code exportExcelEngine} in it means nothing here, since the entry is
+         * always written as CSV.</p>
+         *
+         * @param rowClass       the row class
+         * @param rows           the row objects for this entry
+         * @param sheetName      the sheet name; must not be blank
+         * @param workbookOption the export option for this entry, or {@code null}
+         * @param <T>            the row type
+         * @return this builder
+         * @throws PxlNullPointerException if {@code rowClass}, {@code rows} or {@code sheetName} is
+         *                                 {@code null}
+         * @throws PxlArgumentException    if {@code sheetName} is blank
+         */
+        public <T> Builder csvSheet(final Class<T> rowClass,
+                                    final Collection<T> rows,
+                                    final String sheetName,
+                                    @Nullable final PxlExportWorkbookOption workbookOption)
+                throws PxlNullPointerException, PxlArgumentException {
+
+            return csvSheet(rowClass, rows, sheetName, workbookOption, null);
+        }
+
+        /**
+         * Adds one CSV entry, with an export option and an entry file name applied to that entry only.
+         *
+         * <p>The name given here carries no extension; {@code .csv} is appended, and it is the only extension
+         * this kind can take - there is no engine to resolve, which is why these two kinds have no
+         * {@code resolveFileFormat} of their own. The deflate level follows from that name like any other, so
+         * a CSV entry is compressed rather than stored the way an already-deflated {@code .xlsx} is.</p>
+         *
+         * <p>Unnamed, the entry takes the sheet name. There is no index-suffixed default behind that, because
+         * a CSV entry cannot be added without a sheet name in the first place - so unlike the other kinds
+         * there is always something to fall back to. Two entries built from the same sheet name therefore
+         * collide, and that is rejected before anything is written; name them explicitly.</p>
+         *
+         * @param rowClass       the row class
+         * @param rows           the row objects for this entry
+         * @param sheetName      the sheet name; must not be blank
+         * @param workbookOption the export option for this entry, or {@code null}
+         * @param csvFilename    the entry file name without extension; when blank it falls back to
+         *                       {@code sheetName}
+         * @param <T>            the row type
+         * @return this builder
+         * @throws PxlNullPointerException if {@code rowClass}, {@code rows} or {@code sheetName} is
+         *                                 {@code null}
+         * @throws PxlArgumentException    if {@code sheetName} is blank
+         */
+        public <T> Builder csvSheet(final Class<T> rowClass,
+                                    final Collection<T> rows,
+                                    final String sheetName,
+                                    @Nullable final PxlExportWorkbookOption workbookOption,
+                                    @Nullable final String csvFilename)
+                throws PxlNullPointerException, PxlArgumentException {
+
+            if (Objects.isNull(rowClass)) {
+                throw new PxlNullPointerException("rowClass must not be null");
+            }
+            if (Objects.isNull(rows)) {
+                throw new PxlNullPointerException("rows must not be null");
+            }
+            requireSheetName(sheetName);
+
+            this.entries.add(new CsvSheetEntry<>(rowClass, rows, sheetName, workbookOption, csvFilename));
+            return this;
+        }
+
+        /**
+         * Adds one archive entry holding a CSV sample template generated from a row class - the header record
+         * plus one record of {@code @PxlColumn(exportSample = ...)} values, what {@code PxlSampleCsvExporter}
+         * produces on its own.
+         *
+         * @param rowClass  the row class describing the columns
+         * @param sheetName the sheet name; must not be blank
+         * @return this builder
+         * @throws PxlNullPointerException if {@code rowClass} or {@code sheetName} is {@code null}
+         * @throws PxlArgumentException    if {@code sheetName} is blank
+         */
+        public Builder sampleCsvSheet(final Class<?> rowClass,
+                                      final String sheetName)
+                throws PxlNullPointerException, PxlArgumentException {
+
+            return sampleCsvSheet(rowClass, sheetName, null, null);
+        }
+
+        /**
+         * Adds one CSV sample template entry, with an export option applied to that entry only.
+         *
+         * <p>The option carries the same {@code exportCsv*} settings as on
+         * {@link #csvSheet(Class, Collection, String, PxlExportWorkbookOption)}.</p>
+         *
+         * @param rowClass       the row class describing the columns
+         * @param sheetName      the sheet name; must not be blank
+         * @param workbookOption the export option for this entry, or {@code null}
+         * @return this builder
+         * @throws PxlNullPointerException if {@code rowClass} or {@code sheetName} is {@code null}
+         * @throws PxlArgumentException    if {@code sheetName} is blank
+         */
+        public Builder sampleCsvSheet(final Class<?> rowClass,
+                                      final String sheetName,
+                                      @Nullable final PxlExportWorkbookOption workbookOption)
+                throws PxlNullPointerException, PxlArgumentException {
+
+            return sampleCsvSheet(rowClass, sheetName, workbookOption, null);
+        }
+
+        /**
+         * Adds one CSV sample template entry, with an export option and an entry file name applied to that
+         * entry only.
+         *
+         * <p>Named exactly as {@link #csvSheet(Class, Collection, String, PxlExportWorkbookOption, String)}:
+         * {@code .csv} is appended, and an unnamed entry takes the sheet name, which this kind is likewise
+         * required to have. It is the two Excel sample entries that need a {@code PxlSample{index}} default,
+         * having no name of their own to take.</p>
+         *
+         * @param rowClass       the row class describing the columns
+         * @param sheetName      the sheet name; must not be blank
+         * @param workbookOption the export option for this entry, or {@code null}
+         * @param csvFilename    the entry file name without extension; when blank it falls back to
+         *                       {@code sheetName}
+         * @return this builder
+         * @throws PxlNullPointerException if {@code rowClass} or {@code sheetName} is {@code null}
+         * @throws PxlArgumentException    if {@code sheetName} is blank
+         */
+        public Builder sampleCsvSheet(final Class<?> rowClass,
+                                      final String sheetName,
+                                      @Nullable final PxlExportWorkbookOption workbookOption,
+                                      @Nullable final String csvFilename)
+                throws PxlNullPointerException, PxlArgumentException {
+
+            if (Objects.isNull(rowClass)) {
+                throw new PxlNullPointerException("rowClass must not be null");
+            }
+            requireSheetName(sheetName);
+
+            this.entries.add(new SampleCsvSheetEntry(rowClass, sheetName, workbookOption, csvFilename));
+            return this;
+        }
+
+        /**
+         * Rejects a missing sheet name at the call that adds the entry.
+         *
+         * <p>The core would reject it too, but only from inside {@code writeBody} - by then the file
+         * destination has created its file and the streaming one has sent its headers. It has to be here for
+         * a second reason as well: a CSV entry's name falls back to its sheet name, so {@code validateEntries}
+         * reads this value long before the core sees it. Same exception types the core raises, so the two
+         * paths cannot be told apart by what they throw.</p>
+         *
+         * @param sheetName the sheet name given to a CSV entry method
+         * @throws PxlNullPointerException if {@code sheetName} is {@code null}
+         * @throws PxlArgumentException    if {@code sheetName} is blank
+         */
+        private static void requireSheetName(final String sheetName)
+                throws PxlNullPointerException, PxlArgumentException {
+
+            if (Objects.isNull(sheetName)) {
+                throw new PxlNullPointerException("sheetName must not be null");
+            }
+            if (StringUtils.isBlank(sheetName)) {
+                throw new PxlArgumentException("sheetName must not be blank");
+            }
+        }
+
         // ----- terminals -----
 
         /**
@@ -884,7 +1082,7 @@ public class PxlExcelZipExporter {
                 throws PxlArgumentException {
 
             if (entries.isEmpty()) {
-                throw new PxlArgumentException("at least one workbook(...), poiWorkbook(...) or sampleWorkbook(...) entry must be specified");
+                throw new PxlArgumentException("at least one entry must be specified: workbook(...), poiWorkbook(...), sampleWorkbook(...), csvSheet(...) or sampleCsvSheet(...)");
             }
 
             final Set<String> seenEntryNames = new HashSet<>();
@@ -1300,6 +1498,186 @@ public class PxlExcelZipExporter {
                 return StringUtils.isNotBlank(excelFilename)
                         ? excelFilename
                         : DEFAULT_EXPORT_SAMPLE_EXCEL_FILENAME + index;
+            }
+
+        }
+
+        /**
+         * An archive member holding a row collection written as CSV: the row class and its rows, the sheet
+         * name they are written under, an optional per-entry export option, and an optional entry file name.
+         *
+         * <p>Generic so that the row class and the collection stay paired the way the core's
+         * {@code sheet(Class<T>, Collection<T>, String)} requires. Held as {@code Class<?>} plus
+         * {@code Collection<?>} instead, that pairing would be lost at the field and {@code writeBody} would
+         * need a cast; the entry list is {@code List<Entry>} either way, so nothing is given up for it.</p>
+         */
+        private static final class CsvSheetEntry<T> extends Entry {
+
+            private final Class<T> rowClass;
+
+            private final Collection<T> rows;
+
+            private final String sheetName;
+
+            private final PxlExportWorkbookOption workbookOption;
+
+            private final String csvFilename;
+
+            /**
+             * Creates an archive entry.
+             *
+             * @param rowClass       the row class (never {@code null})
+             * @param rows           the row objects (never {@code null})
+             * @param sheetName      the sheet name (never blank)
+             * @param workbookOption the export option for this entry, or {@code null}
+             * @param csvFilename    the entry file name without extension, or {@code null}/blank for the
+             *                       fallback
+             */
+            private CsvSheetEntry(final Class<T> rowClass,
+                                  final Collection<T> rows,
+                                  final String sheetName,
+                                  final PxlExportWorkbookOption workbookOption,
+                                  final String csvFilename) {
+
+                this.rowClass = rowClass;
+                this.rows = rows;
+                this.sheetName = sheetName;
+                this.workbookOption = workbookOption;
+                this.csvFilename = csvFilename;
+            }
+
+            /**
+             * Resolves the name this entry takes inside the archive: the explicit name, else the sheet name,
+             * plus {@code .csv}.
+             *
+             * <p>The format is a constant rather than something to resolve - CSV is the only thing this kind
+             * writes - which is why {@code resolveFileFormat} is not part of {@code Entry}'s contract but a
+             * private detail of the kinds that do have a choice.</p>
+             *
+             * <p>{@code index} goes unused, the only kind where it does: the other four fall back to an
+             * index-suffixed default because their source may carry no name, while a CSV entry cannot be added
+             * without a sheet name. There is consequently nothing to make an unnamed entry unique, so two
+             * entries under one sheet name collide - {@code validateEntries} rejects that before anything is
+             * written.</p>
+             *
+             * @param index the entry's zero-based index in the archive; unused by this kind
+             * @return the entry name, extension included
+             */
+            @Override
+            String resolveEntryName(final int index) {
+
+                return withExtension(resolveCsvFilename(), PxlFileFormat.CSV);
+            }
+
+            /**
+             * Writes the rows straight into the archive stream as CSV, applying this entry's own option.
+             *
+             * @param outputStream the open archive stream, positioned on this entry
+             * @param pxl          the shared core entry point
+             * @throws PxlException if the rows fail to export
+             */
+            @Override
+            void writeBody(final OutputStream outputStream,
+                           final Pxl pxl)
+                    throws PxlException {
+
+                pxl.exportCsv()
+                        .sheet(rowClass, rows, sheetName)
+                        .override(workbookOption)
+                        .toStream(outputStream);
+            }
+
+            /**
+             * Resolves this entry's file name: the explicit name, else the sheet name.
+             *
+             * @return the entry file name without extension
+             */
+            private String resolveCsvFilename() {
+
+                return StringUtils.isNotBlank(csvFilename) ? csvFilename : sheetName;
+            }
+
+        }
+
+        /**
+         * An archive member holding a CSV sample template generated from a row class: the class to describe,
+         * the sheet name, an optional per-entry export option, and an optional entry file name.
+         *
+         * <p>Not generic, unlike {@code CsvSheetEntry}: there are no rows to keep paired with the class.</p>
+         */
+        private static final class SampleCsvSheetEntry extends Entry {
+
+            private final Class<?> rowClass;
+
+            private final String sheetName;
+
+            private final PxlExportWorkbookOption workbookOption;
+
+            private final String csvFilename;
+
+            /**
+             * Creates an archive entry.
+             *
+             * @param rowClass       the row class describing the columns (never {@code null})
+             * @param sheetName      the sheet name (never blank)
+             * @param workbookOption the export option for this entry, or {@code null}
+             * @param csvFilename    the entry file name without extension, or {@code null}/blank for the
+             *                       fallback
+             */
+            private SampleCsvSheetEntry(final Class<?> rowClass,
+                                        final String sheetName,
+                                        final PxlExportWorkbookOption workbookOption,
+                                        final String csvFilename) {
+
+                this.rowClass = rowClass;
+                this.sheetName = sheetName;
+                this.workbookOption = workbookOption;
+                this.csvFilename = csvFilename;
+            }
+
+            /**
+             * Resolves the name this entry takes inside the archive: the explicit name, else the sheet name,
+             * plus {@code .csv}.
+             *
+             * <p>{@code index} goes unused for the same reason as on {@code CsvSheetEntry} - a sheet name is
+             * required, so there is always a fallback and never a need for one built from the index.</p>
+             *
+             * @param index the entry's zero-based index in the archive; unused by this kind
+             * @return the entry name, extension included
+             */
+            @Override
+            String resolveEntryName(final int index) {
+
+                return withExtension(resolveCsvFilename(), PxlFileFormat.CSV);
+            }
+
+            /**
+             * Generates the CSV sample template straight into the archive stream, applying this entry's own
+             * option.
+             *
+             * @param outputStream the open archive stream, positioned on this entry
+             * @param pxl          the shared core entry point
+             * @throws PxlException if the template fails to generate
+             */
+            @Override
+            void writeBody(final OutputStream outputStream,
+                           final Pxl pxl)
+                    throws PxlException {
+
+                pxl.exportSampleCsv()
+                        .sheet(rowClass, sheetName)
+                        .override(workbookOption)
+                        .toStream(outputStream);
+            }
+
+            /**
+             * Resolves this entry's file name: the explicit name, else the sheet name.
+             *
+             * @return the entry file name without extension
+             */
+            private String resolveCsvFilename() {
+
+                return StringUtils.isNotBlank(csvFilename) ? csvFilename : sheetName;
             }
 
         }
