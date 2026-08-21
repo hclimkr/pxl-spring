@@ -59,6 +59,7 @@ import java.util.zip.ZipOutputStream;
  *         .poiWorkbook(alreadyBuilt, null, "raw")
  *         .sampleWorkbook(UploadForm.class, null, "template")
  *         .csvSheet(Employee.class, employees, "Employees")
+ *         .sampleCsvSheet(Employee.class, "Upload form")
  *         .toResponse(response, "quarterly-report");
  * }</pre>
  *
@@ -308,9 +309,9 @@ public class PxlZipExporter {
      *
      * @param zipOutputStream the archive stream to append entries to
      * @param builder         the configured ZIP export builder (already validated)
-     * @throws PxlException if a workbook object is {@code null} (the builder rejects those up front, so this
-     *                      only surfaces the core builder's own guard), writing an entry fails, or an entry
-     *                      fails to export
+     * @throws PxlException if writing an entry fails, or an entry's body fails to generate - which is the
+     *                      only kind of failure left by the time this method runs, the builder's own checks
+     *                      having all been made before it
      */
     private void writeEntries(final ZipOutputStream zipOutputStream,
                               final Builder builder)
@@ -383,8 +384,7 @@ public class PxlZipExporter {
      *
      * @param outputStream the stream to write the archive to (not closed by this method)
      * @param builder      the configured ZIP export builder (already validated)
-     * @throws PxlException if a workbook object is {@code null}, writing the archive fails, or an entry
-     *                      fails to export
+     * @throws PxlException if writing the archive fails, or an entry's body fails to generate
      */
     private void writeArchive(final OutputStream outputStream,
                               final Builder builder)
@@ -415,8 +415,7 @@ public class PxlZipExporter {
      *
      * @param builder the configured ZIP export builder (already validated)
      * @return a buffer holding the finished archive
-     * @throws PxlException if a workbook object is {@code null}, writing the archive fails, or a workbook
-     *                      fails to export
+     * @throws PxlException if writing the archive fails, or an entry's body fails to generate
      */
     private FastByteArrayOutputStream writeArchiveToBuffer(final Builder builder)
             throws PxlException {
@@ -497,6 +496,7 @@ public class PxlZipExporter {
      *         .poiWorkbook(alreadyBuilt, null, "raw")
      *         .sampleWorkbook(UploadForm.class, null, "template")
      *         .csvSheet(Employee.class, employees, "Employees")
+     *         .sampleCsvSheet(Employee.class, "Upload form")
      *         .toResponse(response, "quarterly-report");
      * }</pre>
      */
@@ -893,8 +893,8 @@ public class PxlZipExporter {
          *
          * <p>Named exactly as {@link #csvSheet(Class, Collection, String, PxlExportWorkbookOption, String)}:
          * {@code .csv} is appended, and an unnamed entry takes the sheet name, which this kind is likewise
-         * required to have. It is the two Excel sample entries that need a {@code PxlSample{index}} default,
-         * having no name of their own to take.</p>
+         * required to have. It is {@link #sampleWorkbook(Class)} that needs a {@code PxlSample{index}}
+         * default: given a class and nothing else, it has no name of its own to take.</p>
          *
          * @param rowClass       the row class describing the columns
          * @param sheetName      the sheet name; must not be blank
@@ -1015,12 +1015,9 @@ public class PxlZipExporter {
          * CSV entry given a password. Those happen inside the write loop, after the headers have gone out.
          * Such a failure does put bytes on the wire - {@link ZipOutputStream#putNextEntry} writes the entry's
          * local file header before the entry's body is generated - so the client receives a download that
-         * starts and stops. What it never receives is a readable one, because the central directory is
-         * written only once every entry is in.</p>
-         *
-         * <p>What a failure never produces is a readable archive: the central directory is written only once
-         * every entry is in, so a client can never mistake a failed download for a complete one - see
-         * {@code writeArchive}.</p>
+         * starts and stops. What it never receives is a <em>readable</em> one: the central directory is
+         * written only once every entry is in, so a failed download can never be mistaken for a complete
+         * archive - see {@code writeArchive}.</p>
          *
          * <p>There is no streaming counterpart for the other destinations: {@link #toStream(OutputStream)} and
          * {@link #toFile(File)} already write straight through, and {@link #toResponseEntity(String)} cannot,
