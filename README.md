@@ -396,7 +396,7 @@ Every operation is handled through a single method chain like the examples above
 |---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Excel export        | `pxlSpring.exportExcel()`<br/>→ `.workbook(...) / .sheet(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Sample Excel export | `pxlSpring.exportSampleExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
-| Excel ZIP export    | `pxlSpring.exportExcelZip()`<br/>→ `.workbook(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
+| Excel ZIP export    | `pxlSpring.exportExcelZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | CSV export          | `pxlSpring.exportCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Sample CSV export   | `pxlSpring.exportSampleCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Excel import        | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
@@ -668,6 +668,20 @@ public void downloadWithRawWorkbook(HttpServletResponse response) throws Excepti
                  .poiWorkbook(chart, null, "chart")   // -> chart.xlsx (XSSF), chart.xls (HSSF)
                  .toResponse(response, "quarterly-report");
     }
+}
+```
+
+**Bundling upload templates**
+
+A sample template entry is what `exportSampleExcel()` produces, put in an archive — the header row plus one row of `@PxlColumn(exportSample = ...)` values. Unnamed, it falls back to `PxlSample{index}`, since a class carries no workbook name.
+
+```java
+@GetMapping("/forms/zip")
+public ResponseEntity<Resource> downloadUploadForms() throws Exception {
+    return pxlSpring.exportExcelZip()
+                    .sampleWorkbook(EmployeeForm.class, null, "employees")
+                    .sampleWorkbook(DepartmentForm.class, null, "departments")
+                    .toResponseEntity("upload-forms");   // -> upload-forms.zip
 }
 ```
 
@@ -993,6 +1007,9 @@ workbook(Object workbookObject, PxlExportWorkbookOption option, String excelFile
 poiWorkbook(Workbook workbook)                                                               // a POI workbook as-is
 poiWorkbook(Workbook workbook, String password)                                              // written encrypted
 poiWorkbook(Workbook workbook, String password, String excelFilename)
+sampleWorkbook(Class<?> workbookClass)                                                       // a sample template
+sampleWorkbook(Class<?> workbookClass, PxlExportWorkbookOption option)
+sampleWorkbook(Class<?> workbookClass, PxlExportWorkbookOption option, String excelFilename)
 
 // execution — the response destinations take the archive file name as an argument (required)
 void                     toStream(OutputStream outputStream)
@@ -1005,6 +1022,7 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 - An entry name is resolved as the name you gave → the workbook name → `Pxl{index}`. A blank name is treated as absent, so resolution moves on to the next step.
 - Its extension is appended from the format the entry is written in: the per-entry option's export engine, else the one the workbook class declares. Name, bytes and deflate level all follow that one answer.
 - With `poiWorkbook(...)` nothing is bound, so there is no per-entry option and no workbook name: the extension comes from the workbook's own type and an unnamed entry falls straight to `Pxl{index}`. Encryption keeps that extension, exactly as on `PxlExcelExporter`.
+- `sampleWorkbook(...)` takes an option like `workbook(...)`, but is given a class rather than an instance, so there is no workbook name to read: an unnamed entry falls straight to `PxlSample{index}`. The index is what keeps unnamed entries apart — `PxlSampleExcelExporter` needs none, since it names a single download.
 - The archive name is required.
 
 ### `PxlCsvExporter`

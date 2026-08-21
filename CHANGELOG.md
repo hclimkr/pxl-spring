@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is the format its body is written in; encryption keeps that extension, as it does on
   `PxlExcelExporter`. This kind carries no workbook name, so an unnamed entry falls straight to
   `Pxl{index}`. Duplicate entry names are still rejected across every kind of entry alike.
+- A sample template can go into a ZIP archive too: `exportExcelZip().sampleWorkbook(workbookClass)`,
+  with `sampleWorkbook(workbookClass, option)` and
+  `sampleWorkbook(workbookClass, option, entryName)` alongside it — the header row plus one row of
+  `@PxlColumn(exportSample = ...)` values, exactly what `exportSampleExcel()` produces on its own,
+  so "download all three upload forms" is one chain. The per-entry option drives the entry's
+  extension as well as its bytes, as on `workbook(...)`. This form is given a class rather than an
+  instance, so there is no workbook name to read: an unnamed entry falls straight to
+  `PxlSample{index}` — with the index, unlike `PxlSampleExcelExporter`'s bare `PxlSample`, because
+  entries share an archive and must come out distinct.
 
 ### Changed
 

@@ -46,23 +46,26 @@ import java.util.zip.ZipOutputStream;
  *
  * <p>Everything is configured through the fluent builder returned by {@link #exportExcelZip()} - add one
  * entry per call ({@code workbook(...)} for a {@code @PxlWorkbook}-annotated object, {@code poiWorkbook(...)}
- * for a raw POI {@link Workbook} you built yourself), then call a terminal ({@code toStream} / {@code toFile} /
- * {@code toResponse} / {@code toResponseStreaming} / {@code toResponseEntity}); the response terminals take
- * the archive's own download file name as an argument, and it is required there - unlike an entry name it has
- * nothing to fall back to:</p>
+ * for a raw POI {@link Workbook} you built yourself, {@code sampleWorkbook(...)} for a sample template
+ * generated from a class), then call a terminal ({@code toStream} / {@code toFile} / {@code toResponse} /
+ * {@code toResponseStreaming} / {@code toResponseEntity}); the response terminals take the archive's own
+ * download file name as an argument, and it is required there - unlike an entry name it has nothing to fall
+ * back to:</p>
  *
  * <pre>{@code
  * pxlSpring.exportExcelZip()
  *         .workbook(januaryReport)
  *         .workbook(februaryReport, option, "February")
  *         .poiWorkbook(alreadyBuilt, null, "raw")
+ *         .sampleWorkbook(UploadForm.class, null, "template")
  *         .toResponse(response, "quarterly-report");
  * }</pre>
  *
- * <p>An entry's file name falls back to the workbook object name - a raw POI workbook carries none, so that
- * kind falls straight through - and then to {@code Pxl{index}}. It must be a plain name - one carrying a path
- * separator is rejected with {@link PxlArgumentException}, so the archive can never hand a traversal path to
- * whoever extracts it.</p>
+ * <p>An entry's file name falls back to the workbook object name - only a {@code workbook(...)} entry has one,
+ * so the other kinds fall straight through - and then to an index-suffixed default ({@code Pxl{index}}, or
+ * {@code PxlSample{index}} for a sample template). It must be a plain name - one carrying a path separator is
+ * rejected with {@link PxlArgumentException}, so the archive can never hand a traversal path to whoever
+ * extracts it.</p>
  *
  * <p>The index fallback only applies when no earlier step yields a name, so it does not make names unique:
  * two entries built from the same workbook class, both relying on the same declared workbook name, resolve to
@@ -467,9 +470,10 @@ public class PxlExcelZipExporter {
      * bundling is a pxl-spring concern - so this builder simply collects archive entries and the archive's
      * own download name, then hands them to a terminal.</p>
      *
-     * <p>Each {@link #workbook(Object)} or {@link #poiWorkbook(Workbook)} call adds one archive entry; there
-     * are no separate option methods, because an entry's export option and file name are arguments of the
-     * overload that adds it - they mean nothing except against that one entry. Terminal methods:
+     * <p>Each {@link #workbook(Object)}, {@link #poiWorkbook(Workbook)} or {@link #sampleWorkbook(Class)} call
+     * adds one archive entry; there are no separate option methods, because an entry's export option and file
+     * name are arguments of the overload that adds it - they mean nothing except against that one entry.
+     * Terminal methods:
      * {@link #toStream(OutputStream)}, {@link #toFile(File)}, {@link #toResponse(HttpServletResponse, String)},
      * {@link #toResponseStreaming(HttpServletResponse, String)}, {@link #toResponseEntity(String)}. Each
      * terminal delegates straight back to the enclosing component so the work still runs inside a
@@ -489,6 +493,7 @@ public class PxlExcelZipExporter {
      *         .workbook(januaryReport)
      *         .workbook(februaryReport, option, "February")
      *         .poiWorkbook(alreadyBuilt, null, "raw")
+     *         .sampleWorkbook(UploadForm.class, null, "template")
      *         .toResponse(response, "quarterly-report");
      * }</pre>
      */
@@ -499,6 +504,15 @@ public class PxlExcelZipExporter {
          * where the kind of entry has one - yields a name; the entry's zero-based index is appended.
          */
         private static final String DEFAULT_EXPORT_EXCEL_FILENAME = "Pxl";
+
+        /**
+         * The same for a sample template entry, which describes a shape rather than a data set.
+         *
+         * <p>Matches the download name {@code PxlSampleExcelExporter} falls back to, except that the index is
+         * appended here: that one names a single download, where uniqueness is nobody's concern, while these
+         * share an archive and must come out distinct.</p>
+         */
+        private static final String DEFAULT_EXPORT_SAMPLE_EXCEL_FILENAME = "PxlSample";
 
         /**
          * The owning component; terminals call back into it so the export runs through its AOP proxy.
@@ -665,6 +679,75 @@ public class PxlExcelZipExporter {
             return this;
         }
 
+        /**
+         * Adds one archive entry holding a sample template generated from a class annotated with
+         * {@code @PxlWorkbook} - the header row plus one row of {@code @PxlColumn(exportSample = ...)} values,
+         * exactly what {@code PxlSampleExcelExporter} produces on its own.
+         *
+         * @param workbookClass the {@code @PxlWorkbook}-annotated class to describe
+         * @return this builder
+         * @throws PxlNullPointerException if {@code workbookClass} is {@code null}
+         */
+        public Builder sampleWorkbook(final Class<?> workbookClass)
+                throws PxlNullPointerException {
+
+            return sampleWorkbook(workbookClass, null, null);
+        }
+
+        /**
+         * Adds one sample template entry, with an export option applied to that entry only.
+         *
+         * <p>The option drives this entry's extension as well as its bytes, on the same terms as
+         * {@link #workbook(Object, PxlExportWorkbookOption)}: an {@code exportExcelEngine} in it takes
+         * precedence over the engine the class declares through {@code @PxlWorkbook}.</p>
+         *
+         * @param workbookClass  the {@code @PxlWorkbook}-annotated class to describe
+         * @param workbookOption the export option for this entry, or {@code null}
+         * @return this builder
+         * @throws PxlNullPointerException if {@code workbookClass} is {@code null}
+         */
+        public Builder sampleWorkbook(final Class<?> workbookClass,
+                                      @Nullable final PxlExportWorkbookOption workbookOption)
+                throws PxlNullPointerException {
+
+            return sampleWorkbook(workbookClass, workbookOption, null);
+        }
+
+        /**
+         * Adds one sample template entry, with an export option and an entry file name applied to that entry
+         * only.
+         *
+         * <p>The name given here carries no extension, which is appended from the format that option - or,
+         * failing that, the class - resolves to.</p>
+         *
+         * <p><strong>An unnamed sample entry falls back to {@code PxlSample{index}}, with no workbook-name
+         * step in between.</strong> That step reads a {@code @PxlWorkbookName} field off an annotated
+         * <em>instance</em>, and this form is given a class; there is nothing to read it from. Nothing is lost
+         * by it: the index is always appended, so unnamed sample entries stay distinct from one another - the
+         * one thing an archive needs. Note the difference from {@code PxlSampleExcelExporter}, which falls
+         * back to a bare {@code PxlSample}: that names a single download, where uniqueness is nobody's
+         * concern.</p>
+         *
+         * @param workbookClass  the {@code @PxlWorkbook}-annotated class to describe
+         * @param workbookOption the export option for this entry, or {@code null}
+         * @param excelFilename  the entry file name without extension; when blank it falls back to
+         *                       {@code PxlSample{index}}
+         * @return this builder
+         * @throws PxlNullPointerException if {@code workbookClass} is {@code null}
+         */
+        public Builder sampleWorkbook(final Class<?> workbookClass,
+                                      @Nullable final PxlExportWorkbookOption workbookOption,
+                                      @Nullable final String excelFilename)
+                throws PxlNullPointerException {
+
+            if (Objects.isNull(workbookClass)) {
+                throw new PxlNullPointerException("workbookClass must not be null");
+            }
+
+            this.entries.add(new SampleWorkbookEntry(workbookClass, workbookOption, excelFilename));
+            return this;
+        }
+
         // ----- terminals -----
 
         /**
@@ -801,7 +884,7 @@ public class PxlExcelZipExporter {
                 throws PxlArgumentException {
 
             if (entries.isEmpty()) {
-                throw new PxlArgumentException("at least one workbook(...) or poiWorkbook(...) entry must be specified");
+                throw new PxlArgumentException("at least one workbook(...), poiWorkbook(...) or sampleWorkbook(...) entry must be specified");
             }
 
             final Set<String> seenEntryNames = new HashSet<>();
@@ -1111,6 +1194,112 @@ public class PxlExcelZipExporter {
                 return StringUtils.isNotBlank(excelFilename)
                         ? excelFilename
                         : DEFAULT_EXPORT_EXCEL_FILENAME + index;
+            }
+
+        }
+
+        /**
+         * An archive member holding a sample template generated from a {@code @PxlWorkbook}-annotated class:
+         * the class to describe, its optional per-entry export option, and its optional entry file name.
+         *
+         * <p>Holds a {@link Class} where {@code WorkbookEntry} holds an instance, which is the whole of the
+         * difference between the two - see {@link #resolveExcelFilename(int)} for what that costs.</p>
+         */
+        private static final class SampleWorkbookEntry extends Entry {
+
+            private final Class<?> workbookClass;
+
+            private final PxlExportWorkbookOption workbookOption;
+
+            private final String excelFilename;
+
+            /**
+             * Creates an archive entry.
+             *
+             * @param workbookClass  the class to describe (never {@code null})
+             * @param workbookOption the export option for this entry, or {@code null}
+             * @param excelFilename  the entry file name without extension, or {@code null}/blank for the
+             *                       fallback
+             */
+            private SampleWorkbookEntry(final Class<?> workbookClass,
+                                        final PxlExportWorkbookOption workbookOption,
+                                        final String excelFilename) {
+
+                this.workbookClass = workbookClass;
+                this.workbookOption = workbookOption;
+                this.excelFilename = excelFilename;
+            }
+
+            /**
+             * Resolves the name this entry takes inside the archive: its file name plus the extension of the
+             * format it is written in - see {@link #resolveFileFormat()}.
+             *
+             * @param index the entry's zero-based index in the archive
+             * @return the entry name, extension included
+             */
+            @Override
+            String resolveEntryName(final int index) {
+
+                return withExtension(resolveExcelFilename(index), resolveFileFormat());
+            }
+
+            /**
+             * Resolves the format this entry is written in: the engine carried by its own export option, else
+             * the one its class declares through {@code @PxlWorkbook}.
+             *
+             * <p>Same priority, and for the same reason, as {@code WorkbookEntry.resolveFileFormat}: the core
+             * is handed that option when the template is generated, so it is the option that decides the
+             * bytes. A template is generated from the class either way, so there is no third source to
+             * consider.</p>
+             *
+             * @return the entry's file format
+             */
+            private PxlFileFormat resolveFileFormat() {
+
+                final PxlExcelEngine optionExcelEngine = Objects.nonNull(workbookOption)
+                        ? workbookOption.getExportExcelEngine()
+                        : null;
+
+                return Objects.nonNull(optionExcelEngine)
+                        ? optionExcelEngine.getFileFormat()
+                        : PxlExcelEngine.fromWorkbookObject(workbookClass).getFileFormat();
+            }
+
+            /**
+             * Generates the sample template straight into the archive stream, applying this entry's own
+             * option.
+             *
+             * @param outputStream the open archive stream, positioned on this entry
+             * @param pxl          the shared core entry point
+             * @throws PxlException if the template fails to generate
+             */
+            @Override
+            void writeBody(final OutputStream outputStream,
+                           final Pxl pxl)
+                    throws PxlException {
+
+                pxl.exportSampleExcel()
+                        .workbook(workbookClass)
+                        .override(workbookOption)
+                        .toStream(outputStream);
+            }
+
+            /**
+             * Resolves this entry's file name: the explicit name, else {@code PxlSample} followed by the entry
+             * index.
+             *
+             * <p>No workbook-name step, and not by choice: {@code PxlWorkbookUtils} reads a workbook name off
+             * an annotated <em>instance</em>, and this kind is given a class. The index is always appended, so
+             * unnamed sample entries are distinct from one another regardless.</p>
+             *
+             * @param index the entry's zero-based index in the archive
+             * @return the entry file name without extension
+             */
+            private String resolveExcelFilename(final int index) {
+
+                return StringUtils.isNotBlank(excelFilename)
+                        ? excelFilename
+                        : DEFAULT_EXPORT_SAMPLE_EXCEL_FILENAME + index;
             }
 
         }

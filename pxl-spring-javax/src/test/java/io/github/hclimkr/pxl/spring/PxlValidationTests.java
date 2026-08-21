@@ -423,7 +423,7 @@ class PxlValidationTests {
     }
 
     @Test
-    void nullPoiWorkbookInZipEntry_throwsPxlNullPointer() {
+    void nullSourceOnEveryZipEntryKind_throwsPxlNullPointer() {
         // the same holds for every kind of entry: adding one is a builder call, so it stays outside bean
         // validation's reach even here, where the component is proxied
         assertThatThrownBy(() ->
@@ -432,6 +432,10 @@ class PxlValidationTests {
 
         assertThatThrownBy(() ->
                 pxlExcelZipExporter.exportExcelZip().poiWorkbook(null, "secret"))
+                .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() ->
+                pxlExcelZipExporter.exportExcelZip().sampleWorkbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
     }
 }

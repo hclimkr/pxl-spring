@@ -1,8 +1,9 @@
 # PXL Spring (Unreleased)
 
 A release about the ZIP exporter. An entry-name collision is caught before the archive is written rather than
-from inside the zip stream, an entry's name now agrees with the bytes in it, and an archive can hold a raw POI
-workbook you built yourself. Built against [PXL](https://github.com/hclimkr/pxl) 0.9.4, unchanged.
+from inside the zip stream, an entry's name now agrees with the bytes in it, and an archive can hold two more
+kinds of member: a raw POI workbook you built yourself, and a sample template generated from a class. Built
+against [PXL](https://github.com/hclimkr/pxl) 0.9.4, unchanged.
 
 Pre-1.0 release carrying **breaking** changes: a collision raises `PxlArgumentException` where it used to
 raise `PxlIOException`, two entry names differing only in case are refused where they used to produce an
@@ -26,6 +27,21 @@ the highlights below.
              .workbook(januaryReport)             // -> january.xlsx, bound from the annotated object
              .poiWorkbook(chart, null, "chart")   // -> chart.xlsx, written as-is
              .toResponse(response, "quarterly-report");
+    ```
+  - **A ZIP entry can be a sample template.** `sampleWorkbook(workbookClass)`,
+    `sampleWorkbook(workbookClass, option)` and `sampleWorkbook(workbookClass, option, entryName)` put what
+    `exportSampleExcel()` produces — the header row plus one row of `@PxlColumn(exportSample = ...)` values —
+    straight into an archive, so handing out several upload forms at once is one chain rather than one
+    download per form. The per-entry option decides the entry's extension as well as its bytes, exactly as on
+    `workbook(...)`. What differs is the name: this form is given a class, and a workbook name is read off an
+    annotated *instance*, so there is nothing to read it from — an unnamed entry resolves straight to
+    `PxlSample{index}`. The index is there because entries share an archive and have to come out distinct;
+    `PxlSampleExcelExporter` falls back to a bare `PxlSample` because it names a single download.
+    ```java
+    pxlSpring.exportExcelZip()
+             .sampleWorkbook(EmployeeForm.class, null, "employees")
+             .sampleWorkbook(DepartmentForm.class, null, "departments")
+             .toResponseEntity("upload-forms");
     ```
   - **A duplicate ZIP entry name fails before anything is written.** Entry names resolve as
     `explicit name` → `@PxlWorkbook` workbook name → `Pxl{index}`, and the index fallback applies only when
