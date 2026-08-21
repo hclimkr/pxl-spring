@@ -43,13 +43,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Behavioural tests for {@link PxlZipExporter}, all driven through the
- * {@link PxlZipExporter.Builder} fluent API: bundling several Excel workbooks into one ZIP across every
- * entry kind, entry form and destination, entry naming (provided name &rarr; workbook name &rarr; index
- * fallback), per-entry export options, and archive validity via {@link ZipFile} (reads the central directory,
- * not just streamed local headers). Five kinds of source reach an entry - a {@code @PxlWorkbook}-annotated
- * object, a raw POI {@link Workbook}, a sample template generated from a class, and the two CSV equivalents -
- * and the invariants that hold them together (one resolved name per entry, an extension that follows the
- * bytes, a duplicate check spanning every kind) are pinned across all of them.
+ * {@link PxlZipExporter.Builder} fluent API: bundling spreadsheets into one ZIP across every kind of entry,
+ * every overload that adds one and every destination, entry naming (provided name &rarr; the name the source
+ * carries &rarr; index fallback), per-entry export options, and archive validity via {@link ZipFile} (reads
+ * the central directory, not just streamed local headers). Five kinds of source reach an entry - a
+ * {@code @PxlWorkbook}-annotated object, a raw POI {@link Workbook}, a sample template generated from a class,
+ * and the two CSV equivalents - and the invariants that hold them together (one resolved name per entry, an
+ * extension that follows the bytes, a duplicate check spanning every kind) are pinned across all of them.
  *
  * <p>CSV expectations that depend on encoding are asserted on the raw entry bytes rather than on a decoded
  * string: decoding first would absorb a byte order mark into U+FEFF and hide whether one was written.</p>
@@ -58,8 +58,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * facade hands back this component's own builder, so what is exercised here is still the component.</p>
  *
  * <p>The last section is different in kind: an archive entry is a polymorphic type, and the two properties
- * that split rests on - one shared entry list, and entry types that stay private nestmates - produce no
- * behaviour of their own while a single kind exists, so they are pinned reflectively.</p>
+ * that split rests on - one shared entry list, and entry types that stay private nestmates - are structural.
+ * Splitting the list per kind would still pass every behavioural test that adds entries of one kind, and
+ * widening a nestmate would pass all of them; both are therefore pinned reflectively. The roster assertion
+ * there also fixes the list of kinds itself, so a sixth one has to be added to it deliberately.</p>
  */
 class PxlZipExporterTests {
 
@@ -517,6 +519,33 @@ class PxlZipExporterTests {
     }
 
     @Test
+    void everyEntryKindInOneArchive_streamsAsAValidArchive() throws PxlException, IOException {
+        // The Dest matrix cannot reach this terminal - asserting on headers needs a live response - so every
+        // streaming test above hands it workbook(...) entries and nothing else. It is the one destination
+        // that writes into the servlet stream rather than into a buffer or a file, and a CSV entry reaches it
+        // through the core's own spill-to-temp-file rendering, so the full mix belongs here too.
+        final MockHttpServletResponse streamed = new MockHttpServletResponse();
+
+        try (Workbook raw = oneCell(new XSSFWorkbook())) {
+            pxlSpring.exportZip()
+                    .workbook(workbook("bound"))
+                    .poiWorkbook(raw, null, "raw")
+                    .sampleWorkbook(TestWorkbook.class, null, "template")
+                    .csvSheet(TestUser.class, users(), "Users")
+                    .sampleCsvSheet(TestUser.class, "Forms")
+                    .toResponseStreaming(streamed, "archive");
+        }
+
+        final byte[] onTheWire = streamed.getContentAsByteArray();
+        assertThat(centralDirectoryEntryNames(onTheWire))
+                .containsExactly("bound.xlsx", "raw.xlsx", "template.xlsx", "Users.csv", "Forms.csv");
+        // not merely named: the bodies survive the unbuffered path as well
+        assertThat(linesOf(entryBytes(onTheWire, "Users.csv")))
+                .containsExactly("Name,Age", "Alice,30", "Bob,25", "");
+        assertThat(streamed.getHeader(HttpHeaders.CONTENT_LENGTH)).isNull();
+    }
+
+    @Test
     void pathCarryingEntryName_isRejectedBeforeHeadersGoOut() {
         // The path check moved into validateEntries, which every terminal calls first, so it now runs before
         // the headers on the streaming path too - the response is left untouched on either path. It used to
@@ -609,6 +638,17 @@ class PxlZipExporterTests {
 
         assertThatThrownBy(() -> named().toResponse(new MockHttpServletResponse(), "  "))
                 .isInstanceOf(PxlArgumentException.class);
+
+        // the streaming terminal resolves the name before it sets a single header, so this failure leaves the
+        // response untouched like the builder's other up-front checks - the one thing that separates it from
+        // a core-level failure on the same terminal
+        final MockHttpServletResponse streamed = new MockHttpServletResponse();
+
+        assertThatThrownBy(() -> named().toResponseStreaming(streamed, "  "))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(streamed.getHeader(HttpHeaders.CONTENT_DISPOSITION)).isNull();
+        assertThat(streamed.getContentAsByteArray()).isEmpty();
     }
 
     @Test
@@ -783,8 +823,11 @@ class PxlZipExporterTests {
                 .containsExactly("report.xlsx", "report.xls");
     }
 
-    // ----- entry-form x destination matrix -----
-    // Three workbook(...) arities, each reachable from all four terminals.
+    // ----- entry-kind x destination matrix -----
+    // Every overload of every kind has to be reachable from every terminal, so each one gets its own sweep -
+    // the sweeps for the four later kinds sit in their own sections below and share this enum. Only
+    // toResponseStreaming is missing from it: it needs a live response to assert headers on, so it is
+    // exercised by the dedicated tests above instead.
 
     /**
      * The four terminal destinations, swept by the matrix tests below.
@@ -966,7 +1009,9 @@ class PxlZipExporterTests {
     }
 
     @Test
-    void mixedEntryForms_areWrittenInCallOrder() throws PxlException, IOException {
+    void workbookArities_areWrittenInCallOrder() throws PxlException, IOException {
+        // one kind, three ways of adding it: an explicit name does not move an entry, it only renames it.
+        // mixedEntryKinds_areWrittenInCallOrder is the same assertion across all five kinds.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         pxlSpring.exportZip()
                 .workbook(workbook("one"))
