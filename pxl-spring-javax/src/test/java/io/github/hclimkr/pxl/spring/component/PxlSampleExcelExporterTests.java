@@ -43,6 +43,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>The builder comes from {@link PxlSpring}, the entry point the documentation guides users to. The
  * facade hands back this component's own builder, so what is exercised here is still the component.</p>
+ *
+ * <p>Every destination is swept rather than spot-checked, through one of two enums: assertions about the
+ * generated template are {@code @ParameterizedTest}s over {@link Dest}, and assertions about the download
+ * headers are the same thing on the other axis, over {@link Download} - the three terminals that have
+ * headers at all, the streaming response included. What stays a plain {@code @Test} is the guards, the
+ * entity-only invariants, and the comparisons one terminal makes against another.</p>
  */
 class PxlSampleExcelExporterTests {
 
@@ -71,233 +77,20 @@ class PxlSampleExcelExporterTests {
         return values;
     }
 
-    // ----- OutputStream -----
-
-    @Test
-    void sampleWorkbookClassToStream_isValidXlsx() throws PxlException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportSampleExcel()
-                .workbook(TestWorkbook.class)
-                .toStream(baos);
-
-        assertThat(isXlsx(baos.toByteArray())).isTrue();
-    }
-
-    @Test
-    void sampleSingleSheetToStream_containsHeaders() throws PxlException, IOException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .toStream(baos);
-
-        assertThat(stringCells(baos.toByteArray())).contains("Name", "Age");
-    }
-
-    @Test
-    void sampleMultiSheetToStream_producesEverySheet() throws PxlException, IOException {
-        // the fluent builder newly allows several sheet(...) calls; the old overloads were single-sheet only
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .sheet(TestUser.class, "Admins")
-                .toStream(baos);
-
-        assertThat(sheetNames(baos.toByteArray())).containsExactly("Users", "Admins");
-    }
-
-    // ----- File -----
-
-    @Test
-    void sampleWorkbookClassToFile_writesValidXlsx() throws PxlException, IOException {
-        final File file = TestPaths.exportFile(testInfo);
-        pxlSpring.exportSampleExcel()
-                .workbook(TestWorkbook.class)
-                .toFile(file);
-
-        assertThat(file).exists();
-        assertThat(isXlsx(Files.readAllBytes(file.toPath()))).isTrue();
-    }
-
-    @Test
-    void sampleSingleSheetToFile_containsHeaders() throws PxlException, IOException {
-        final File file = TestPaths.exportFile(testInfo);
-        pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .toFile(file);
-
-        assertThat(file).exists();
-        assertThat(stringCells(Files.readAllBytes(file.toPath()))).contains("Name", "Age");
-    }
-
-    // ----- HttpServletResponse -----
-
-    @Test
-    void sampleWorkbookClassToResponse_writesTemplate() throws PxlException {
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        pxlSpring.exportSampleExcel()
-                .workbook(TestWorkbook.class)
-                .toResponse(response, "wbTemplate");
-
-        assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("wbTemplate.xlsx");
-        assertThat(isXlsx(response.getContentAsByteArray())).isTrue();
-    }
-
-    @Test
-    void sampleSingleSheetToResponse_writesTemplate() throws PxlException {
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .toResponse(response, "template");
-
-        assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("template.xlsx");
-        assertThat(isXlsx(response.getContentAsByteArray())).isTrue();
-    }
-
     // ----- ResponseEntity<Resource> -----
 
     @Test
     void sampleWorkbookClassToResponseEntity_usesDefaultFilename() throws PxlException {
+        // the entity terminal alone: the body is a view over the download buffer rather than a copy of it,
+        // so the length the header carries and the length the body reads out come from two different places
         final ResponseEntity<Resource> entity = pxlSpring.exportSampleExcel()
                 .workbook(TestWorkbook.class)
                 .toResponseEntity(null);
 
         assertThat(entity.getStatusCode().value()).isEqualTo(200);
         assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).contains("PxlSample.xlsx");
-        // the body is a view over the download buffer rather than a copy of it, so the length the header
-        // carries and the length the body reads out come from two different places and must still agree
         assertThat(entity.getHeaders().getContentLength()).isEqualTo(bodyBytes(entity).length);
         assertThat(isXlsx(bodyBytes(entity))).isTrue();
-    }
-
-    @Test
-    void sampleSingleSheetToResponseEntity_usesDefaultFilename() throws PxlException {
-        final ResponseEntity<Resource> entity = pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .toResponseEntity(null);
-
-        assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).contains("PxlSample.xlsx");
-        assertThat(isXlsx(bodyBytes(entity))).isTrue();
-    }
-
-    @Test
-    void sampleContainsColumnHeaders() throws PxlException, IOException {
-        final ResponseEntity<Resource> entity = pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .toResponseEntity(null);
-
-        assertThat(stringCells(bodyBytes(entity))).contains("Name", "Age");
-    }
-
-    @Test
-    void sampleContainsSampleDataRow() throws PxlException, IOException {
-        final ResponseEntity<Resource> entity = pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .toResponseEntity(null);
-
-        // the template is not empty: @PxlColumn(name = "Name", exportSample = "Alice") on TestUser fills
-        // the single sample data row, so "Alice" (a value, not a header) must be present in the sheet.
-        assertThat(stringCells(bodyBytes(entity))).contains("Alice");
-    }
-
-    @Test
-    void koreanFilename_isRfc5987PercentEncoded() throws PxlException {
-        final ResponseEntity<Resource> entity = pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "사용자")
-                .toResponseEntity("템플릿");
-
-        final String contentDisposition = entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
-        assertThat(contentDisposition).startsWith("attachment; filename=\"___.xlsx\"; filename*=UTF-8''");
-        assertThat(contentDisposition).doesNotContain("템플릿").contains("%");
-    }
-
-    // ----- non-null option engine on the response destinations -----
-    // These take the option.getExportExcelEngine() branch (the null-option tests above take the fallback),
-    // so the download extension is driven by the option rather than the default/workbook engine.
-
-    @Test
-    void sampleWorkbookClassToResponse_withHssfOption_switchesExtensionToXls() throws PxlException {
-        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportExcelEngine(PxlExcelEngine.HSSF)
-                .build();
-
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        pxlSpring.exportSampleExcel()
-                .workbook(TestWorkbook.class)
-                .override(option)
-                .toResponse(response, "wbTemplate");
-
-        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).endsWith("wbTemplate.xls");
-        assertThat(response.getContentAsByteArray()).isNotEmpty();
-    }
-
-    @Test
-    void sampleSingleSheetToResponse_withHssfOption_switchesExtensionToXls() throws PxlException {
-        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportExcelEngine(PxlExcelEngine.HSSF)
-                .build();
-
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .override(option)
-                .toResponse(response, "template");
-
-        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).endsWith("template.xls");
-        assertThat(response.getContentAsByteArray()).isNotEmpty();
-    }
-
-    @Test
-    void sampleWorkbookClassToResponseEntity_withHssfOption_switchesExtensionToXls() throws PxlException {
-        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportExcelEngine(PxlExcelEngine.HSSF)
-                .build();
-
-        final ResponseEntity<Resource> entity = pxlSpring.exportSampleExcel()
-                .workbook(TestWorkbook.class)
-                .override(option)
-                .toResponseEntity("wbTemplate");
-
-        assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).endsWith("wbTemplate.xls");
-        assertThat(bodyBytes(entity)).isNotEmpty();
-    }
-
-    @Test
-    void sampleSingleSheetToResponseEntity_withHssfOption_switchesExtensionToXls() throws PxlException {
-        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportExcelEngine(PxlExcelEngine.HSSF)
-                .build();
-
-        final ResponseEntity<Resource> entity = pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .override(option)
-                .toResponseEntity("template");
-
-        assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).endsWith("template.xls");
-        assertThat(bodyBytes(entity)).isNotEmpty();
-    }
-
-    // ----- blank filename falls back to the default "PxlSample" on the servlet-response destinations -----
-
-    @Test
-    void sampleWorkbookClassToResponse_blankFilename_usesDefaultFilename() throws PxlException {
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        pxlSpring.exportSampleExcel()
-                .workbook(TestWorkbook.class)
-                .toResponse(response, null);
-
-        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("PxlSample.xlsx");
-    }
-
-    @Test
-    void sampleSingleSheetToResponse_blankFilename_usesDefaultFilename() throws PxlException {
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        pxlSpring.exportSampleExcel()
-                .sheet(TestUser.class, "Users")
-                .toResponse(response, "  ");
-
-        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("PxlSample.xlsx");
     }
 
     // ----- builder source guards (delegated to the core builder) -----
@@ -402,7 +195,9 @@ class PxlSampleExcelExporterTests {
 
     // ----- source x destination matrix -----
     // Both source forms are now reachable from all four terminals, and the fluent builder newly allows
-    // several sheet(...) calls; these sweep every pairing rather than spot-checking a few.
+    // several sheet(...) calls; these sweep every pairing rather than spot-checking a few. Every assertion
+    // about the generated template lives here rather than picking one terminal - the template cannot depend
+    // on where it is written. What stays a plain @Test is what only a response can show.
 
     /**
      * The four terminal destinations, swept by the matrix tests below.
@@ -439,6 +234,39 @@ class PxlSampleExcelExporterTests {
         }
     }
 
+    /**
+     * The three destinations that carry download headers. A stream and a file have none to look at, which is
+     * why the header tests cannot ride on {@link Dest} - and why {@code toResponseStreaming}, absent from
+     * that enum, belongs in this one: it resolves the filename through the same {@code resolveFilename}.
+     */
+    enum Download {
+        RESPONSE, RESPONSE_STREAMING, RESPONSE_ENTITY
+    }
+
+    /**
+     * Runs the configured builder against the given download destination and returns the
+     * {@code Content-Disposition} it set, so one assertion can serve all three.
+     */
+    private String contentDisposition(final PxlSampleExcelExporter.Builder builder, final Download dest,
+                                      final String filename) throws PxlException {
+        switch (dest) {
+            case RESPONSE: {
+                final MockHttpServletResponse response = new MockHttpServletResponse();
+                builder.toResponse(response, filename);
+                return response.getHeader(HttpHeaders.CONTENT_DISPOSITION);
+            }
+            case RESPONSE_STREAMING: {
+                final MockHttpServletResponse response = new MockHttpServletResponse();
+                builder.toResponseStreaming(response, filename);
+                return response.getHeader(HttpHeaders.CONTENT_DISPOSITION);
+            }
+            default: {
+                return builder.toResponseEntity(filename)
+                        .getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
+            }
+        }
+    }
+
     @ParameterizedTest
     @EnumSource(Dest.class)
     void workbookClassSource_producesTemplateOnEveryDestination(final Dest dest) throws PxlException, IOException {
@@ -456,12 +284,15 @@ class PxlSampleExcelExporterTests {
                 .sheet(TestUser.class, "Users"), dest);
 
         assertThat(isXlsx(bytes)).isTrue();
+        // the template is not empty: @PxlColumn(name = "Name", exportSample = "Alice") on TestUser fills the
+        // single sample data row, so "Alice" - a value, not a header - must be in the sheet as well
         assertThat(stringCells(bytes)).contains("Name", "Age", "Alice");
     }
 
     @ParameterizedTest
     @EnumSource(Dest.class)
     void multiSheetSource_producesEverySheetOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        // the fluent builder newly allows several sheet(...) calls; the old overloads were single-sheet only
         final byte[] bytes = emit(pxlSpring.exportSampleExcel()
                 .sheet(TestUser.class, "Users")
                 .sheet(TestUser.class, "Admins"), dest);
@@ -502,6 +333,61 @@ class PxlSampleExcelExporterTests {
                 .override(option), dest);
 
         assertThat(isXlsx(bytes)).isFalse();
+    }
+
+    // ----- download headers x response destination -----
+    // A filename and an extension are only observable where headers are, so these sweep Download rather than
+    // Dest. All three terminals resolve the name through the same resolveFilename(String) and the format
+    // through the same resolveFileFormat() - and toResponseStreaming, which the Dest matrix cannot reach, is
+    // swept here alongside the other two.
+
+    @ParameterizedTest
+    @EnumSource(Download.class)
+    void theDefaultFilename_isPxlSample(final Download dest) throws PxlException {
+        // unlike PxlExcelExporter there is no name to fall back through: a template describes a shape, so a
+        // blank name goes straight to the constant - on both source forms, and whether blank means null or
+        // whitespace. An explicit name still outranks it.
+        assertThat(contentDisposition(pxlSpring.exportSampleExcel()
+                .workbook(TestWorkbook.class), dest, null))
+                .contains("PxlSample.xlsx");
+
+        assertThat(contentDisposition(pxlSpring.exportSampleExcel()
+                .sheet(TestUser.class, "Users"), dest, "  "))
+                .contains("PxlSample.xlsx");
+
+        assertThat(contentDisposition(pxlSpring.exportSampleExcel()
+                .sheet(TestUser.class, "Users"), dest, "template"))
+                .contains("template.xlsx");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Download.class)
+    void optionExcelEngine_drivesTheDownloadExtension(final Download dest) throws PxlException {
+        // the option.getExportExcelEngine() branch (the tests above take the fallback), on both source forms
+        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                .exportExcelEngine(PxlExcelEngine.HSSF)
+                .build();
+
+        assertThat(contentDisposition(pxlSpring.exportSampleExcel()
+                .workbook(TestWorkbook.class)
+                .override(option), dest, "wbTemplate"))
+                .endsWith("wbTemplate.xls");
+
+        assertThat(contentDisposition(pxlSpring.exportSampleExcel()
+                .sheet(TestUser.class, "Users")
+                .override(option), dest, "template"))
+                .endsWith("template.xls");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Download.class)
+    void koreanFilename_isRfc5987PercentEncoded(final Download dest) throws PxlException {
+        // the header is assembled in one place, so all three terminals must produce the same one
+        final String contentDisposition = contentDisposition(pxlSpring.exportSampleExcel()
+                .sheet(TestUser.class, "사용자"), dest, "템플릿");
+
+        assertThat(contentDisposition).startsWith("attachment; filename=\"___.xlsx\"; filename*=UTF-8''");
+        assertThat(contentDisposition).doesNotContain("템플릿").contains("%");
     }
 
     // ----- builder call-order independence -----

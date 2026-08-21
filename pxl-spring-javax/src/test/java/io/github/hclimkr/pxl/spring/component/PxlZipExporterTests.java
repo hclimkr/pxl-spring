@@ -57,6 +57,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * <p>The builder comes from {@link PxlSpring}, the entry point the documentation guides users to. The
  * facade hands back this component's own builder, so what is exercised here is still the component.</p>
  *
+ * <p>Every destination is swept rather than spot-checked, through one of two enums: assertions about the
+ * archive - entry names, entry bodies, deflate levels - are {@code @ParameterizedTest}s over {@link Dest},
+ * and assertions about the download headers are the same thing over {@link Download}, the three terminals
+ * that have headers at all. What stays a plain {@code @Test} is the guards and failure paths, what is
+ * bound to one destination by intent (the caller's stream left open, the leftover-file guards, the
+ * write-failure simulations), and the streaming tests that assert on headers and body together.</p>
+ *
  * <p>The last section is different in kind: an archive entry is a polymorphic type, and the two properties
  * that split rests on - one shared entry list, and entry types that stay private nestmates - are structural.
  * Splitting the list per kind would still pass every behavioural test that adds entries of one kind, and
@@ -162,118 +169,6 @@ class PxlZipExporterTests {
         assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("archive.zip");
         assertThat(response.getContentType()).isEqualTo("application/zip");
         assertThat(entryNames(response.getContentAsByteArray())).hasSize(2);
-    }
-
-    @Test
-    void zipToStream_isValidZip() throws PxlException, IOException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        named().toStream(baos);
-
-        assertThat(entryNames(baos.toByteArray())).hasSize(2);
-    }
-
-    @Test
-    void zipToFile_writesValidZip() throws PxlException, IOException {
-        final File zipFile = TestPaths.exportFile(testInfo, ".zip");
-        named().toFile(zipFile);
-
-        assertThat(zipFile).exists();
-        assertThat(entryNames(Files.readAllBytes(zipFile.toPath()))).hasSize(2);
-    }
-
-    @Test
-    void providedFilenames_nameTheEntries() throws PxlException, IOException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .workbook(workbook("first"), null, "a")
-                .workbook(workbook("second"), null, "b")
-                .toStream(baos);
-
-        assertThat(entryNames(baos.toByteArray())).containsExactly("a.xlsx", "b.xlsx");
-    }
-
-    @Test
-    void missingFilenamesAndNames_fallBackToPxlIndex() throws PxlException, IOException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        unnamed().toStream(baos);
-
-        assertThat(entryNames(baos.toByteArray())).containsExactly("Pxl0.xlsx", "Pxl1.xlsx");
-    }
-
-    @Test
-    void blankProvidedFilename_fallsBackToWorkbookName() throws PxlException, IOException {
-        // a blank per-entry name is treated as absent, so the workbook name still wins
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .workbook(workbook("first"), null, "  ")
-                .toStream(baos);
-
-        assertThat(entryNames(baos.toByteArray())).containsExactly("first.xlsx");
-    }
-
-    @Test
-    void workbookName_usedWhenNoFilenameProvided() throws PxlException, IOException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        named().toStream(baos);
-
-        assertThat(entryNames(baos.toByteArray())).containsExactly("first.xlsx", "second.xlsx");
-    }
-
-    // ----- ZipFile (central-directory) validity -----
-    // These fail if the archive bytes are captured before the ZipOutputStream is closed (missing central
-    // directory) - the streaming ZipInputStream checks above would not catch that.
-
-    @Test
-    void zipToResponseEntity_isValidArchiveViaZipFile() throws PxlException, IOException {
-        final ResponseEntity<Resource> entity = named().toResponseEntity("archive");
-
-        assertThat(centralDirectoryEntryNames(bodyBytes(entity))).containsExactly("first.xlsx", "second.xlsx");
-    }
-
-    @Test
-    void zipToResponse_isValidArchiveViaZipFile() throws PxlException, IOException {
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        named().toResponse(response, "archive");
-
-        assertThat(centralDirectoryEntryNames(response.getContentAsByteArray()))
-                .containsExactly("first.xlsx", "second.xlsx");
-    }
-
-    @Test
-    void zipToStream_isValidArchiveViaZipFile() throws PxlException, IOException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        named().toStream(baos);
-
-        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("first.xlsx", "second.xlsx");
-    }
-
-    @Test
-    void zipToFile_isValidArchiveViaZipFile() throws PxlException, IOException {
-        final File zipFile = TestPaths.exportFile(testInfo, ".zip");
-        named().toFile(zipFile);
-
-        assertThat(centralDirectoryEntryNames(Files.readAllBytes(zipFile.toPath())))
-                .containsExactly("first.xlsx", "second.xlsx");
-    }
-
-    @Test
-    void zipEntryContent_isReadableXlsx_andRoundTrips() throws PxlException, IOException {
-        final ResponseEntity<Resource> entity = named().toResponseEntity("archive");
-
-        final File tmp = writeTempZip(bodyBytes(entity));
-        try (ZipFile zipFile = new ZipFile(tmp)) {
-            final ZipEntry entry = zipFile.getEntry("first.xlsx");
-            assertThat(entry).as("central-directory entry first.xlsx").isNotNull();
-
-            try (InputStream in = zipFile.getInputStream(entry)) {
-                @SuppressWarnings("unchecked") final List<TestUser> back = new Pxl().importExcel()
-                        .sheet(TestUser.class, List.class, Collections.singletonList("Users"))
-                        .fromStream(in);
-                assertThat(back).extracting(TestUser::getName).containsExactly("Alice", "Bob");
-            }
-        } finally {
-            tmp.delete();
-        }
     }
 
     @Test
@@ -427,15 +322,14 @@ class PxlZipExporterTests {
                 .isInstanceOf(PxlNullPointerException.class);
     }
 
-    @Test
-    void xlsxEntriesAreNotRecompressed_whileXlsEntriesStillAre() throws PxlException, IOException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void xlsxEntriesAreNotRecompressed_whileXlsEntriesStillAre(final Dest dest) throws PxlException, IOException {
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook("ooxml"))                          // -> ooxml.xlsx
-                .workbook(new TestHssfWorkbook("ole2", users()))      // -> ole2.xls
-                .toStream(baos);
+                .workbook(new TestHssfWorkbook("ole2", users())), dest);      // -> ole2.xls
 
-        final File tmp = writeTempZip(baos.toByteArray());
+        final File tmp = writeTempZip(bytes);
         try (ZipFile zipFile = new ZipFile(tmp)) {
             // .xlsx is itself a deflated container, so it is written at NO_COMPRESSION to skip a pointless
             // compression pass. A deflate stream carries that as stored blocks (5 bytes of framing per 64KB),
@@ -452,22 +346,22 @@ class PxlZipExporterTests {
         }
     }
 
-    @Test
-    void aDotInTheEntryBaseName_doesNotFoolTheDeflateLevel() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void aDotInTheEntryBaseName_doesNotFoolTheDeflateLevel(final Dest dest) throws PxlException, IOException {
         // The level is read back off the finished entry name, so the caller's own base name now reaches the
         // extension parser - it did not while the level came straight from the format. A base name carrying
         // dots ("2026.01") is ordinary, and everything after the last one is what decides here, so both
         // entries must be treated exactly as the plain-named ones above.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .workbook(workbook("ignored"), null, "2026.01")                          // -> 2026.01.xlsx
-                .workbook(new TestHssfWorkbook("ignored", users()), null, "2026.02")     // -> 2026.02.xls
-                .toStream(baos);
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                        .workbook(workbook("ignored"), null, "2026.01")                          // -> 2026.01.xlsx
+                        .workbook(new TestHssfWorkbook("ignored", users()), null, "2026.02"),    // -> 2026.02.xls
+                dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+        assertThat(centralDirectoryEntryNames(bytes))
                 .containsExactly("2026.01.xlsx", "2026.02.xls");
 
-        final File tmp = writeTempZip(baos.toByteArray());
+        final File tmp = writeTempZip(bytes);
         try (ZipFile zipFile = new ZipFile(tmp)) {
             final ZipEntry xlsx = zipFile.getEntry("2026.01.xlsx");
             assertThat(xlsx.getCompressedSize()).isGreaterThan(xlsx.getSize());
@@ -795,31 +689,29 @@ class PxlZipExporterTests {
         assertThat(response.getContentAsByteArray()).isEmpty();
     }
 
-    @Test
-    void anExplicitNameSeparatesWorkbooksDeclaringTheSameName() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void anExplicitNameSeparatesWorkbooksDeclaringTheSameName(final Dest dest) throws PxlException, IOException {
         // the documented way out of the collision, pinned so the advice in the workbook(...) javadoc keeps
         // working
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook("same"), null, "january")
-                .workbook(workbook("same"), null, "february")
-                .toStream(baos);
+                .workbook(workbook("same"), null, "february"), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+        assertThat(centralDirectoryEntryNames(bytes))
                 .containsExactly("january.xlsx", "february.xlsx");
     }
 
-    @Test
-    void differingExtensions_makeTheSameBaseNameTwoDistinctEntries() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void differingExtensions_makeTheSameBaseNameTwoDistinctEntries(final Dest dest) throws PxlException, IOException {
         // the collision above is on the full entry name, extension included: the same base name under two
         // declared engines is two members, not a clash
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook("report"))                            // -> report.xlsx
-                .workbook(new TestHssfWorkbook("report", users()))       // -> report.xls
-                .toStream(baos);
+                .workbook(new TestHssfWorkbook("report", users())), dest);       // -> report.xls
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+        assertThat(centralDirectoryEntryNames(bytes))
                 .containsExactly("report.xlsx", "report.xls");
     }
 
@@ -828,6 +720,16 @@ class PxlZipExporterTests {
     // the sweeps for the four later kinds sit in their own sections below and share this enum. Only
     // toResponseStreaming is missing from it: it needs a live response to assert headers on, so it is
     // exercised by the dedicated tests above instead.
+    //
+    // Everything that asserts on the archive - entry names, entry bodies, deflate levels - is swept rather
+    // than written against one terminal: none of it can depend on where the bytes are written, and a
+    // single-destination test could only ever show one of the four. Reading back through
+    // centralDirectoryEntryNames is part of that: it needs the end-of-central-directory record, so it also
+    // fails on an archive whose bytes were captured before the ZipOutputStream was closed - which the
+    // streaming ZipInputStream reader in entryNames would not catch. What stays a plain @Test is what only
+    // a response can show (download headers, the untouched response on failure), what is bound to one
+    // destination by intent (the caller's stream left open, the leftover-file guards, the write-failure
+    // simulations), and the guards, which never produce an archive at all.
 
     /**
      * The four terminal destinations, swept by the matrix tests below.
@@ -864,6 +766,47 @@ class PxlZipExporterTests {
         }
     }
 
+    /**
+     * The three destinations that carry download headers. A stream and a file have none to look at, which is
+     * why the archive-name tests cannot ride on {@link Dest} - and why {@code toResponseStreaming}, absent
+     * from that enum, belongs in this one: it resolves the name through the same {@code resolveZipFilename}.
+     */
+    enum Download {
+        RESPONSE, RESPONSE_STREAMING, RESPONSE_ENTITY
+    }
+
+    /**
+     * Runs the configured builder against the given download destination and returns the
+     * {@code Content-Disposition} it set, so one assertion can serve all three.
+     */
+    private String contentDisposition(final PxlZipExporter.Builder builder, final Download dest,
+                                      final String filename) throws PxlException {
+        switch (dest) {
+            case RESPONSE: {
+                final MockHttpServletResponse response = new MockHttpServletResponse();
+                builder.toResponse(response, filename);
+                return response.getHeader(HttpHeaders.CONTENT_DISPOSITION);
+            }
+            case RESPONSE_STREAMING: {
+                final MockHttpServletResponse response = new MockHttpServletResponse();
+                builder.toResponseStreaming(response, filename);
+                return response.getHeader(HttpHeaders.CONTENT_DISPOSITION);
+            }
+            default: {
+                return builder.toResponseEntity(filename)
+                        .getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Download.class)
+    void theArchiveFilename_takesTheZipExtension(final Download dest) throws PxlException {
+        // there is no fallback here - resolveZipFilename rejects a blank name rather than inventing one, so
+        // what a terminal does with the name it is given is all there is to sweep
+        assertThat(contentDisposition(named(), dest, "archive")).contains("archive.zip");
+    }
+
     @ParameterizedTest
     @EnumSource(Dest.class)
     void workbookWithoutOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
@@ -898,6 +841,26 @@ class PxlZipExporterTests {
 
     @ParameterizedTest
     @EnumSource(Dest.class)
+    void missingFilenamesAndNames_fallBackToPxlIndexOnEveryDestination(final Dest dest)
+            throws PxlException, IOException {
+        final byte[] bytes = emit(unnamed(), dest);
+
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Pxl0.xlsx", "Pxl1.xlsx");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void blankProvidedFilename_fallsBackToWorkbookNameOnEveryDestination(final Dest dest)
+            throws PxlException, IOException {
+        // a blank per-entry name is treated as absent, so the workbook name still wins
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                .workbook(workbook("first"), null, "  "), dest);
+
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("first.xlsx");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
     void singleEntryArchive_isValidOnEveryDestination(final Dest dest) throws PxlException, IOException {
         final byte[] bytes = emit(pxlSpring.exportZip().workbook(workbook("only")), dest);
 
@@ -906,9 +869,32 @@ class PxlZipExporterTests {
 
     @ParameterizedTest
     @EnumSource(Dest.class)
+    void zipEntryContent_isReadableXlsx_andRoundTripsOnEveryDestination(final Dest dest)
+            throws PxlException, IOException {
+        // the names above only prove the directory; this opens an entry and binds it back to rows
+        final byte[] bytes = emit(named(), dest);
+
+        final File tmp = writeTempZip(bytes);
+        try (ZipFile zipFile = new ZipFile(tmp)) {
+            final ZipEntry entry = zipFile.getEntry("first.xlsx");
+            assertThat(entry).as("central-directory entry first.xlsx").isNotNull();
+
+            try (InputStream in = zipFile.getInputStream(entry)) {
+                @SuppressWarnings("unchecked") final List<TestUser> back = new Pxl().importExcel()
+                        .sheet(TestUser.class, List.class, Collections.singletonList("Users"))
+                        .fromStream(in);
+                assertThat(back).extracting(TestUser::getName).containsExactly("Alice", "Bob");
+            }
+        } finally {
+            tmp.delete();
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
     void everyEntryKindInOneArchive_isValidOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        // Each kind has its own sweep above, and eachEntryKindNamesItselfAfterTheBytesItWrites mixes all five
-        // - but only into a stream. This is the case the component exists for, so it gets the full matrix: an
+        // Each kind has its own sweep above, and eachEntryKindNamesItselfAfterTheBytesItWrites goes further
+        // into the extensions each one resolves. This is the case the component exists for, kept short: an
         // archive of every kind at once has to open through its central directory on every destination, with
         // the names in call order.
         try (Workbook raw = oneCell(new XSSFWorkbook())) {
@@ -926,59 +912,56 @@ class PxlZipExporterTests {
 
     // ----- per-entry export options -----
 
-    @Test
-    void perEntryOption_drivesTheEntryExtensionAsWellAsItsBody() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void perEntryOption_drivesTheEntryExtensionAsWellAsItsBody(final Dest dest) throws PxlException, IOException {
         // The option decides the bytes, so it decides the extension - it is asked before the workbook class's
         // declared engine, the same priority PxlExcelExporter.resolveFileFormat() uses. It used to be asked
         // second, which put OLE2 bytes under a .xlsx entry name.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook("hssf"), hssfOption())
-                .workbook(workbook("xssf"))
-                .toStream(baos);
+                .workbook(workbook("xssf")), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("hssf.xls", "xssf.xlsx");
-        assertThat(isXlsx(entryBytes(baos.toByteArray(), "hssf.xls"))).isFalse();
-        assertThat(isXlsx(entryBytes(baos.toByteArray(), "xssf.xlsx"))).isTrue();
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("hssf.xls", "xssf.xlsx");
+        assertThat(isXlsx(entryBytes(bytes, "hssf.xls"))).isFalse();
+        assertThat(isXlsx(entryBytes(bytes, "xssf.xlsx"))).isTrue();
     }
 
-    @Test
-    void perEntryOption_overridesADeclaredEngineInEitherDirection() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void perEntryOption_overridesADeclaredEngineInEitherDirection(final Dest dest) throws PxlException, IOException {
         // the other way round: a class declaring HSSF, turned back into XLSX by its entry's option
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .workbook(new TestHssfWorkbook("declared-hssf", users()), xssfOption())
-                .toStream(baos);
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                .workbook(new TestHssfWorkbook("declared-hssf", users()), xssfOption()), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("declared-hssf.xlsx");
-        assertThat(isXlsx(entryBytes(baos.toByteArray(), "declared-hssf.xlsx"))).isTrue();
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("declared-hssf.xlsx");
+        assertThat(isXlsx(entryBytes(bytes, "declared-hssf.xlsx"))).isTrue();
     }
 
-    @Test
-    void anOptionCarryingNoEngine_leavesTheExtensionToTheClass() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void anOptionCarryingNoEngine_leavesTheExtensionToTheClass(final Dest dest) throws PxlException, IOException {
         // only an exportExcelEngine takes over; an option without one falls through to the class declaration,
         // which is what keeps the null branch of resolveFileFormat honest
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .workbook(workbook("xssf-class"), PxlExportWorkbookOption.builder().build())
-                .workbook(new TestHssfWorkbook("hssf-class", users()), PxlExportWorkbookOption.builder().build())
-                .toStream(baos);
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                        .workbook(workbook("xssf-class"), PxlExportWorkbookOption.builder().build())
+                        .workbook(new TestHssfWorkbook("hssf-class", users()), PxlExportWorkbookOption.builder().build()),
+                dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+        assertThat(centralDirectoryEntryNames(bytes))
                 .containsExactly("xssf-class.xlsx", "hssf-class.xls");
     }
 
-    @Test
-    void anOptionDrivenXlsEntry_isCompressedAsTheOle2ItActuallyIs() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void anOptionDrivenXlsEntry_isCompressedAsTheOle2ItActuallyIs(final Dest dest) throws PxlException, IOException {
         // deflateLevelFor reads the same resolved format, so the compression follows the bytes that are
         // written. While the extension came from the class, this entry was OLE2 stored at NO_COMPRESSION -
         // uncompressed data written uncompressed, the worst of both.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .workbook(workbook("ole2"), hssfOption())
-                .toStream(baos);
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                .workbook(workbook("ole2"), hssfOption()), dest);
 
-        final File tmp = writeTempZip(baos.toByteArray());
+        final File tmp = writeTempZip(bytes);
         try (ZipFile zipFile = new ZipFile(tmp)) {
             final ZipEntry xls = zipFile.getEntry("ole2.xls");
             assertThat(xls.getCompressedSize()).isLessThan(xls.getSize());
@@ -1008,32 +991,40 @@ class PxlZipExporterTests {
                 .isInstanceOf(PxlArgumentException.class);
     }
 
-    @Test
-    void workbookArities_areWrittenInCallOrder() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void workbookArities_areWrittenInCallOrder(final Dest dest) throws PxlException, IOException {
         // one kind, three ways of adding it: an explicit name does not move an entry, it only renames it.
         // mixedEntryKinds_areWrittenInCallOrder is the same assertion across all five kinds.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook("one"))
                 .workbook(workbook("two"))
-                .workbook(workbook("ignored"), null, "three")
-                .toStream(baos);
+                .workbook(workbook("ignored"), null, "three"), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+        assertThat(centralDirectoryEntryNames(bytes))
                 .containsExactly("one.xlsx", "two.xlsx", "three.xlsx");
     }
 
-    @Test
-    void koreanEntryAndArchiveNames_areCarriedThrough() throws PxlException, IOException {
-        final ResponseEntity<Resource> entity = pxlSpring.exportZip()
-                .workbook(workbook("무시됨"), null, "사용자")
-                .toResponseEntity("보고서모음");
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void koreanEntryNames_areCarriedThrough(final Dest dest) throws PxlException, IOException {
+        // the ZIP entry name is not a header, so it keeps its Korean characters whichever terminal writes it
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                .workbook(workbook("무시됨"), null, "사용자"), dest);
 
-        final String contentDisposition = entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("사용자.xlsx");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Download.class)
+    void koreanArchiveFilename_isRfc5987PercentEncoded(final Download dest) throws PxlException {
+        // the archive name is a header, and it is assembled in one place - so all three terminals that carry
+        // headers must produce the same one
+        final String contentDisposition = contentDisposition(pxlSpring.exportZip()
+                .workbook(workbook("무시됨"), null, "사용자"), dest, "보고서모음");
+
         assertThat(contentDisposition).startsWith("attachment; filename=\"_____.zip\"; filename*=UTF-8''");
         assertThat(contentDisposition).doesNotContain("보고서모음").contains("%");
-        // the ZIP entry name is not a header, so it keeps its Korean characters
-        assertThat(centralDirectoryEntryNames(bodyBytes(entity))).containsExactly("사용자.xlsx");
     }
 
     // ----- raw POI workbook entries -----
@@ -1113,23 +1104,24 @@ class PxlZipExporterTests {
         }
     }
 
-    @Test
-    void blankEntryNameOnARawPoiWorkbook_fallsBackToPxlIndex() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void blankEntryNameOnARawPoiWorkbook_fallsBackToPxlIndex(final Dest dest) throws PxlException, IOException {
         // a blank name is treated as absent, exactly as on a workbook(...) entry - only here there is no
         // workbook name in between, so it goes straight to the index
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportZip()
-                    .poiWorkbook(xssf, null, "  ")
-                    .toStream(baos);
+            final byte[] bytes = emit(pxlSpring.exportZip()
+                    .poiWorkbook(xssf, null, "  "), dest);
 
-            assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("Pxl0.xlsx");
+            assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Pxl0.xlsx");
         }
     }
 
-    @Test
-    void poiWorkbookEntryBytes_reopenAsTheWorkbooksThatWentIn() throws PxlException, IOException {
-        // The counterpart of zipEntryContent_isReadableXlsx_andRoundTrips for this kind, and the check that
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void poiWorkbookEntryBytes_reopenAsTheWorkbooksThatWentIn(final Dest dest) throws PxlException, IOException {
+        // The counterpart of zipEntryContent_isReadableXlsx_andRoundTripsOnEveryDestination for this kind,
+        // and the check that
         // costs the least to get wrong: PxlWorkbookUtils writes straight into the open archive stream, so a
         // body that were truncated - or an entry that closed the stream out from under the next one - would
         // still start with the right magic bytes. Distinct cell values also pin each entry to its own
@@ -1138,48 +1130,43 @@ class PxlZipExporterTests {
              Workbook locked = oneCell(new XSSFWorkbook(), "locked");
              Workbook ole2 = oneCell(new HSSFWorkbook(), "ole2")) {
 
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportZip()
+            final byte[] archive = emit(pxlSpring.exportZip()
                     .poiWorkbook(plain, null, "plain")
                     .poiWorkbook(locked, "secret", "locked")
-                    .poiWorkbook(ole2, null, "ole2")
-                    .toStream(baos);
+                    .poiWorkbook(ole2, null, "ole2"), dest);
 
-            final byte[] archive = baos.toByteArray();
             assertThat(firstCellOf(entryBytes(archive, "plain.xlsx"), null)).isEqualTo("plain");
             assertThat(firstCellOf(entryBytes(archive, "locked.xlsx"), "secret")).isEqualTo("locked");
             assertThat(firstCellOf(entryBytes(archive, "ole2.xls"), null)).isEqualTo("ole2");
         }
     }
 
-    @Test
-    void poiWorkbookEntrySxssf_isNamedXlsxLikeItsXssfBase() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void poiWorkbookEntrySxssf_isNamedXlsxLikeItsXssfBase(final Dest dest) throws PxlException, IOException {
         // SXSSFWorkbook wraps rather than extends XSSFWorkbook, so it is its own PxlExcelEngine - but both
         // write the same OOXML container, one PxlFileFormat, and the entry is named off the format
         try (SXSSFWorkbook sxssf = oneCell(new SXSSFWorkbook())) {
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportZip()
-                    .poiWorkbook(sxssf, null, "streamed")
-                    .toStream(baos);
+            final byte[] bytes = emit(pxlSpring.exportZip()
+                    .poiWorkbook(sxssf, null, "streamed"), dest);
 
-            assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("streamed.xlsx");
-            assertThat(isXlsx(entryBytes(baos.toByteArray(), "streamed.xlsx"))).isTrue();
+            assertThat(centralDirectoryEntryNames(bytes)).containsExactly("streamed.xlsx");
+            assertThat(isXlsx(entryBytes(bytes, "streamed.xlsx"))).isTrue();
         }
     }
 
-    @Test
-    void poiWorkbookEntryWithPassword_keepsTheWorkbookTypeInTheEntryName() throws PxlException, IOException {
-        // Paired with PxlExcelExporterTests.poiWorkbookPassword_keepsTheWorkbookTypeInTheHeaders: encryption
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void poiWorkbookEntryWithPassword_keepsTheWorkbookTypeInTheEntryName(final Dest dest)
+            throws PxlException, IOException {
+        // Paired with PxlExcelExporterTests.poiWorkbookHeaders_followTheWorkbookType: encryption
         // wraps the bytes in an OLE2 container whatever the workbook type, but the name still follows the
         // workbook - which is how an encrypted OOXML file is normally distributed. The entry kind inherits
         // that property rather than deciding its own.
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportZip()
-                    .poiWorkbook(xssf, "secret", "locked")
-                    .toStream(baos);
+            final byte[] archive = emit(pxlSpring.exportZip()
+                    .poiWorkbook(xssf, "secret", "locked"), dest);
 
-            final byte[] archive = baos.toByteArray();
             assertThat(centralDirectoryEntryNames(archive)).containsExactly("locked.xlsx");
             assertThat(isXlsx(entryBytes(archive, "locked.xlsx"))).isFalse();
             assertThat(entryBytes(archive, "locked.xlsx")).isNotEmpty();
@@ -1259,72 +1246,68 @@ class PxlZipExporterTests {
         assertThat(centralDirectoryEntryNames(bytes)).containsExactly("form-a.xlsx", "form-b.xlsx");
     }
 
-    @Test
-    void blankEntryNameOnASampleWorkbook_fallsBackToPxlSampleIndex() throws PxlException, IOException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .sampleWorkbook(TestWorkbook.class, null, "  ")
-                .toStream(baos);
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void blankEntryNameOnASampleWorkbook_fallsBackToPxlSampleIndex(final Dest dest) throws PxlException, IOException {
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                .sampleWorkbook(TestWorkbook.class, null, "  "), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("PxlSample0.xlsx");
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("PxlSample0.xlsx");
     }
 
-    @Test
-    void sampleEntryDefault_isPxlSampleIndexRatherThanPxlIndex() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void sampleEntryDefault_isPxlSampleIndexRatherThanPxlIndex(final Dest dest) throws PxlException, IOException {
         // Two things at once. The prefixes differ, so an unnamed template is not mistaken for an unnamed
         // export; and the index is appended to both, which is what keeps unnamed entries of either kind
         // distinct - the reason this default carries one where PxlSampleExcelExporter's bare "PxlSample"
         // does not.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook(null))
                 .sampleWorkbook(TestWorkbook.class)
-                .sampleWorkbook(TestWorkbook.class)
-                .toStream(baos);
+                .sampleWorkbook(TestWorkbook.class), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+        assertThat(centralDirectoryEntryNames(bytes))
                 .containsExactly("Pxl0.xlsx", "PxlSample1.xlsx", "PxlSample2.xlsx");
     }
 
-    @Test
-    void sampleWorkbookEntryBytes_carryTheHeaderAndTheSampleRow() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void sampleWorkbookEntryBytes_carryTheHeaderAndTheSampleRow(final Dest dest) throws PxlException, IOException {
         // the body is a real template, not an empty workbook: PxlSampleExcelExporter's own promise, inherited
         // here because the entry generates itself through the same core builder
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .sampleWorkbook(TestWorkbook.class, null, "form")
-                .toStream(baos);
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                .sampleWorkbook(TestWorkbook.class, null, "form"), dest);
 
-        assertThat(stringCellsOf(entryBytes(baos.toByteArray(), "form.xlsx")))
+        assertThat(stringCellsOf(entryBytes(bytes, "form.xlsx")))
                 .contains("Name", "Age", "Alice");
     }
 
-    @Test
-    void sampleWorkbookOption_overridesADeclaredEngineInEitherDirection() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void sampleWorkbookOption_overridesADeclaredEngineInEitherDirection(final Dest dest)
+            throws PxlException, IOException {
         // the direction sampleWorkbookWithOption_... does not take: a class declaring HSSF, turned back into
         // XLSX by its entry's option. Both branches of resolveFileFormat's option check have to work, or the
         // priority is only half right.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .sampleWorkbook(TestHssfWorkbook.class, xssfOption(), "declared-hssf")
-                .toStream(baos);
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                .sampleWorkbook(TestHssfWorkbook.class, xssfOption(), "declared-hssf"), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("declared-hssf.xlsx");
-        assertThat(isXlsx(entryBytes(baos.toByteArray(), "declared-hssf.xlsx"))).isTrue();
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("declared-hssf.xlsx");
+        assertThat(isXlsx(entryBytes(bytes, "declared-hssf.xlsx"))).isTrue();
     }
 
-    @Test
-    void aSampleOptionCarryingNoEngine_leavesTheExtensionToTheClass() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void aSampleOptionCarryingNoEngine_leavesTheExtensionToTheClass(final Dest dest) throws PxlException, IOException {
         // Only an exportExcelEngine takes over. Passing null for the whole option skips the inner null check
         // entirely, so an option that exists but carries no engine is the case that keeps it honest - the
         // same gap anOptionCarryingNoEngine_leavesTheExtensionToTheClass closes for workbook(...).
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, PxlExportWorkbookOption.builder().build())
-                .sampleWorkbook(TestHssfWorkbook.class, PxlExportWorkbookOption.builder().build())
-                .toStream(baos);
+                .sampleWorkbook(TestHssfWorkbook.class, PxlExportWorkbookOption.builder().build()), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+        assertThat(centralDirectoryEntryNames(bytes))
                 .containsExactly("PxlSample0.xlsx", "PxlSample1.xls");
     }
 
@@ -1348,18 +1331,16 @@ class PxlZipExporterTests {
                 .isInstanceOf(PxlArgumentException.class);
     }
 
-    @Test
-    void sampleWorkbookEntries_eachCarryTheirOwnClassTemplate() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void sampleWorkbookEntries_eachCarryTheirOwnClassTemplate(final Dest dest) throws PxlException, IOException {
         // writeBody opens a fresh core builder per entry, so nothing carries over between them. Shared, the
         // second entry would inherit the first one's sheets - which the sheet names make visible in a way the
         // extension never could, since both classes resolve to XLSX.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] archive = emit(pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, null, "one-sheet")
-                .sampleWorkbook(TestMultiSheetWorkbook.class, null, "two-sheets")
-                .toStream(baos);
+                .sampleWorkbook(TestMultiSheetWorkbook.class, null, "two-sheets"), dest);
 
-        final byte[] archive = baos.toByteArray();
         assertThat(sheetNames(entryBytes(archive, "one-sheet.xlsx"))).containsExactly("Users");
         assertThat(sheetNames(entryBytes(archive, "two-sheets.xlsx"))).containsExactly("Users", "Admins");
     }
@@ -1454,29 +1435,26 @@ class PxlZipExporterTests {
         assertThat(centralDirectoryEntryNames(bytes)).containsExactly("form-a.csv", "form-b.csv");
     }
 
-    @Test
-    void blankEntryNameOnACsvEntry_fallsBackToTheSheetName() throws PxlException, IOException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void blankEntryNameOnACsvEntry_fallsBackToTheSheetName(final Dest dest) throws PxlException, IOException {
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", null, "  ")
-                .sampleCsvSheet(TestUser.class, "Forms", null, "  ")
-                .toStream(baos);
+                .sampleCsvSheet(TestUser.class, "Forms", null, "  "), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("Users.csv", "Forms.csv");
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Users.csv", "Forms.csv");
     }
 
-    @Test
-    void csvEntryBytes_carryTheRecordsThatWentIn() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void csvEntryBytes_carryTheRecordsThatWentIn(final Dest dest) throws PxlException, IOException {
         // Distinct rows per entry, so this also pins that each entry opens its own core builder: shared, the
         // second entry would carry the first one's rows, which the entry names could never show.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] archive = emit(pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users")
                 .csvSheet(TestUser.class, Collections.singletonList(new TestUser("Carol", 41)), "Admins")
-                .sampleCsvSheet(TestUser.class, "Forms")
-                .toStream(baos);
+                .sampleCsvSheet(TestUser.class, "Forms"), dest);
 
-        final byte[] archive = baos.toByteArray();
         assertThat(linesOf(entryBytes(archive, "Users.csv")))
                 .containsExactly("Name,Age", "Alice,30", "Bob,25", "");
         assertThat(linesOf(entryBytes(archive, "Admins.csv")))
@@ -1486,19 +1464,21 @@ class PxlZipExporterTests {
                 .containsExactly("Name,Age", "Alice,30", "");
     }
 
-    @Test
-    void csvEntryContent_isReadableCsv_andRoundTrips() throws PxlException, IOException, HttpMediaTypeNotSupportedException {
-        // The counterpart of zipEntryContent_isReadableXlsx_andRoundTrips: what came out of the archive is a
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void csvEntryContent_isReadableCsv_andRoundTrips(final Dest dest)
+            throws PxlException, IOException, HttpMediaTypeNotSupportedException {
+        // The counterpart of zipEntryContent_isReadableXlsx_andRoundTripsOnEveryDestination: what came out of
+        // the archive is a
         // CSV this library reads back, not merely bytes that split on CRLF the way we expected. A
         // FileSystemResource because importCsv refuses a resource with no file name - there would be no
         // extension to check.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .csvSheet(TestUser.class, users(), "Users")
-                .toStream(baos);
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                .csvSheet(TestUser.class, users(), "Users"), dest);
 
-        final File extracted = TestPaths.exportFile(testInfo, ".csv");
-        Files.write(extracted.toPath(), entryBytes(baos.toByteArray(), "Users.csv"));
+        final File extracted = TestPaths.exportFile(testInfo.getTestMethod()
+                .orElseThrow(IllegalStateException::new).getName() + "-" + dest + "-entry.csv");
+        Files.write(extracted.toPath(), entryBytes(bytes, "Users.csv"));
 
         final List<TestUser> back = pxlSpring.importCsv()
                 .sheet(TestUser.class)
@@ -1508,34 +1488,32 @@ class PxlZipExporterTests {
         assertThat(back).extracting(TestUser::getAge).containsExactly(30, 25);
     }
 
-    @Test
-    void emptyRowsOnACsvEntry_stillWriteTheHeader() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void emptyRowsOnACsvEntry_stillWriteTheHeader(final Dest dest) throws PxlException, IOException {
         // an export with nothing in it is ordinary - a report for a quiet month - and it must still produce a
         // well-formed member rather than an empty one
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
-                .csvSheet(TestUser.class, Collections.<TestUser>emptyList(), "Users")
-                .toStream(baos);
+        final byte[] bytes = emit(pxlSpring.exportZip()
+                .csvSheet(TestUser.class, Collections.<TestUser>emptyList(), "Users"), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("Users.csv");
-        assertThat(linesOf(entryBytes(baos.toByteArray(), "Users.csv"))).containsExactly("Name,Age", "");
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Users.csv");
+        assertThat(linesOf(entryBytes(bytes, "Users.csv"))).containsExactly("Name,Age", "");
     }
 
-    @Test
-    void csvEntryNames_carryNoIndexUnlikeTheSampleDefaults() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void csvEntryNames_carryNoIndexUnlikeTheSampleDefaults(final Dest dest) throws PxlException, IOException {
         // The mirror of sampleEntryDefault_isPxlSampleIndexRatherThanPxlIndex. Two kinds append the entry
         // index to their default because their source may carry no name; the CSV pair never does, because a
         // sheet name is required and is therefore always there to take. Placed last on purpose - at index 2 an
         // appended index would be visible.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook(null))
                 .sampleWorkbook(TestWorkbook.class)
                 .csvSheet(TestUser.class, users(), "Users")
-                .sampleCsvSheet(TestUser.class, "Forms")
-                .toStream(baos);
+                .sampleCsvSheet(TestUser.class, "Forms"), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+        assertThat(centralDirectoryEntryNames(bytes))
                 .containsExactly("Pxl0.xlsx", "PxlSample1.xlsx", "Users.csv", "Forms.csv");
     }
 
@@ -1567,52 +1545,47 @@ class PxlZipExporterTests {
                 .isInstanceOf(PxlArgumentException.class);
     }
 
-    @Test
-    void csvEntryBytes_carryTheBom() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void csvEntryBytes_carryTheBom(final Dest dest) throws PxlException, IOException {
         // Asserted on the raw bytes, never on a decoded string: decoding first absorbs the mark into U+FEFF
         // and hides whether one was written at all. The mark is per entry, so the second one must not have it.
         final PxlExportWorkbookOption bomOption = PxlExportWorkbookOption.builder()
                 .exportCsvBom(Boolean.TRUE)
                 .build();
 
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] archive = emit(pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Marked", bomOption)
-                .csvSheet(TestUser.class, users(), "Plain")
-                .toStream(baos);
+                .csvSheet(TestUser.class, users(), "Plain"), dest);
 
-        final byte[] archive = baos.toByteArray();
         assertThat(entryBytes(archive, "Marked.csv")).startsWith((byte) 0xEF, (byte) 0xBB, (byte) 0xBF);
         assertThat(entryBytes(archive, "Plain.csv")).startsWith((byte) 'N');
     }
 
-    @Test
-    void csvEntryOption_reachesTheBytesWithoutTouchingTheName() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void csvEntryOption_reachesTheBytesWithoutTouchingTheName(final Dest dest) throws PxlException, IOException {
         // The CSV kinds have no format axis, so the whole of what an option does here is inside the body -
         // which makes it worth pinning that it arrives at all, and that the entry is still named .csv.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] archive = emit(pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", semicolonOption())
-                .sampleCsvSheet(TestUser.class, "Forms", semicolonOption())
-                .toStream(baos);
+                .sampleCsvSheet(TestUser.class, "Forms", semicolonOption()), dest);
 
-        final byte[] archive = baos.toByteArray();
         assertThat(centralDirectoryEntryNames(archive)).containsExactly("Users.csv", "Forms.csv");
         assertThat(linesOf(entryBytes(archive, "Users.csv"))).startsWith("Name;Age", "Alice;30");
         assertThat(linesOf(entryBytes(archive, "Forms.csv"))).startsWith("Name;Age", "Alice;30");
     }
 
-    @Test
-    void anExcelEngineOption_doesNotChangeACsvEntry() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void anExcelEngineOption_doesNotChangeACsvEntry(final Dest dest) throws PxlException, IOException {
         // resolveFileFormat does not exist on these kinds, so an exportExcelEngine has nothing to act on -
         // the same promise PxlSampleCsvExporter.excelEngineOption_doesNotChangeTheCsvExtension makes
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", hssfOption())
-                .sampleCsvSheet(TestUser.class, "Forms", hssfOption())
-                .toStream(baos);
+                .sampleCsvSheet(TestUser.class, "Forms", hssfOption()), dest);
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("Users.csv", "Forms.csv");
+        assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Users.csv", "Forms.csv");
     }
 
     /**
@@ -1628,17 +1601,16 @@ class PxlZipExporterTests {
         return rows;
     }
 
-    @Test
-    void csvEntriesAreCompressed_whileXlsxIsNot() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void csvEntriesAreCompressed_whileXlsxIsNot(final Dest dest) throws PxlException, IOException {
         // The level is read off the entry name, so a .csv entry needed no code of its own: it is not .xlsx,
         // therefore it is deflated - and text deflates well, which is what makes the contrast visible.
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .csvSheet(TestUser.class, manyUsers(), "Users")
-                .workbook(workbook("ooxml"))
-                .toStream(baos);
+                .workbook(workbook("ooxml")), dest);
 
-        final File tmp = writeTempZip(baos.toByteArray());
+        final File tmp = writeTempZip(bytes);
         try (ZipFile zipFile = new ZipFile(tmp)) {
             final ZipEntry csv = zipFile.getEntry("Users.csv");
             assertThat(csv.getCompressedSize()).isLessThan(csv.getSize());
@@ -1672,16 +1644,15 @@ class PxlZipExporterTests {
                 .containsExactly("january.csv", "february.csv");
     }
 
-    @Test
-    void aCsvEntryAndAnExcelEntry_shareABaseNameWithoutColliding() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void aCsvEntryAndAnExcelEntry_shareABaseNameWithoutColliding(final Dest dest) throws PxlException, IOException {
         // the comparison is on the whole name, and .csv is simply another extension in it
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook("report"))                                   // -> report.xlsx
-                .csvSheet(TestUser.class, users(), "ignored", null, "report")   // -> report.csv
-                .toStream(baos);
+                .csvSheet(TestUser.class, users(), "ignored", null, "report"), dest);   // -> report.csv
 
-        assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+        assertThat(centralDirectoryEntryNames(bytes))
                 .containsExactly("report.xlsx", "report.csv");
     }
 
@@ -1755,15 +1726,15 @@ class PxlZipExporterTests {
         assertThat(zipFile).doesNotExist();
     }
 
-    @Test
-    void eachEntryKindNamesItselfAfterTheBytesItWrites() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void eachEntryKindNamesItselfAfterTheBytesItWrites(final Dest dest) throws PxlException, IOException {
         // The extension follows the format the entry actually writes itself in, whichever kind resolves it:
         // a bound entry asks its option then its class, a raw one asks the workbook, a sample one its option
         // then its class, and the two CSV kinds do not resolve anything - CSV is all they write. All five end
         // up named after the bytes inside them, which is what the magic-byte assertions check.
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportZip()
+            final byte[] archive = emit(pxlSpring.exportZip()
                     .workbook(workbook("bound"))                              // -> bound.xlsx
                     .workbook(new TestHssfWorkbook("bound-ole2", users()))    // -> bound-ole2.xls
                     .poiWorkbook(xssf, null, "raw")                           // -> raw.xlsx
@@ -1771,10 +1742,8 @@ class PxlZipExporterTests {
                     .sampleWorkbook(TestWorkbook.class, null, "sample")       // -> sample.xlsx
                     .sampleWorkbook(TestWorkbook.class, hssfOption(), "sample-ole2")   // -> sample-ole2.xls
                     .csvSheet(TestUser.class, users(), "text")                // -> text.csv
-                    .sampleCsvSheet(TestUser.class, "text-sample")            // -> text-sample.csv
-                    .toStream(baos);
+                    .sampleCsvSheet(TestUser.class, "text-sample"), dest);    // -> text-sample.csv
 
-            final byte[] archive = baos.toByteArray();
             assertThat(centralDirectoryEntryNames(archive))
                     .containsExactly("bound.xlsx", "bound-ole2.xls", "raw.xlsx", "raw-ole2.xls",
                             "sample.xlsx", "sample-ole2.xls", "text.csv", "text-sample.csv");
@@ -1791,18 +1760,17 @@ class PxlZipExporterTests {
         }
     }
 
-    @Test
-    void rawPoiEntries_areCompressedByWhatTheyActuallyHold() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void rawPoiEntries_areCompressedByWhatTheyActuallyHold(final Dest dest) throws PxlException, IOException {
         // the third thing hanging off that one answer: the deflate level is read back off the entry name, so
         // a raw .xlsx is stored (it is already a deflated container) and a raw .xls is compressed
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportZip()
+            final byte[] bytes = emit(pxlSpring.exportZip()
                     .poiWorkbook(xssf, null, "ooxml")
-                    .poiWorkbook(hssf, null, "ole2")
-                    .toStream(baos);
+                    .poiWorkbook(hssf, null, "ole2"), dest);
 
-            final File tmp = writeTempZip(baos.toByteArray());
+            final File tmp = writeTempZip(bytes);
             try (ZipFile zipFile = new ZipFile(tmp)) {
                 final ZipEntry storedXlsx = zipFile.getEntry("ooxml.xlsx");
                 assertThat(storedXlsx.getCompressedSize()).isGreaterThan(storedXlsx.getSize());
@@ -1858,19 +1826,18 @@ class PxlZipExporterTests {
         }
     }
 
-    @Test
-    void oneBaseNameUnderTwoWorkbookTypes_staysTwoRawEntries() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void oneBaseNameUnderTwoWorkbookTypes_staysTwoRawEntries(final Dest dest) throws PxlException, IOException {
         // the other direction: the comparison is on the whole name, so the extension each workbook type
         // resolves to keeps these apart - the raw counterpart of
         // differingExtensions_makeTheSameBaseNameTwoDistinctEntries
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportZip()
+            final byte[] bytes = emit(pxlSpring.exportZip()
                     .poiWorkbook(xssf, null, "report")     // -> report.xlsx
-                    .poiWorkbook(hssf, null, "report")     // -> report.xls
-                    .toStream(baos);
+                    .poiWorkbook(hssf, null, "report"), dest);     // -> report.xls
 
-            assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+            assertThat(centralDirectoryEntryNames(bytes))
                     .containsExactly("report.xlsx", "report.xls");
         }
     }
@@ -1903,21 +1870,20 @@ class PxlZipExporterTests {
                 .isInstanceOf(PxlArgumentException.class);
     }
 
-    @Test
-    void mixedEntryKinds_areWrittenInCallOrder() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void mixedEntryKinds_areWrittenInCallOrder(final Dest dest) throws PxlException, IOException {
         // one list, one order: kinds interleave rather than being grouped by what they are made of
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {
-            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportZip()
+            final byte[] bytes = emit(pxlSpring.exportZip()
                     .poiWorkbook(xssf, null, "one")
                     .workbook(workbook("two"))
                     .csvSheet(TestUser.class, users(), "ignored", null, "three")
                     .sampleWorkbook(TestWorkbook.class, null, "four")
                     .sampleCsvSheet(TestUser.class, "ignored", null, "five")
-                    .workbook(workbook("ignored"), null, "six")
-                    .toStream(baos);
+                    .workbook(workbook("ignored"), null, "six"), dest);
 
-            assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+            assertThat(centralDirectoryEntryNames(bytes))
                     .containsExactly("one.xlsx", "two.xlsx", "three.csv", "four.xlsx", "five.csv", "six.xlsx");
         }
     }

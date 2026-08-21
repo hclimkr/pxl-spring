@@ -45,6 +45,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *
  * <p>Encoding-sensitive expectations are asserted on the raw bytes rather than on a decoded string: decoding
  * first would absorb a byte order mark into U+FEFF and hide whether one was written at all.</p>
+ *
+ * <p>Every destination is swept rather than spot-checked, through one of two enums: assertions about the
+ * records written are {@code @ParameterizedTest}s over {@link Dest} - all five terminals, streaming
+ * included - and assertions about the download headers are the same thing over {@link Download}, the three
+ * of those five that have headers at all. What stays a plain {@code @Test} is the guards, the entity-only
+ * invariants, what is bound to one destination by intent, and the comparisons one terminal makes against
+ * another.</p>
  */
 class PxlCsvExporterTests {
 
@@ -68,47 +75,7 @@ class PxlCsvExporterTests {
         return linesOf(bytes, StandardCharsets.UTF_8);
     }
 
-    // ----- OutputStream -----
-
-    @Test
-    void sheetToStream_writesHeaderAndDataRecords() throws PxlException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .toStream(baos);
-
-        final List<String> lines = linesOf(baos.toByteArray());
-        assertThat(lines.get(0)).isEqualTo("Name,Age");
-        assertThat(lines.get(1)).isEqualTo("Alice,30");
-        assertThat(lines.get(2)).isEqualTo("Bob,25");
-        // trailing record separator only; no extra record
-        assertThat(lines.get(3)).isEmpty();
-        assertThat(lines).hasSize(4);
-    }
-
-    @Test
-    void noByteOrderMarkIsWrittenByDefault() throws PxlException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .toStream(baos);
-
-        // the default is off, so the first byte is the header's first character rather than EF BB BF
-        assertThat(baos.toByteArray()[0]).isEqualTo((byte) 'N');
-    }
-
     // ----- File -----
-
-    @Test
-    void sheetToFile_writesTheSameRecords() throws PxlException, IOException {
-        final File file = TestPaths.exportFile(testInfo, ".csv");
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .toFile(file);
-
-        assertThat(file).exists();
-        assertThat(linesOf(Files.readAllBytes(file.toPath()))).startsWith("Name,Age", "Alice,30", "Bob,25");
-    }
 
     @Test
     void sheetToFile_roundTripsThroughAResource() throws PxlException, HttpMediaTypeNotSupportedException {
@@ -173,18 +140,6 @@ class PxlCsvExporterTests {
         assertThat(linesOf(response.getContentAsByteArray())).startsWith("Name,Age");
     }
 
-    @Test
-    void blankFilename_fallsBackToTheSheetName() throws PxlException {
-        // one CSV file is one sheet, so the sheet name is the only name the source carries - it stands in for
-        // the Excel exporter's @PxlWorkbook workbook-name fallback
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .toResponse(response, "  ");
-
-        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("Users.csv");
-    }
-
     // ----- ResponseEntity<Resource> -----
 
     @Test
@@ -202,74 +157,9 @@ class PxlCsvExporterTests {
         assertThat(linesOf(bodyBytes(entity))).startsWith("Name,Age", "Alice,30");
     }
 
-    @Test
-    void blankFilenameOnResponseEntity_fallsBackToTheSheetName() throws PxlException {
-        // the same resolveFilename(String) as the servlet-response destination, on the entity one
-        final ResponseEntity<Resource> entity = pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .toResponseEntity(null);
-
-        assertThat(entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION)).contains("Users.csv");
-    }
-
-    @Test
-    void koreanFilename_isRfc5987PercentEncoded() throws PxlException {
-        final ResponseEntity<Resource> entity = pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "사용자")
-                .toResponseEntity("보고서");
-
-        final String contentDisposition = entity.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
-        assertThat(contentDisposition).startsWith("attachment; filename=\"___.csv\"; filename*=UTF-8''");
-        assertThat(contentDisposition).doesNotContain("보고서").contains("%");
-    }
-
     // ----- override(...) -----
-
-    @Test
-    void delimiterOption_changesTheFieldSeparator() throws PxlException {
-        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportCsvDelimiter(';')
-                .build();
-
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .override(option)
-                .toStream(baos);
-
-        assertThat(linesOf(baos.toByteArray())).startsWith("Name;Age", "Alice;30");
-    }
-
-    @Test
-    void bomOption_prefixesTheUtf8Mark() throws PxlException {
-        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportCsvBom(Boolean.TRUE)
-                .build();
-
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .override(option)
-                .toStream(baos);
-
-        assertThat(baos.toByteArray()).startsWith((byte) 0xEF, (byte) 0xBB, (byte) 0xBF);
-    }
-
-    @Test
-    void charsetOption_encodesTheOutputWithIt() throws PxlException {
-        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportCsvCharset("MS949")
-                .build();
-
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .override(option)
-                .toStream(baos);
-
-        // ASCII data either way; what this pins is that the named charset is accepted and used to encode
-        assertThat(linesOf(baos.toByteArray(), Charset.forName("MS949"))).startsWith("Name,Age");
-    }
+    // What an option does to the bytes is swept across every destination in the matrix section below; what
+    // is left here are the refusals, which never produce bytes at all.
 
     @Test
     void unsupportedCharset_throwsPxlArgument() {
@@ -296,25 +186,6 @@ class PxlCsvExporterTests {
                 .override(option)
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
-    }
-
-    @Test
-    void excelEngineOption_doesNotChangeTheCsvExtension() throws PxlException {
-        // the counterpart of the Excel exporter's engine tests, inverted: this exporter writes one format, so
-        // an engine on the option is ignored rather than switching the download headers to .xls
-        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                .exportExcelEngine(PxlExcelEngine.HSSF)
-                .build();
-
-        final MockHttpServletResponse response = new MockHttpServletResponse();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .override(option)
-                .toResponse(response, "report");
-
-        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).endsWith("report.csv");
-        assertThat(response.getContentType()).isEqualTo("text/csv");
-        assertThat(linesOf(response.getContentAsByteArray())).startsWith("Name,Age");
     }
 
     // ----- i18n export resource bundle -----
@@ -347,66 +218,66 @@ class PxlCsvExporterTests {
         }
     }
 
-    @Test
-    void exportResourceBundle_translatesColumnHeaders() throws PxlException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void exportResourceBundle_translatesColumnHeadersOnEveryDestination(final Dest dest)
+            throws PxlException, IOException {
         // the CSV writer calls the same codec entry point as the Excel one, so column-name translation is
         // shared rather than reimplemented - this pins that it really reaches the header record
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
                 .exportResourceBundle(koreanColumnBundle(true))
                 .build();
 
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
+        final byte[] bytes = emit(pxlSpring.exportCsv()
                 .sheet(TestUser.class, users(), "Users")
-                .override(option)
-                .toStream(baos);
+                .override(option), dest);
 
-        assertThat(linesOf(baos.toByteArray()).get(0)).isEqualTo("이름,나이");
+        assertThat(linesOf(bytes).get(0)).isEqualTo("이름,나이");
     }
 
-    @Test
-    void exportResourceBundle_missingKeyFallsBackToColumnName() throws PxlException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void exportResourceBundle_missingKeyFallsBackToColumnNameOnEveryDestination(final Dest dest)
+            throws PxlException, IOException {
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
                 .exportResourceBundle(koreanColumnBundle(false)) // only "Name" is mapped
                 .build();
 
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
+        final byte[] bytes = emit(pxlSpring.exportCsv()
                 .sheet(TestUser.class, users(), "Users")
-                .override(option)
-                .toStream(baos);
+                .override(option), dest);
 
         // "Name" is translated; the unmapped "Age" key is emitted unchanged
-        assertThat(linesOf(baos.toByteArray()).get(0)).isEqualTo("이름,Age");
+        assertThat(linesOf(bytes).get(0)).isEqualTo("이름,Age");
     }
 
-    @Test
-    void exportResourceBundle_loadedFromPropertiesFile_translatesColumnHeaders() throws PxlException, IOException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void exportResourceBundle_loadedFromPropertiesFile_translatesColumnHeadersOnEveryDestination(final Dest dest)
+            throws PxlException, IOException {
         // src/test/resources/messages_ko.properties maps Name/Age -> 이름/나이 (read as UTF-8)
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
                 .exportResourceBundle(utf8PropertiesBundle("/messages_ko.properties"))
                 .build();
 
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
+        final byte[] bytes = emit(pxlSpring.exportCsv()
                 .sheet(TestUser.class, users(), "Users")
-                .override(option)
-                .toStream(baos);
+                .override(option), dest);
 
-        assertThat(linesOf(baos.toByteArray()).get(0)).isEqualTo("이름,나이");
+        assertThat(linesOf(bytes).get(0)).isEqualTo("이름,나이");
     }
 
-    @Test
-    void exportResourceBundle_roundTripsWithMatchingImportBundle() throws PxlException, HttpMediaTypeNotSupportedException {
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void exportResourceBundle_roundTripsWithMatchingImportBundleOnEveryDestination(final Dest dest)
+            throws PxlException, IOException, HttpMediaTypeNotSupportedException {
         final PxlExportWorkbookOption exportOption = PxlExportWorkbookOption.builder()
                 .exportResourceBundle(koreanColumnBundle(true))
                 .build();
 
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
+        final byte[] bytes = emit(pxlSpring.exportCsv()
                 .sheet(TestUser.class, users(), "Users")
-                .override(exportOption)
-                .toStream(baos);
+                .override(exportOption), dest);
 
         // with translated headers, re-import must translate the same way to bind columns back to fields
         final PxlImportWorkbookOption importOption = PxlImportWorkbookOption.builder()
@@ -416,7 +287,7 @@ class PxlCsvExporterTests {
         final List<TestUser> back = pxlSpring.importCsv()
                 .override(importOption)
                 .sheet(TestUser.class)
-                .fromMultipartFile(new MockMultipartFile("file", "Users.csv", null, baos.toByteArray()));
+                .fromMultipartFile(new MockMultipartFile("file", "Users.csv", null, bytes));
 
         assertThat(back).extracting(TestUser::getName).containsExactly("Alice", "Bob");
         assertThat(back).extracting(TestUser::getAge).containsExactly(30, 25);
@@ -562,21 +433,6 @@ class PxlCsvExporterTests {
     }
 
     @Test
-    void streamingResolvesTheFilenameLikeTheBufferedTerminal() throws PxlException {
-        // the name argument runs through the same resolveFilename(String), so a blank one falls back to the
-        // sheet name on this terminal too
-        final MockHttpServletResponse fromSheetName = new MockHttpServletResponse();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users").toResponseStreaming(fromSheetName, null);
-        assertThat(fromSheetName.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("Users.csv");
-
-        final MockHttpServletResponse fromExplicit = new MockHttpServletResponse();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users").toResponseStreaming(fromExplicit, "report");
-        assertThat(fromExplicit.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("report.csv");
-    }
-
-    @Test
     void blankFilenameAndNoSheet_fallsBackToPxl() {
         // The sheet name is the only fallback a CSV source carries, and the core rejects a blank one, so the
         // "Pxl" constant is reachable only from a chain that reaches a terminal having configured no sheet.
@@ -591,9 +447,15 @@ class PxlCsvExporterTests {
     }
 
     // ----- destination matrix -----
+    // Everything that asserts on the exported records lives here rather than picking one terminal: the bytes
+    // must not depend on where they are written, and unlike the Excel exporters this enum reaches the
+    // streaming response too - one CSV file is one sheet, so nothing about the source needs a live response
+    // to observe. What stays a plain @Test is what only a response can show (download headers, the filename
+    // fallbacks, the untouched response on failure) and what is destination-bound by intent (the file
+    // round trip through a Resource, the leftover-file guard).
 
     /**
-     * The five terminal destinations, swept by the matrix test below.
+     * The five terminal destinations, swept by the matrix tests below.
      */
     enum Dest {
         STREAM, FILE, RESPONSE, RESPONSE_STREAMING, RESPONSE_ENTITY
@@ -632,18 +494,111 @@ class PxlCsvExporterTests {
         }
     }
 
+    /**
+     * The three destinations that carry download headers - the subset of {@link Dest} a stream and a file
+     * are not part of, since neither has headers to look at.
+     */
+    enum Download {
+        RESPONSE, RESPONSE_STREAMING, RESPONSE_ENTITY
+    }
+
+    /**
+     * Runs the configured builder against the given download destination and returns the
+     * {@code Content-Disposition} it set, so one assertion can serve all three.
+     */
+    private String contentDisposition(final PxlCsvExporter.Builder builder, final Download dest,
+                                      final String filename) throws PxlException {
+        switch (dest) {
+            case RESPONSE: {
+                final MockHttpServletResponse response = new MockHttpServletResponse();
+                builder.toResponse(response, filename);
+                return response.getHeader(HttpHeaders.CONTENT_DISPOSITION);
+            }
+            case RESPONSE_STREAMING: {
+                final MockHttpServletResponse response = new MockHttpServletResponse();
+                builder.toResponseStreaming(response, filename);
+                return response.getHeader(HttpHeaders.CONTENT_DISPOSITION);
+            }
+            default: {
+                return builder.toResponseEntity(filename)
+                        .getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION);
+            }
+        }
+    }
+
+    // ----- download headers x response destination -----
+    // A filename and an extension are only observable where headers are, so these sweep Download rather than
+    // Dest. All three terminals resolve the name through the same resolveFilename(String).
+
+    @ParameterizedTest
+    @EnumSource(Download.class)
+    void theSheetNameFillsInForABlankFilename(final Download dest) throws PxlException {
+        // one CSV file is one sheet, so the sheet name is the only name the source carries - it stands in for
+        // the Excel exporter's @PxlWorkbook workbook-name fallback, and an explicit name still outranks it
+        assertThat(contentDisposition(pxlSpring.exportCsv()
+                .sheet(TestUser.class, users(), "Users"), dest, "  "))
+                .contains("Users.csv");
+
+        assertThat(contentDisposition(pxlSpring.exportCsv()
+                .sheet(TestUser.class, users(), "Users"), dest, "report"))
+                .contains("report.csv")
+                .doesNotContain("Users");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Download.class)
+    void excelEngineOption_doesNotChangeTheCsvExtension(final Download dest) throws PxlException {
+        // the counterpart of the Excel exporter's engine tests, inverted: this exporter writes one format, so
+        // an engine on the option is ignored rather than switching the download headers to .xls
+        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                .exportExcelEngine(PxlExcelEngine.HSSF)
+                .build();
+
+        assertThat(contentDisposition(pxlSpring.exportCsv()
+                .sheet(TestUser.class, users(), "Users")
+                .override(option), dest, "report"))
+                .endsWith("report.csv");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Download.class)
+    void koreanFilename_isRfc5987PercentEncoded(final Download dest) throws PxlException {
+        // the header is assembled in one place, so all three terminals must produce the same one
+        final String contentDisposition = contentDisposition(pxlSpring.exportCsv()
+                .sheet(TestUser.class, users(), "사용자"), dest, "보고서");
+
+        assertThat(contentDisposition).startsWith("attachment; filename=\"___.csv\"; filename*=UTF-8''");
+        assertThat(contentDisposition).doesNotContain("보고서").contains("%");
+    }
+
     @ParameterizedTest
     @EnumSource(Dest.class)
     void sheetSource_producesTheSameCsvOnEveryDestination(final Dest dest) throws PxlException, IOException {
         final byte[] bytes = emit(pxlSpring.exportCsv()
                 .sheet(TestUser.class, users(), "Users"), dest);
 
-        assertThat(linesOf(bytes)).startsWith("Name,Age", "Alice,30", "Bob,25");
+        final List<String> lines = linesOf(bytes);
+        assertThat(lines.get(0)).isEqualTo("Name,Age");
+        assertThat(lines.get(1)).isEqualTo("Alice,30");
+        assertThat(lines.get(2)).isEqualTo("Bob,25");
+        // trailing record separator only; no extra record
+        assertThat(lines.get(3)).isEmpty();
+        assertThat(lines).hasSize(4);
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void noByteOrderMarkIsWrittenByDefaultOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        final byte[] bytes = emit(pxlSpring.exportCsv()
+                .sheet(TestUser.class, users(), "Users"), dest);
+
+        // the default is off, so the first byte is the header's first character rather than EF BB BF
+        assertThat(bytes[0]).isEqualTo((byte) 'N');
     }
 
     // ----- override(...) on every destination -----
     // The response destinations above already assert that an option cannot switch the download extension;
-    // this pins the effect an option has on the bytes themselves, wherever they are written.
+    // these pin the effect an option has on the bytes themselves, wherever they are written.
 
     @ParameterizedTest
     @EnumSource(Dest.class)
@@ -659,18 +614,47 @@ class PxlCsvExporterTests {
         assertThat(linesOf(bytes)).startsWith("Name;Age", "Alice;30");
     }
 
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void bomOption_prefixesTheUtf8MarkOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                .exportCsvBom(Boolean.TRUE)
+                .build();
+
+        final byte[] bytes = emit(pxlSpring.exportCsv()
+                .sheet(TestUser.class, users(), "Users")
+                .override(option), dest);
+
+        assertThat(bytes).startsWith((byte) 0xEF, (byte) 0xBB, (byte) 0xBF);
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void charsetOption_encodesTheOutputWithItOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                .exportCsvCharset("MS949")
+                .build();
+
+        final byte[] bytes = emit(pxlSpring.exportCsv()
+                .sheet(TestUser.class, users(), "Users")
+                .override(option), dest);
+
+        // ASCII data either way; what this pins is that the named charset is accepted and used to encode
+        assertThat(linesOf(bytes, Charset.forName("MS949"))).startsWith("Name,Age");
+    }
+
     // ----- round trip -----
 
-    @Test
-    void exportedCsv_readsBackThroughImportCsv() throws PxlException, HttpMediaTypeNotSupportedException {
-        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportCsv()
-                .sheet(TestUser.class, users(), "Users")
-                .toStream(baos);
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void exportedCsv_readsBackThroughImportCsvOnEveryDestination(final Dest dest)
+            throws PxlException, IOException, HttpMediaTypeNotSupportedException {
+        final byte[] bytes = emit(pxlSpring.exportCsv()
+                .sheet(TestUser.class, users(), "Users"), dest);
 
         final List<TestUser> back = pxlSpring.importCsv()
                 .sheet(TestUser.class)
-                .fromMultipartFile(new MockMultipartFile("file", "Users.csv", null, baos.toByteArray()));
+                .fromMultipartFile(new MockMultipartFile("file", "Users.csv", null, bytes));
 
         assertThat(back).extracting(TestUser::getName).containsExactly("Alice", "Bob");
         assertThat(back).extracting(TestUser::getAge).containsExactly(30, 25);
