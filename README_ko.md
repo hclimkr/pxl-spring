@@ -61,7 +61,7 @@ public ResponseEntity<Resource> download() throws Exception {
 ## 주요 기능
 
 - **빈 하나로 모든 방향** — `PxlSpring`을 주입하면 각 작업이 거기서 시작하는 메서드 체인이 된다.
-  `exportExcel()`, `exportSampleExcel()`, `exportExcelZip()`, `exportCsv()`, `exportSampleCsv()`,
+  `exportExcel()`, `exportSampleExcel()`, `exportZip()`, `exportCsv()`, `exportSampleCsv()`,
   `importExcel()`, `importCsv()`.
 - **멀티파트 업로드를 곧바로 객체로** — `fromMultipartFile(...)` / `fromMultipartFiles(...)`가 업로드를
   `List<Employee>`나 워크북 객체 하나로 만들며, 파싱하기 전에 확장자를 먼저 확인한다.
@@ -76,9 +76,9 @@ public ResponseEntity<Resource> download() throws Exception {
 - **대용량 다운로드에서도 일정한 Heap** — `toResponseStreaming(...)`이 다운로드 버퍼를 건너뛴다. `SXSSF`
   엔진이나 CSV export의 4 MiB 임시 파일 분할과 함께 쓰면 행 수가 얼마든 export가 쓰는 Heap이 거의
   일정해진다.
-- **여러 워크북을 zip 하나로** — `exportExcelZip()`이 워크북마다 엑셀 엔트리 하나를 만들어 묶는다. 이미
-  압축된 `.xlsx`는 다시 압축하지 않으며, export가 실패하면 아카이브로 열리는 파일을 남기지
-  않는다.
+- **여러 스프레드시트를 zip 하나로** — `exportZip()`은 다른 익스포터가 만드는 것을 엑셀이든 CSV든
+  엔트리로 받는다. 이미 압축된 `.xlsx`는 다시 압축하지 않으며, export가 실패하면 아카이브로 열리는
+  파일을 남기지 않는다.
 - **클래스만으로 샘플 양식** — `exportSampleExcel()` / `exportSampleCsv()`가 헤더 행과 예시 값이 채워진
   데이터 행 하나를 만들어 준다. 배포한 뒤 채워 받아 importer로 그대로 되읽을 수 있다.
 - **경계에서의 검증** — 지원하지 않는 확장자는 파싱 전에 `HttpMediaTypeNotSupportedException`으로,
@@ -192,7 +192,7 @@ implementation 'io.github.hclimkr:pxl-spring-jakarta:0.9.2'
 |---------------------------------|----------------------------------------------------------------------|
 | `pxlSpring.exportExcel()`       | Java 객체 → 엑셀 (Stream/File/Response/ResponseStreaming/ResponseEntity) |
 | `pxlSpring.exportSampleExcel()` | 클래스 → 샘플 데이터 한 줄이 든 엑셀                                               |
-| `pxlSpring.exportExcelZip()`    | 여러 워크북 → 하나의 zip                                                     |
+| `pxlSpring.exportZip()`         | 여러 스프레드시트(엑셀·CSV) → 하나의 zip                                   |
 | `pxlSpring.exportCsv()`         | Java 객체 → CSV (목적지 다섯 개는 동일)                                         |
 | `pxlSpring.exportSampleCsv()`   | 클래스 → 샘플 데이터 한 줄이 든 CSV                                              |
 | `pxlSpring.importExcel()`       | 엑셀 파일 → Java 객체                                                      |
@@ -220,7 +220,7 @@ private PxlSpring pxlSpring;
 
 // pxlSpring.exportExcel()
 // pxlSpring.exportSampleExcel()
-// pxlSpring.exportExcelZip()
+// pxlSpring.exportZip()
 // pxlSpring.exportCsv()
 // pxlSpring.exportSampleCsv()
 // pxlSpring.importExcel()
@@ -396,7 +396,7 @@ public int upload(@RequestParam MultipartFile file) throws Exception {
 |----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 엑셀 export      | `pxlSpring.exportExcel()`<br/>→ `.workbook(...) / .sheet(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | 샘플 엑셀 export   | `pxlSpring.exportSampleExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                    |
-| 엑셀 ZIP export  | `pxlSpring.exportExcelZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...) / .csvSheet(...) / .sampleCsvSheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                      |
+| ZIP export       | `pxlSpring.exportZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...) / .csvSheet(...) / .sampleCsvSheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                      |
 | CSV export     | `pxlSpring.exportCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                              |
 | 샘플 CSV export  | `pxlSpring.exportSampleCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                        |
 | 엑셀 import      | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
@@ -613,7 +613,7 @@ public void writeSampleTemplate(File file) throws Exception {
 }
 ```
 
-### `PxlExcelZipExporter`
+### `PxlZipExporter`
 
 **여러 워크북으로 구성된 압축파일 다운로드**
 
@@ -625,7 +625,7 @@ public ResponseEntity<Resource> downloadQuarter() throws Exception {
     Company january = ...;    // workbookName = "january"
     Company february = ...;   // workbookName = "february"
 
-    return pxlSpring.exportExcelZip()
+    return pxlSpring.exportZip()
                     .workbook(january)
                     .workbook(february)
                     .toResponseEntity("archive");   // -> archive.zip  (엔트리: january.xlsx, february.xlsx)
@@ -644,7 +644,7 @@ public void downloadQuarterNamed(HttpServletResponse response) throws Exception 
                                                                 .exportExcelEngine(PxlExcelEngine.HSSF)
                                                                 .build();
 
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(january, null, "1월보고서")
              .workbook(february, hssfOption, "2월보고서")
              .toResponse(response, "분기보고서");
@@ -663,7 +663,7 @@ public void downloadWithRawWorkbook(HttpServletResponse response) throws Excepti
     Company january = ...;
 
     try (Workbook chart = buildChartWorkbook()) {
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                  .workbook(january)
                  .poiWorkbook(chart, null, "차트")   // -> 차트.xlsx (XSSF), 차트.xls (HSSF)
                  .toResponse(response, "분기보고서");
@@ -678,7 +678,7 @@ public void downloadWithRawWorkbook(HttpServletResponse response) throws Excepti
 ```java
 @GetMapping("/forms/zip")
 public ResponseEntity<Resource> downloadUploadForms() throws Exception {
-    return pxlSpring.exportExcelZip()
+    return pxlSpring.exportZip()
                     .sampleWorkbook(EmployeeForm.class, null, "직원양식")
                     .sampleWorkbook(DepartmentForm.class, null, "부서양식")
                     .toResponseEntity("업로드양식");   // -> 업로드양식.zip
@@ -694,7 +694,7 @@ public ResponseEntity<Resource> downloadUploadForms() throws Exception {
 public void downloadBundle(HttpServletResponse response) throws Exception {
     List<Employee> employees = ...;
 
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(report)                                        // report.xlsx
              .csvSheet(Employee.class, employees, "직원명단")            // 직원명단.csv
              .sampleCsvSheet(Employee.class, "업로드양식")               // 업로드양식.csv
@@ -709,7 +709,7 @@ public void writeQuarterArchive(File zipFile) throws Exception {
     Company january = ...;
     Company february = ...;
 
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(january)
              .workbook(february)
              .toFile(zipFile);   // 실패한 export는 아카이브로 열 수 없는 바이트만 남긴다
@@ -951,7 +951,7 @@ public void loadSeedData() throws Exception {
 ```java
 PxlExcelExporter.Builder       exportExcel()
 PxlSampleExcelExporter.Builder exportSampleExcel()
-PxlExcelZipExporter.Builder    exportExcelZip()
+PxlZipExporter.Builder         exportZip()
 PxlCsvExporter.Builder         exportCsv()
 PxlSampleCsvExporter.Builder   exportSampleCsv()
 PxlExcelImporter.Builder       importExcel()
@@ -1009,13 +1009,13 @@ ResponseEntity<Resource> toResponseEntity(String excelFilename)
 
 - 다중 시트 샘플 엑셀은 `sheet(...)`를 여러 번 호출하면 된다.
 
-### `PxlExcelZipExporter`
+### `PxlZipExporter`
 
 여러 스프레드시트를 각각 하나의 엔트리로 만들어 zip 하나로 묶는다.
 
 ```java
 // 시작
-PxlExcelZipExporter.Builder exportExcelZip()
+PxlZipExporter.Builder exportZip()
 
 // 구성 (호출할 때마다 엔트리 하나씩 추가)
 workbook(Object workbookObject)                                                              // @PxlWorkbook 객체
@@ -1286,8 +1286,8 @@ pxl.performance.logging.low-performance-in-ms=5000
 업로드된 CSV 여러 개를 `@PxlSheet` 필드마다 하나씩 묶어 워크북 객체 하나로 읽을 수 있다.
 
 **엑셀 파일 여러 개를 한 번에 내려받게 하려면?**
-`exportExcelZip()`에 파일마다 `workbook(...)`을 한 번씩 호출하면 zip 하나로 묶어 내려준다 —
-[`PxlExcelZipExporter`](#pxlexcelzipexporter) 참고.
+`exportZip()`에 파일마다 구성 메서드를 한 번씩 호출하면 — `workbook(...)`·`csvSheet(...)` 등 — zip 하나로
+묶어 내려준다. [`PxlZipExporter`](#pxlzipexporter) 참고.
 
 **웹 요청 밖에서 — 배치 잡이나 테스트에서 — 스프레드시트를 읽을 수 있나?**
 읽을 수 있다. `fromResource(...)` / `fromResources(...)`가 스프링 `Resource`를 받으므로 `MultipartFile`도

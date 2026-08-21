@@ -42,8 +42,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Behavioural tests for {@link PxlExcelZipExporter}, all driven through the
- * {@link PxlExcelZipExporter.Builder} fluent API: bundling several Excel workbooks into one ZIP across every
+ * Behavioural tests for {@link PxlZipExporter}, all driven through the
+ * {@link PxlZipExporter.Builder} fluent API: bundling several Excel workbooks into one ZIP across every
  * entry kind, entry form and destination, entry naming (provided name &rarr; workbook name &rarr; index
  * fallback), per-entry export options, and archive validity via {@link ZipFile} (reads the central directory,
  * not just streamed local headers). Five kinds of source reach an entry - a {@code @PxlWorkbook}-annotated
@@ -61,7 +61,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * that split rests on - one shared entry list, and entry types that stay private nestmates - produce no
  * behaviour of their own while a single kind exists, so they are pinned reflectively.</p>
  */
-class PxlExcelZipExporterTests {
+class PxlZipExporterTests {
 
     private final PxlSpring pxlSpring = new PxlSpring();
 
@@ -82,8 +82,8 @@ class PxlExcelZipExporterTests {
     /**
      * Adds the two named workbooks ("first", "second") as archive entries.
      */
-    private PxlExcelZipExporter.Builder named() throws PxlException {
-        return pxlSpring.exportExcelZip()
+    private PxlZipExporter.Builder named() throws PxlException {
+        return pxlSpring.exportZip()
                 .workbook(workbook("first"))
                 .workbook(workbook("second"));
     }
@@ -91,8 +91,8 @@ class PxlExcelZipExporterTests {
     /**
      * Adds two workbooks with no workbook name, so entry naming falls through to the index fallback.
      */
-    private PxlExcelZipExporter.Builder unnamed() throws PxlException {
-        return pxlSpring.exportExcelZip()
+    private PxlZipExporter.Builder unnamed() throws PxlException {
+        return pxlSpring.exportZip()
                 .workbook(workbook(null))
                 .workbook(workbook(null));
     }
@@ -182,7 +182,7 @@ class PxlExcelZipExporterTests {
     @Test
     void providedFilenames_nameTheEntries() throws PxlException, IOException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("first"), null, "a")
                 .workbook(workbook("second"), null, "b")
                 .toStream(baos);
@@ -202,7 +202,7 @@ class PxlExcelZipExporterTests {
     void blankProvidedFilename_fallsBackToWorkbookName() throws PxlException, IOException {
         // a blank per-entry name is treated as absent, so the workbook name still wins
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("first"), null, "  ")
                 .toStream(baos);
 
@@ -385,7 +385,7 @@ class PxlExcelZipExporterTests {
         // TestBadNameWorkbook fails while the core resolves its export metadata, i.e. during generation.
         // In the pre-Option-A code the download headers were already written by then; now the whole archive
         // is built into a buffer first, so the response must be left untouched.
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(new TestBadNameWorkbook(1), null, "a")
                 .toResponse(response, "archive"))
                 .isInstanceOf(PxlException.class);
@@ -415,20 +415,20 @@ class PxlExcelZipExporterTests {
     @Test
     void noEntry_throwsPxlArgument() {
         assertThatThrownBy(() ->
-                pxlSpring.exportExcelZip().toStream(new ByteArrayOutputStream()))
+                pxlSpring.exportZip().toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
     }
 
     @Test
     void nullWorkbookObject_throwsPxlNullPointer() {
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().workbook(null))
+        assertThatThrownBy(() -> pxlSpring.exportZip().workbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
     }
 
     @Test
     void xlsxEntriesAreNotRecompressed_whileXlsEntriesStillAre() throws PxlException, IOException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("ooxml"))                          // -> ooxml.xlsx
                 .workbook(new TestHssfWorkbook("ole2", users()))      // -> ole2.xls
                 .toStream(baos);
@@ -457,7 +457,7 @@ class PxlExcelZipExporterTests {
         // dots ("2026.01") is ordinary, and everything after the last one is what decides here, so both
         // entries must be treated exactly as the plain-named ones above.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("ignored"), null, "2026.01")                          // -> 2026.01.xlsx
                 .workbook(new TestHssfWorkbook("ignored", users()), null, "2026.02")     // -> 2026.02.xls
                 .toStream(baos);
@@ -524,7 +524,7 @@ class PxlExcelZipExporterTests {
         // committed; that window is gone for every check this builder makes itself.
         final MockHttpServletResponse streamed = new MockHttpServletResponse();
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("first"), null, "sub/report")
                 .toResponseStreaming(streamed, "archive"))
                 .isInstanceOf(PxlArgumentException.class);
@@ -534,7 +534,7 @@ class PxlExcelZipExporterTests {
 
         final MockHttpServletResponse buffered = new MockHttpServletResponse();
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("first"), null, "sub/report")
                 .toResponse(buffered, "archive"))
                 .isInstanceOf(PxlArgumentException.class);
@@ -549,7 +549,7 @@ class PxlExcelZipExporterTests {
         // nothing is left on disk at all. It used to leave an unreadable half-archive behind.
         final File zipFile = TestPaths.exportFile(testInfo, ".zip");
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("first"), null, "sub/report")
                 .toFile(zipFile))
                 .isInstanceOf(PxlArgumentException.class);
@@ -558,26 +558,33 @@ class PxlExcelZipExporterTests {
     }
 
     @Test
-    void streamingStillCommitsHeadersBeforeACoreLevelFailure() {
+    void streamingStillCommitsHeadersBeforeACoreLevelFailure() throws IOException {
         // What the move does not buy back: the streaming window is still real, because generating an entry
         // happens after the headers have gone out and only the core can tell that it will fail. This is the
         // documented cost of the terminal, and it must stay observable - if it ever stops being, the
         // toResponseStreaming javadoc is the thing to fix, not this test.
         //
-        // "no body" is not free either: it holds because writeArchive finishes the archive only once every
-        // entry is in. Closing the ZipOutputStream as the exception unwound would emit the
-        // end-of-central-directory record even with zero entries written, handing the client a well-formed
-        // *empty* archive.
+        // Note what does reach the client. The builder's own checks failed before putNextEntry, so they left
+        // nothing at all; a core-level failure does not, because putNextEntry writes the entry's local file
+        // header before writeBody is even called. So the wire carries a started entry and stops. What it can
+        // never carry is a readable archive: writeArchive finishes only once every entry is in, so there is
+        // no central directory and the download fails to open. Were it finished on the way out instead, the
+        // client would get a well-formed archive holding nothing.
         final MockHttpServletResponse streamed = new MockHttpServletResponse();
 
         // TestBadNameWorkbook fails while the core resolves its export metadata, i.e. inside writeBody
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(new TestBadNameWorkbook(1), null, "a")
                 .toResponseStreaming(streamed, "archive"))
                 .isInstanceOf(PxlException.class);
 
-        assertThat(streamed.getContentAsByteArray()).isEmpty();
         assertThat(streamed.getHeader(HttpHeaders.CONTENT_DISPOSITION)).isNotNull();
+
+        final byte[] onTheWire = streamed.getContentAsByteArray();
+        assertThat(onTheWire).as("the entry's local file header was already written").isNotEmpty();
+        assertThatThrownBy(() -> centralDirectoryEntryNames(onTheWire))
+                .as("but it cannot be opened as an archive")
+                .isInstanceOf(IOException.class);
     }
 
     @Test
@@ -586,7 +593,7 @@ class PxlExcelZipExporterTests {
         // headers on either path, so these failures do leave the response untouched
         final MockHttpServletResponse response = new MockHttpServletResponse();
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .toResponseStreaming(response, "archive"))
                 .isInstanceOf(PxlArgumentException.class);
 
@@ -608,14 +615,14 @@ class PxlExcelZipExporterTests {
     void entryNameCarryingAPath_throwsPxlArgument() {
         // a ZipEntry name may legally hold a path, so an unchecked separator would put a traversal path
         // inside an archive we hand out - Zip Slip for whoever extracts it
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("first"), null, "../../evil")
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
 
         // '\' is a literal character in a ZIP name rather than a separator, so it does not traverse, but it
         // produces a name that extractors disagree about; FilenameUtils.getName rejects both alike
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("first"), null, "sub\\report")
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
@@ -633,7 +640,7 @@ class PxlExcelZipExporterTests {
         // metadata, which is inside writeBody and therefore inside the open archive.
         final File zipFile = TestPaths.exportFile(testInfo, ".zip");
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(new TestBadNameWorkbook(1), null, "a")
                 .toFile(zipFile))
                 .isInstanceOf(PxlException.class);
@@ -647,7 +654,7 @@ class PxlExcelZipExporterTests {
     void pathCarryingWorkbookName_isRejectedToo() {
         // the guard has to cover the fallback source as well: a workbook name is data the application filled
         // in, not an argument the caller wrote at the call site
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("sub/report"))
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
@@ -661,7 +668,7 @@ class PxlExcelZipExporterTests {
 
     @Test
     void duplicateEntryNames_throwPxlArgumentNamingTheOffender() {
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("same"))
                 .workbook(workbook("same"))
                 .toStream(new ByteArrayOutputStream()))
@@ -675,7 +682,7 @@ class PxlExcelZipExporterTests {
     void duplicateEntryNames_areComparedAcrossEveryNameSource() {
         // the check compares resolved names, not one source against itself: an explicit name on one entry and
         // a workbook-name fallback on another collide just the same
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("report"))                       // fallback  -> report.xlsx
                 .workbook(workbook("other"), null, "report")        // explicit  -> report.xlsx
                 .toStream(new ByteArrayOutputStream()))
@@ -687,7 +694,7 @@ class PxlExcelZipExporterTests {
         // Stricter than ZipOutputStream on purpose: it compares exactly, so both would go into the archive,
         // and extracting them on a case-insensitive file system (Windows, macOS by default) would silently
         // overwrite one with the other.
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("Report"))
                 .workbook(workbook("report"))
                 .toStream(new ByteArrayOutputStream()))
@@ -702,7 +709,7 @@ class PxlExcelZipExporterTests {
         try {
             Locale.setDefault(new Locale("tr", "TR"));
 
-            assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+            assertThatThrownBy(() -> pxlSpring.exportZip()
                     .workbook(workbook("FILE"))
                     .workbook(workbook("file"))
                     .toStream(new ByteArrayOutputStream()))
@@ -721,7 +728,7 @@ class PxlExcelZipExporterTests {
         // (failedExportToFile_leavesNothingOpenableAsAnArchive).
         final File zipFile = TestPaths.exportFile(testInfo, ".zip");
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("same"))
                 .workbook(workbook("same"))
                 .toFile(zipFile))
@@ -738,7 +745,7 @@ class PxlExcelZipExporterTests {
         // (streamingStillCommitsHeadersBeforeACoreLevelFailure).
         final MockHttpServletResponse response = new MockHttpServletResponse();
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("same"))
                 .workbook(workbook("same"))
                 .toResponseStreaming(response, "archive"))
@@ -753,7 +760,7 @@ class PxlExcelZipExporterTests {
         // the documented way out of the collision, pinned so the advice in the workbook(...) javadoc keeps
         // working
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("same"), null, "january")
                 .workbook(workbook("same"), null, "february")
                 .toStream(baos);
@@ -767,7 +774,7 @@ class PxlExcelZipExporterTests {
         // the collision above is on the full entry name, extension included: the same base name under two
         // declared engines is two members, not a clash
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("report"))                            // -> report.xlsx
                 .workbook(new TestHssfWorkbook("report", users()))       // -> report.xls
                 .toStream(baos);
@@ -790,7 +797,7 @@ class PxlExcelZipExporterTests {
      * Runs the configured builder against the given destination and returns the archive bytes, so one
      * assertion can serve every destination. File artifacts are named per destination to stay inspectable.
      */
-    private byte[] emit(final PxlExcelZipExporter.Builder builder, final Dest dest) throws PxlException, IOException {
+    private byte[] emit(final PxlZipExporter.Builder builder, final Dest dest) throws PxlException, IOException {
         switch (dest) {
             case STREAM: {
                 final ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -817,7 +824,7 @@ class PxlExcelZipExporterTests {
     @ParameterizedTest
     @EnumSource(Dest.class)
     void workbookWithoutOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook("first"))
                 .workbook(workbook("second")), dest);
 
@@ -829,7 +836,7 @@ class PxlExcelZipExporterTests {
     void workbookWithOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
         // the two-argument workbook(object, option) overload had no coverage at all. The HSSF option names
         // its entry .xls on every destination alike - the extension is resolved once, before any of them.
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook("first"), hssfOption())
                 .workbook(workbook("second"), null), dest);
 
@@ -839,7 +846,7 @@ class PxlExcelZipExporterTests {
     @ParameterizedTest
     @EnumSource(Dest.class)
     void workbookWithOptionAndName_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .workbook(workbook("first"), null, "a")
                 .workbook(workbook("second"), null, "b"), dest);
 
@@ -849,7 +856,7 @@ class PxlExcelZipExporterTests {
     @ParameterizedTest
     @EnumSource(Dest.class)
     void singleEntryArchive_isValidOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        final byte[] bytes = emit(pxlSpring.exportExcelZip().workbook(workbook("only")), dest);
+        final byte[] bytes = emit(pxlSpring.exportZip().workbook(workbook("only")), dest);
 
         assertThat(centralDirectoryEntryNames(bytes)).containsExactly("only.xlsx");
     }
@@ -862,7 +869,7 @@ class PxlExcelZipExporterTests {
         // declared engine, the same priority PxlExcelExporter.resolveFileFormat() uses. It used to be asked
         // second, which put OLE2 bytes under a .xlsx entry name.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("hssf"), hssfOption())
                 .workbook(workbook("xssf"))
                 .toStream(baos);
@@ -876,7 +883,7 @@ class PxlExcelZipExporterTests {
     void perEntryOption_overridesADeclaredEngineInEitherDirection() throws PxlException, IOException {
         // the other way round: a class declaring HSSF, turned back into XLSX by its entry's option
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(new TestHssfWorkbook("declared-hssf", users()), xssfOption())
                 .toStream(baos);
 
@@ -889,7 +896,7 @@ class PxlExcelZipExporterTests {
         // only an exportExcelEngine takes over; an option without one falls through to the class declaration,
         // which is what keeps the null branch of resolveFileFormat honest
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("xssf-class"), PxlExportWorkbookOption.builder().build())
                 .workbook(new TestHssfWorkbook("hssf-class", users()), PxlExportWorkbookOption.builder().build())
                 .toStream(baos);
@@ -904,7 +911,7 @@ class PxlExcelZipExporterTests {
         // written. While the extension came from the class, this entry was OLE2 stored at NO_COMPRESSION -
         // uncompressed data written uncompressed, the worst of both.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("ole2"), hssfOption())
                 .toStream(baos);
 
@@ -922,7 +929,7 @@ class PxlExcelZipExporterTests {
         // the duplicate check compares whole entry names, so whichever extension the option resolves to is
         // part of that comparison. One base name under two engines is two members...
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("report"))                   // -> report.xlsx
                 .workbook(workbook("report"), hssfOption())     // -> report.xls
                 .toStream(baos);
@@ -931,7 +938,7 @@ class PxlExcelZipExporterTests {
                 .containsExactly("report.xlsx", "report.xls");
 
         // ...and two classes that declare different engines collide once an option lines their formats up
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("report"))                                        // -> report.xlsx
                 .workbook(new TestHssfWorkbook("report", users()), xssfOption())     // -> report.xlsx too
                 .toStream(new ByteArrayOutputStream()))
@@ -941,7 +948,7 @@ class PxlExcelZipExporterTests {
     @Test
     void mixedEntryForms_areWrittenInCallOrder() throws PxlException, IOException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("one"))
                 .workbook(workbook("two"))
                 .workbook(workbook("ignored"), null, "three")
@@ -953,7 +960,7 @@ class PxlExcelZipExporterTests {
 
     @Test
     void koreanEntryAndArchiveNames_areCarriedThrough() throws PxlException, IOException {
-        final ResponseEntity<Resource> entity = pxlSpring.exportExcelZip()
+        final ResponseEntity<Resource> entity = pxlSpring.exportZip()
                 .workbook(workbook("무시됨"), null, "사용자")
                 .toResponseEntity("보고서모음");
 
@@ -1007,7 +1014,7 @@ class PxlExcelZipExporterTests {
         // an annotated instance, and a raw POI workbook is not one. The index is always appended, so unnamed
         // entries of this kind stay distinct from one another.
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
-            final byte[] bytes = emit(pxlSpring.exportExcelZip()
+            final byte[] bytes = emit(pxlSpring.exportZip()
                     .poiWorkbook(xssf)
                     .poiWorkbook(hssf), dest);
 
@@ -1021,7 +1028,7 @@ class PxlExcelZipExporterTests {
         // the two-argument overload, and the only place a password reaches the destination matrix: an
         // encrypted entry is named exactly as an unencrypted one of the same workbook type
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
-            final byte[] bytes = emit(pxlSpring.exportExcelZip()
+            final byte[] bytes = emit(pxlSpring.exportZip()
                     .poiWorkbook(xssf, "secret")
                     .poiWorkbook(hssf, null), dest);
 
@@ -1033,7 +1040,7 @@ class PxlExcelZipExporterTests {
     @EnumSource(Dest.class)
     void poiWorkbookWithPasswordAndName_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
-            final byte[] bytes = emit(pxlSpring.exportExcelZip()
+            final byte[] bytes = emit(pxlSpring.exportZip()
                     .poiWorkbook(xssf, null, "ooxml")
                     .poiWorkbook(hssf, null, "ole2"), dest);
 
@@ -1047,7 +1054,7 @@ class PxlExcelZipExporterTests {
         // workbook name in between, so it goes straight to the index
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportExcelZip()
+            pxlSpring.exportZip()
                     .poiWorkbook(xssf, null, "  ")
                     .toStream(baos);
 
@@ -1067,7 +1074,7 @@ class PxlExcelZipExporterTests {
              Workbook ole2 = oneCell(new HSSFWorkbook(), "ole2")) {
 
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportExcelZip()
+            pxlSpring.exportZip()
                     .poiWorkbook(plain, null, "plain")
                     .poiWorkbook(locked, "secret", "locked")
                     .poiWorkbook(ole2, null, "ole2")
@@ -1086,7 +1093,7 @@ class PxlExcelZipExporterTests {
         // write the same OOXML container, one PxlFileFormat, and the entry is named off the format
         try (SXSSFWorkbook sxssf = oneCell(new SXSSFWorkbook())) {
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportExcelZip()
+            pxlSpring.exportZip()
                     .poiWorkbook(sxssf, null, "streamed")
                     .toStream(baos);
 
@@ -1103,7 +1110,7 @@ class PxlExcelZipExporterTests {
         // that property rather than deciding its own.
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportExcelZip()
+            pxlSpring.exportZip()
                     .poiWorkbook(xssf, "secret", "locked")
                     .toStream(baos);
 
@@ -1118,13 +1125,13 @@ class PxlExcelZipExporterTests {
     void nullPoiWorkbook_throwsPxlNullPointer() {
         // every arity guards the workbook, not just the one the others delegate to - the delegation is an
         // implementation detail a later refactor could undo
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().poiWorkbook(null))
+        assertThatThrownBy(() -> pxlSpring.exportZip().poiWorkbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().poiWorkbook(null, "secret"))
+        assertThatThrownBy(() -> pxlSpring.exportZip().poiWorkbook(null, "secret"))
                 .isInstanceOf(PxlNullPointerException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().poiWorkbook(null, "secret", "name"))
+        assertThatThrownBy(() -> pxlSpring.exportZip().poiWorkbook(null, "secret", "name"))
                 .isInstanceOf(PxlNullPointerException.class);
     }
 
@@ -1158,7 +1165,7 @@ class PxlExcelZipExporterTests {
     void sampleWorkbookWithoutOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
         // no name given: straight to PxlSample{index}, since a class carries no workbook name. The extension
         // still follows what the class declares, so the HSSF one comes out .xls.
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class)
                 .sampleWorkbook(TestHssfWorkbook.class), dest);
 
@@ -1170,7 +1177,7 @@ class PxlExcelZipExporterTests {
     void sampleWorkbookWithOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
         // the option decides the bytes, so it decides the extension - asked before the class, exactly as on a
         // workbook(...) entry
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, hssfOption())
                 .sampleWorkbook(TestWorkbook.class, null), dest);
 
@@ -1180,7 +1187,7 @@ class PxlExcelZipExporterTests {
     @ParameterizedTest
     @EnumSource(Dest.class)
     void sampleWorkbookWithOptionAndName_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, null, "form-a")
                 .sampleWorkbook(TestWorkbook.class, null, "form-b"), dest);
 
@@ -1190,7 +1197,7 @@ class PxlExcelZipExporterTests {
     @Test
     void blankEntryNameOnASampleWorkbook_fallsBackToPxlSampleIndex() throws PxlException, IOException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, null, "  ")
                 .toStream(baos);
 
@@ -1204,7 +1211,7 @@ class PxlExcelZipExporterTests {
         // distinct - the reason this default carries one where PxlSampleExcelExporter's bare "PxlSample"
         // does not.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook(null))
                 .sampleWorkbook(TestWorkbook.class)
                 .sampleWorkbook(TestWorkbook.class)
@@ -1219,7 +1226,7 @@ class PxlExcelZipExporterTests {
         // the body is a real template, not an empty workbook: PxlSampleExcelExporter's own promise, inherited
         // here because the entry generates itself through the same core builder
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, null, "form")
                 .toStream(baos);
 
@@ -1233,7 +1240,7 @@ class PxlExcelZipExporterTests {
         // XLSX by its entry's option. Both branches of resolveFileFormat's option check have to work, or the
         // priority is only half right.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .sampleWorkbook(TestHssfWorkbook.class, xssfOption(), "declared-hssf")
                 .toStream(baos);
 
@@ -1247,7 +1254,7 @@ class PxlExcelZipExporterTests {
         // entirely, so an option that exists but carries no engine is the case that keeps it honest - the
         // same gap anOptionCarryingNoEngine_leavesTheExtensionToTheClass closes for workbook(...).
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, PxlExportWorkbookOption.builder().build())
                 .sampleWorkbook(TestHssfWorkbook.class, PxlExportWorkbookOption.builder().build())
                 .toStream(baos);
@@ -1261,7 +1268,7 @@ class PxlExcelZipExporterTests {
         // the duplicate check compares whole names, so whichever extension a sample entry's option resolves
         // to is part of the comparison. One base name under two engines is two members...
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, null, "form")           // -> form.xlsx
                 .sampleWorkbook(TestWorkbook.class, hssfOption(), "form")   // -> form.xls
                 .toStream(baos);
@@ -1269,7 +1276,7 @@ class PxlExcelZipExporterTests {
         assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("form.xlsx", "form.xls");
 
         // ...and two classes declaring different engines collide once an option lines their formats up
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, null, "form")                    // -> form.xlsx
                 .sampleWorkbook(TestHssfWorkbook.class, xssfOption(), "form")        // -> form.xlsx too
                 .toStream(new ByteArrayOutputStream()))
@@ -1282,7 +1289,7 @@ class PxlExcelZipExporterTests {
         // second entry would inherit the first one's sheets - which the sheet names make visible in a way the
         // extension never could, since both classes resolve to XLSX.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, null, "one-sheet")
                 .sampleWorkbook(TestMultiSheetWorkbook.class, null, "two-sheets")
                 .toStream(baos);
@@ -1294,13 +1301,13 @@ class PxlExcelZipExporterTests {
 
     @Test
     void nullSampleWorkbookClass_throwsPxlNullPointer() {
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleWorkbook(null))
+        assertThatThrownBy(() -> pxlSpring.exportZip().sampleWorkbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleWorkbook(null, hssfOption()))
+        assertThatThrownBy(() -> pxlSpring.exportZip().sampleWorkbook(null, hssfOption()))
                 .isInstanceOf(PxlNullPointerException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleWorkbook(null, hssfOption(), "name"))
+        assertThatThrownBy(() -> pxlSpring.exportZip().sampleWorkbook(null, hssfOption(), "name"))
                 .isInstanceOf(PxlNullPointerException.class);
     }
 
@@ -1323,7 +1330,7 @@ class PxlExcelZipExporterTests {
     void csvSheetWithoutOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
         // no entry name given: the sheet name is the fallback, and there is no index-suffixed default behind
         // it because a CSV entry cannot be added without one
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users")
                 .csvSheet(TestUser.class, users(), "Admins"), dest);
 
@@ -1335,7 +1342,7 @@ class PxlExcelZipExporterTests {
     void csvSheetWithOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
         // an option changes the bytes here, never the extension - CSV is all this kind writes, so even an
         // exportExcelEngine in it leaves the name alone
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", semicolonOption())
                 .csvSheet(TestUser.class, users(), "Admins", hssfOption()), dest);
 
@@ -1345,7 +1352,7 @@ class PxlExcelZipExporterTests {
     @ParameterizedTest
     @EnumSource(Dest.class)
     void csvSheetWithOptionAndName_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", null, "a")
                 .csvSheet(TestUser.class, users(), "Users", null, "b"), dest);
 
@@ -1355,7 +1362,7 @@ class PxlExcelZipExporterTests {
     @ParameterizedTest
     @EnumSource(Dest.class)
     void sampleCsvSheetWithoutOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .sampleCsvSheet(TestUser.class, "Users")
                 .sampleCsvSheet(TestRequiredUser.class, "Required"), dest);
 
@@ -1365,7 +1372,7 @@ class PxlExcelZipExporterTests {
     @ParameterizedTest
     @EnumSource(Dest.class)
     void sampleCsvSheetWithOption_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .sampleCsvSheet(TestUser.class, "Users", semicolonOption())
                 .sampleCsvSheet(TestUser.class, "Admins", null), dest);
 
@@ -1375,7 +1382,7 @@ class PxlExcelZipExporterTests {
     @ParameterizedTest
     @EnumSource(Dest.class)
     void sampleCsvSheetWithOptionAndName_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
-        final byte[] bytes = emit(pxlSpring.exportExcelZip()
+        final byte[] bytes = emit(pxlSpring.exportZip()
                 .sampleCsvSheet(TestUser.class, "Users", null, "form-a")
                 .sampleCsvSheet(TestUser.class, "Users", null, "form-b"), dest);
 
@@ -1385,7 +1392,7 @@ class PxlExcelZipExporterTests {
     @Test
     void blankEntryNameOnACsvEntry_fallsBackToTheSheetName() throws PxlException, IOException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", null, "  ")
                 .sampleCsvSheet(TestUser.class, "Forms", null, "  ")
                 .toStream(baos);
@@ -1398,7 +1405,7 @@ class PxlExcelZipExporterTests {
         // Distinct rows per entry, so this also pins that each entry opens its own core builder: shared, the
         // second entry would carry the first one's rows, which the entry names could never show.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users")
                 .csvSheet(TestUser.class, Collections.singletonList(new TestUser("Carol", 41)), "Admins")
                 .sampleCsvSheet(TestUser.class, "Forms")
@@ -1421,7 +1428,7 @@ class PxlExcelZipExporterTests {
         // FileSystemResource because importCsv refuses a resource with no file name - there would be no
         // extension to check.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users")
                 .toStream(baos);
 
@@ -1441,7 +1448,7 @@ class PxlExcelZipExporterTests {
         // an export with nothing in it is ordinary - a report for a quiet month - and it must still produce a
         // well-formed member rather than an empty one
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .csvSheet(TestUser.class, Collections.<TestUser>emptyList(), "Users")
                 .toStream(baos);
 
@@ -1456,7 +1463,7 @@ class PxlExcelZipExporterTests {
         // sheet name is required and is therefore always there to take. Placed last on purpose - at index 2 an
         // appended index would be visible.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook(null))
                 .sampleWorkbook(TestWorkbook.class)
                 .csvSheet(TestUser.class, users(), "Users")
@@ -1479,7 +1486,7 @@ class PxlExcelZipExporterTests {
 
         final File zipFile = TestPaths.exportFile(testInfo, ".zip");
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", passwordOption)
                 .toFile(zipFile))
                 .isInstanceOf(PxlArgumentException.class);
@@ -1489,7 +1496,7 @@ class PxlExcelZipExporterTests {
                 .isInstanceOf(IOException.class);
 
         // the sample kind refuses it on the same terms
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .sampleCsvSheet(TestUser.class, "Forms", passwordOption)
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
@@ -1504,7 +1511,7 @@ class PxlExcelZipExporterTests {
                 .build();
 
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Marked", bomOption)
                 .csvSheet(TestUser.class, users(), "Plain")
                 .toStream(baos);
@@ -1519,7 +1526,7 @@ class PxlExcelZipExporterTests {
         // The CSV kinds have no format axis, so the whole of what an option does here is inside the body -
         // which makes it worth pinning that it arrives at all, and that the entry is still named .csv.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", semicolonOption())
                 .sampleCsvSheet(TestUser.class, "Forms", semicolonOption())
                 .toStream(baos);
@@ -1535,7 +1542,7 @@ class PxlExcelZipExporterTests {
         // resolveFileFormat does not exist on these kinds, so an exportExcelEngine has nothing to act on -
         // the same promise PxlSampleCsvExporter.excelEngineOption_doesNotChangeTheCsvExtension makes
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", hssfOption())
                 .sampleCsvSheet(TestUser.class, "Forms", hssfOption())
                 .toStream(baos);
@@ -1561,7 +1568,7 @@ class PxlExcelZipExporterTests {
         // The level is read off the entry name, so a .csv entry needed no code of its own: it is not .xlsx,
         // therefore it is deflated - and text deflates well, which is what makes the contrast visible.
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .csvSheet(TestUser.class, manyUsers(), "Users")
                 .workbook(workbook("ooxml"))
                 .toStream(baos);
@@ -1582,7 +1589,7 @@ class PxlExcelZipExporterTests {
     void twoCsvEntriesUnderOneSheetName_collide() throws PxlException, IOException {
         // With no index-suffixed default there is nothing to make unnamed entries unique, so the ordinary
         // case - the same sheet name twice - is a collision, rejected before anything is written...
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users")
                 .csvSheet(TestUser.class, users(), "Users")
                 .toStream(new ByteArrayOutputStream()))
@@ -1591,7 +1598,7 @@ class PxlExcelZipExporterTests {
 
         // ...and an explicit name is the documented way out, exactly as for the workbook kinds
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users", null, "january")
                 .csvSheet(TestUser.class, users(), "Users", null, "february")
                 .toStream(baos);
@@ -1604,7 +1611,7 @@ class PxlExcelZipExporterTests {
     void aCsvEntryAndAnExcelEntry_shareABaseNameWithoutColliding() throws PxlException, IOException {
         // the comparison is on the whole name, and .csv is simply another extension in it
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook("report"))                                   // -> report.xlsx
                 .csvSheet(TestUser.class, users(), "ignored", null, "report")   // -> report.csv
                 .toStream(baos);
@@ -1617,12 +1624,12 @@ class PxlExcelZipExporterTests {
     void pathCarryingSheetName_isRejectedToo() {
         // the sheet name is a name source like the workbook name, so it reaches the path check as well -
         // the counterpart of pathCarryingWorkbookName_isRejectedToo
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "sub/Users")
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .sampleCsvSheet(TestUser.class, "sub/Forms")
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
@@ -1630,19 +1637,19 @@ class PxlExcelZipExporterTests {
 
     @Test
     void nullCsvEntrySource_throwsPxlNullPointer() {
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(null, users(), "Users"))
+        assertThatThrownBy(() -> pxlSpring.exportZip().csvSheet(null, users(), "Users"))
                 .isInstanceOf(PxlNullPointerException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, null, "Users"))
+        assertThatThrownBy(() -> pxlSpring.exportZip().csvSheet(TestUser.class, null, "Users"))
                 .isInstanceOf(PxlNullPointerException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, users(), null))
+        assertThatThrownBy(() -> pxlSpring.exportZip().csvSheet(TestUser.class, users(), null))
                 .isInstanceOf(PxlNullPointerException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(null, "Users"))
+        assertThatThrownBy(() -> pxlSpring.exportZip().sampleCsvSheet(null, "Users"))
                 .isInstanceOf(PxlNullPointerException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(TestUser.class, null))
+        assertThatThrownBy(() -> pxlSpring.exportZip().sampleCsvSheet(TestUser.class, null))
                 .isInstanceOf(PxlNullPointerException.class);
     }
 
@@ -1651,22 +1658,22 @@ class PxlExcelZipExporterTests {
         // Rejected here rather than by the core inside writeBody, for two reasons: by then the file
         // destination has created its file and the streaming one has sent its headers, and validateEntries
         // reads this value as the entry's name long before the core would see it. Every arity guards it.
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, users(), "  "))
+        assertThatThrownBy(() -> pxlSpring.exportZip().csvSheet(TestUser.class, users(), "  "))
                 .isInstanceOf(PxlArgumentException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, users(), "  ", null))
+        assertThatThrownBy(() -> pxlSpring.exportZip().csvSheet(TestUser.class, users(), "  ", null))
                 .isInstanceOf(PxlArgumentException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().csvSheet(TestUser.class, users(), "  ", null, "a"))
+        assertThatThrownBy(() -> pxlSpring.exportZip().csvSheet(TestUser.class, users(), "  ", null, "a"))
                 .isInstanceOf(PxlArgumentException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(TestUser.class, "  "))
+        assertThatThrownBy(() -> pxlSpring.exportZip().sampleCsvSheet(TestUser.class, "  "))
                 .isInstanceOf(PxlArgumentException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(TestUser.class, "  ", null))
+        assertThatThrownBy(() -> pxlSpring.exportZip().sampleCsvSheet(TestUser.class, "  ", null))
                 .isInstanceOf(PxlArgumentException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip().sampleCsvSheet(TestUser.class, "  ", null, "a"))
+        assertThatThrownBy(() -> pxlSpring.exportZip().sampleCsvSheet(TestUser.class, "  ", null, "a"))
                 .isInstanceOf(PxlArgumentException.class);
     }
 
@@ -1675,7 +1682,7 @@ class PxlExcelZipExporterTests {
         // what guarding at the call site buys, in the same terms as the duplicate check: nothing is on disk
         final File zipFile = TestPaths.exportFile(testInfo, ".zip");
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "  ")
                 .toFile(zipFile))
                 .isInstanceOf(PxlArgumentException.class);
@@ -1691,7 +1698,7 @@ class PxlExcelZipExporterTests {
         // up named after the bytes inside them, which is what the magic-byte assertions check.
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportExcelZip()
+            pxlSpring.exportZip()
                     .workbook(workbook("bound"))                              // -> bound.xlsx
                     .workbook(new TestHssfWorkbook("bound-ole2", users()))    // -> bound-ole2.xls
                     .poiWorkbook(xssf, null, "raw")                           // -> raw.xlsx
@@ -1725,7 +1732,7 @@ class PxlExcelZipExporterTests {
         // a raw .xlsx is stored (it is already a deflated container) and a raw .xls is compressed
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportExcelZip()
+            pxlSpring.exportZip()
                     .poiWorkbook(xssf, null, "ooxml")
                     .poiWorkbook(hssf, null, "ole2")
                     .toStream(baos);
@@ -1749,7 +1756,7 @@ class PxlExcelZipExporterTests {
         // regardless of what it is made of, so a bound entry and a raw POI entry resolving to the same name
         // collide exactly as two bound ones do. Split into a list per kind, this would go into the archive.
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {
-            assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+            assertThatThrownBy(() -> pxlSpring.exportZip()
                     .workbook(workbook("report"))               // fallback -> report.xlsx
                     .poiWorkbook(xssf, null, "report")          // explicit -> report.xlsx too
                     .toStream(new ByteArrayOutputStream()))
@@ -1757,7 +1764,7 @@ class PxlExcelZipExporterTests {
                     .hasMessageContaining("report.xlsx");
         }
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .workbook(workbook("form"))                          // fallback -> form.xlsx
                 .sampleWorkbook(TestWorkbook.class, null, "form")    // explicit -> form.xlsx too
                 .toStream(new ByteArrayOutputStream()))
@@ -1765,7 +1772,7 @@ class PxlExcelZipExporterTests {
                 .hasMessageContaining("form.xlsx");
 
         // the CSV pair collides on its own terms: a sheet-name fallback against an explicit name
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "Users")                     // fallback -> Users.csv
                 .sampleCsvSheet(TestUser.class, "ignored", null, "Users")       // explicit -> Users.csv too
                 .toStream(new ByteArrayOutputStream()))
@@ -1778,7 +1785,7 @@ class PxlExcelZipExporterTests {
         // the fold is in validateEntries, which never asks what an entry is made of - so it spans kinds as
         // well, and one archive cannot carry Report.xlsx alongside a raw report.xlsx
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {
-            assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+            assertThatThrownBy(() -> pxlSpring.exportZip()
                     .workbook(workbook("Report"))
                     .poiWorkbook(xssf, null, "report")
                     .toStream(new ByteArrayOutputStream()))
@@ -1793,7 +1800,7 @@ class PxlExcelZipExporterTests {
         // differingExtensions_makeTheSameBaseNameTwoDistinctEntries
         try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportExcelZip()
+            pxlSpring.exportZip()
                     .poiWorkbook(xssf, null, "report")     // -> report.xlsx
                     .poiWorkbook(hssf, null, "report")     // -> report.xls
                     .toStream(baos);
@@ -1809,23 +1816,23 @@ class PxlExcelZipExporterTests {
         // covered by construction. Pinned anyway, because the archive would otherwise hand out a traversal
         // path.
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {
-            assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+            assertThatThrownBy(() -> pxlSpring.exportZip()
                     .poiWorkbook(xssf, null, "sub/report")
                     .toStream(new ByteArrayOutputStream()))
                     .isInstanceOf(PxlArgumentException.class);
         }
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .sampleWorkbook(TestWorkbook.class, null, "sub/form")
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .csvSheet(TestUser.class, users(), "ignored", null, "sub/text")
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
 
-        assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+        assertThatThrownBy(() -> pxlSpring.exportZip()
                 .sampleCsvSheet(TestUser.class, "ignored", null, "sub/text")
                 .toStream(new ByteArrayOutputStream()))
                 .isInstanceOf(PxlArgumentException.class);
@@ -1836,7 +1843,7 @@ class PxlExcelZipExporterTests {
         // one list, one order: kinds interleave rather than being grouped by what they are made of
         try (Workbook xssf = oneCell(new XSSFWorkbook())) {
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            pxlSpring.exportExcelZip()
+            pxlSpring.exportZip()
                     .poiWorkbook(xssf, null, "one")
                     .workbook(workbook("two"))
                     .csvSheet(TestUser.class, users(), "ignored", null, "three")
@@ -1863,7 +1870,7 @@ class PxlExcelZipExporterTests {
         // instead, the check would run within each list only and a name colliding across two kinds would go
         // straight into the archive - the collision the check exists to catch.
         final List<Field> collectionFields = new ArrayList<>();
-        for (final Field field : PxlExcelZipExporter.Builder.class.getDeclaredFields()) {
+        for (final Field field : PxlZipExporter.Builder.class.getDeclaredFields()) {
             if (!field.isSynthetic()
                     && !Modifier.isStatic(field.getModifiers())
                     && Collection.class.isAssignableFrom(field.getType())) {
@@ -1886,7 +1893,7 @@ class PxlExcelZipExporterTests {
         assertThat(Modifier.isStatic(entryType.getModifiers())).as("Entry is static").isTrue();
 
         final List<Class<?>> kinds = new ArrayList<>();
-        for (final Class<?> nested : PxlExcelZipExporter.Builder.class.getDeclaredClasses()) {
+        for (final Class<?> nested : PxlZipExporter.Builder.class.getDeclaredClasses()) {
             if (!nested.isSynthetic() && !nested.equals(entryType) && entryType.isAssignableFrom(nested)) {
                 kinds.add(nested);
             }
@@ -1915,13 +1922,13 @@ class PxlExcelZipExporterTests {
      * @return the nested type
      */
     private static Class<?> nestedTypeOfBuilder(final String simpleName) {
-        for (final Class<?> nested : PxlExcelZipExporter.Builder.class.getDeclaredClasses()) {
+        for (final Class<?> nested : PxlZipExporter.Builder.class.getDeclaredClasses()) {
             if (nested.getSimpleName().equals(simpleName)) {
                 return nested;
             }
         }
 
-        throw new AssertionError("PxlExcelZipExporter.Builder declares no nested type named " + simpleName);
+        throw new AssertionError("PxlZipExporter.Builder declares no nested type named " + simpleName);
     }
 
     private static PxlExportWorkbookOption hssfOption() {

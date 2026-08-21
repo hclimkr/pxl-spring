@@ -44,7 +44,7 @@ import java.util.zip.ZipOutputStream;
 /**
  * Spring component that bundles several spreadsheets into a single ZIP archive.
  *
- * <p>Everything is configured through the fluent builder returned by {@link #exportExcelZip()} - add one
+ * <p>Everything is configured through the fluent builder returned by {@link #exportZip()} - add one
  * entry per call ({@code workbook(...)} for a {@code @PxlWorkbook}-annotated object, {@code poiWorkbook(...)}
  * for a raw POI {@link Workbook} you built yourself, {@code sampleWorkbook(...)} for a sample template
  * generated from a class, {@code csvSheet(...)} / {@code sampleCsvSheet(...)} for the CSV equivalents), then
@@ -53,7 +53,7 @@ import java.util.zip.ZipOutputStream;
  * and it is required there - unlike an entry name it has nothing to fall back to:</p>
  *
  * <pre>{@code
- * pxlSpring.exportExcelZip()
+ * pxlSpring.exportZip()
  *         .workbook(januaryReport)
  *         .workbook(februaryReport, option, "February")
  *         .poiWorkbook(alreadyBuilt, null, "raw")
@@ -78,18 +78,18 @@ import java.util.zip.ZipOutputStream;
  * explicit name.</p>
  *
  * <p>That builder is the nested {@link Builder}. A fluent chain never has to name it; on the rare occasion
- * you hold one in a variable, spell it {@code PxlExcelZipExporter.Builder}.</p>
+ * you hold one in a variable, spell it {@code PxlZipExporter.Builder}.</p>
  *
  * <p>The component is stateless and safe to share across threads; the builder it hands back is not - start one
  * per archive.</p>
  *
  * <p>Reached through {@link io.github.hclimkr.pxl.spring.PxlSpring PxlSpring}: inject that one bean and call
- * {@code pxlSpring.exportExcelZip()}, which hands back the builder documented here.</p>
+ * {@code pxlSpring.exportZip()}, which hands back the builder documented here.</p>
  *
- * <p>The {@code exportExcelZipTo*} methods below are the builder's execution back-ends. They are
+ * <p>The {@code exportZipTo*} methods below are the builder's execution back-ends. They are
  * {@code public} only because Spring AOP (and {@code @Validated} method validation) can advise public methods
  * only - a terminal has to re-enter this component through its proxy for {@link PxlPerformanceLogging} to fire.
- * Treat them as internal and always go through {@link #exportExcelZip()}.</p>
+ * Treat them as internal and always go through {@link #exportZip()}.</p>
  *
  * <p>Because those back-ends' {@code @NotNull} constraints only fire through the proxy, each one re-checks
  * its destination with {@code PxlArgumentSupport} so a plainly constructed component fails the same way at
@@ -98,9 +98,9 @@ import java.util.zip.ZipOutputStream;
  */
 @Validated
 @Component
-public class PxlExcelZipExporter {
+public class PxlZipExporter {
 
-    private static final String TAG = "PxlExcelZipExporter";
+    private static final String TAG = "PxlZipExporter";
 
     /**
      * The core entry point, shared with the other components - see {@link PxlCoreSupport} for why it is not
@@ -114,19 +114,19 @@ public class PxlExcelZipExporter {
      * <p>The builder's terminals must call back through the proxy, not through {@code this}: a plain
      * {@code this} reference bypasses the proxy, and with it {@link PxlPerformanceLogging} and {@code @Validated}.
      * {@code @Lazy} breaks the self-reference cycle, and {@code required = false} keeps plain
-     * {@code new PxlExcelZipExporter()} usage (outside a Spring context) working - it then falls back to
+     * {@code new PxlZipExporter()} usage (outside a Spring context) working - it then falls back to
      * {@code this} and simply produces no performance log.</p>
      */
     @Autowired(required = false)
     @Lazy
-    private PxlExcelZipExporter self;
+    private PxlZipExporter self;
 
     /**
      * Starts a fluent ZIP export.
      *
      * @return a new builder bound to this component
      */
-    public Builder exportExcelZip() {
+    public Builder exportZip() {
 
         return new Builder(Objects.nonNull(self) ? self : this);
     }
@@ -150,8 +150,8 @@ public class PxlExcelZipExporter {
      *                      finishing the archive fails
      */
     @PxlPerformanceLogging(TAG)
-    public void exportExcelZipToStream(@NotNull final Builder builder,
-                                       @NotNull final OutputStream outputStream)
+    public void exportZipToStream(@NotNull final Builder builder,
+                                  @NotNull final OutputStream outputStream)
             throws PxlException {
 
         PxlArgumentSupport.requireNonNull(outputStream, "outputStream");
@@ -175,8 +175,8 @@ public class PxlExcelZipExporter {
      *                      or writing or finishing the archive fails
      */
     @PxlPerformanceLogging(TAG)
-    public void exportExcelZipToFile(@NotNull final Builder builder,
-                                     @NotNull final File zipFile)
+    public void exportZipToFile(@NotNull final Builder builder,
+                                @NotNull final File zipFile)
             throws PxlException {
 
         PxlArgumentSupport.requireNonNull(zipFile, "zipFile");
@@ -208,9 +208,9 @@ public class PxlExcelZipExporter {
      *                      blank, or writing the archive or response fails
      */
     @PxlPerformanceLogging(TAG)
-    public void exportExcelZipToResponse(@NotNull final Builder builder,
-                                         @NotNull final HttpServletResponse response,
-                                         @NotBlank final String zipFilename)
+    public void exportZipToResponse(@NotNull final Builder builder,
+                                    @NotNull final HttpServletResponse response,
+                                    @NotBlank final String zipFilename)
             throws PxlException {
 
         PxlArgumentSupport.requireNonNull(response, "response");
@@ -240,9 +240,9 @@ public class PxlExcelZipExporter {
      *                      blank, or writing the archive or response fails
      */
     @PxlPerformanceLogging(TAG)
-    public void exportExcelZipToResponseStreaming(@NotNull final Builder builder,
-                                                  @NotNull final HttpServletResponse response,
-                                                  @NotBlank final String zipFilename)
+    public void exportZipToResponseStreaming(@NotNull final Builder builder,
+                                             @NotNull final HttpServletResponse response,
+                                             @NotBlank final String zipFilename)
             throws PxlException {
 
         PxlArgumentSupport.requireNonNull(response, "response");
@@ -268,7 +268,7 @@ public class PxlExcelZipExporter {
      * <p>Internal: called by {@link Builder#toResponseEntity(String)}.</p>
      *
      * <p>The archive name is required on the same terms as
-     * {@link #exportExcelZipToResponse(Builder, HttpServletResponse, String)}.</p>
+     * {@link #exportZipToResponse(Builder, HttpServletResponse, String)}.</p>
      *
      * @param builder     the configured ZIP export builder
      * @param zipFilename the archive file name without extension; required
@@ -278,8 +278,8 @@ public class PxlExcelZipExporter {
      *                      building the response fails
      */
     @PxlPerformanceLogging(TAG)
-    public ResponseEntity<Resource> exportExcelZipToResponseEntity(@NotNull final Builder builder,
-                                                                   @NotBlank final String zipFilename)
+    public ResponseEntity<Resource> exportZipToResponseEntity(@NotNull final Builder builder,
+                                                              @NotBlank final String zipFilename)
             throws PxlException {
 
         builder.validateEntries();
@@ -462,8 +462,8 @@ public class PxlExcelZipExporter {
     }
 
     /**
-     * Fluent builder for the ZIP export destinations of {@link PxlExcelZipExporter}. Created via
-     * {@link PxlExcelZipExporter#exportExcelZip()}.
+     * Fluent builder for the ZIP export destinations of {@link PxlZipExporter}. Created via
+     * {@link PxlZipExporter#exportZip()}.
      *
      * <p>Unlike the other Spring builders there is no core {@code pxl-javax} counterpart to mirror - ZIP
      * bundling is a pxl-spring concern - so this builder simply collects archive entries and the archive's
@@ -489,7 +489,7 @@ public class PxlExcelZipExporter {
      * <p>Not thread-safe, and single-use per terminal call. Example:</p>
      *
      * <pre>{@code
-     * pxlSpring.exportExcelZip()
+     * pxlSpring.exportZip()
      *         .workbook(januaryReport)
      *         .workbook(februaryReport, option, "February")
      *         .poiWorkbook(alreadyBuilt, null, "raw")
@@ -518,7 +518,7 @@ public class PxlExcelZipExporter {
         /**
          * The owning component; terminals call back into it so the export runs through its AOP proxy.
          */
-        private final PxlExcelZipExporter exporter;
+        private final PxlZipExporter exporter;
 
         /**
          * The collected archive entries, in the order they will be written. Read directly by the enclosing
@@ -539,7 +539,7 @@ public class PxlExcelZipExporter {
          *
          * @param exporter the component the terminal methods delegate back to (its AOP proxy where available)
          */
-        private Builder(final PxlExcelZipExporter exporter) {
+        private Builder(final PxlZipExporter exporter) {
 
             this.exporter = exporter;
         }
@@ -955,7 +955,7 @@ public class PxlExcelZipExporter {
         public void toStream(final OutputStream outputStream)
                 throws PxlException {
 
-            exporter.exportExcelZipToStream(this, outputStream);
+            exporter.exportZipToStream(this, outputStream);
         }
 
         /**
@@ -968,7 +968,7 @@ public class PxlExcelZipExporter {
         public void toFile(final File zipFile)
                 throws PxlException {
 
-            exporter.exportExcelZipToFile(this, zipFile);
+            exporter.exportZipToFile(this, zipFile);
         }
 
         /**
@@ -988,7 +988,7 @@ public class PxlExcelZipExporter {
                                final String zipFilename)
                 throws PxlException {
 
-            exporter.exportExcelZipToResponse(this, response, zipFilename);
+            exporter.exportZipToResponse(this, response, zipFilename);
         }
 
         /**
@@ -1007,8 +1007,11 @@ public class PxlExcelZipExporter {
          * headers</strong> - the empty archive, an entry name carrying a path, a duplicate entry name and the
          * archive name - so those failures still leave the response untouched. What does not is anything the
          * core raises while an entry is being generated: a workbook whose export metadata will not resolve, a
-         * CSV entry given a password. Those happen inside the write loop, after the headers have gone out, so
-         * such a failure writes no body but does leave the download headers set.</p>
+         * CSV entry given a password. Those happen inside the write loop, after the headers have gone out.
+         * Such a failure does put bytes on the wire - {@link ZipOutputStream#putNextEntry} writes the entry's
+         * local file header before the entry's body is generated - so the client receives a download that
+         * starts and stops. What it never receives is a readable one, because the central directory is
+         * written only once every entry is in.</p>
          *
          * <p>What a failure never produces is a readable archive: the central directory is written only once
          * every entry is in, so a client can never mistake a failed download for a complete one - see
@@ -1029,7 +1032,7 @@ public class PxlExcelZipExporter {
                                         final String zipFilename)
                 throws PxlException {
 
-            exporter.exportExcelZipToResponseStreaming(this, response, zipFilename);
+            exporter.exportZipToResponseStreaming(this, response, zipFilename);
         }
 
         /**
@@ -1045,10 +1048,10 @@ public class PxlExcelZipExporter {
         public ResponseEntity<Resource> toResponseEntity(final String zipFilename)
                 throws PxlException {
 
-            return exporter.exportExcelZipToResponseEntity(this, zipFilename);
+            return exporter.exportZipToResponseEntity(this, zipFilename);
         }
 
-        // ----- validation and resolution helpers read by PxlExcelZipExporter -----
+        // ----- validation and resolution helpers read by PxlZipExporter -----
         // private: the component is this class's nestmate, so nothing here needs to be exposed.
 
         /**
@@ -1142,7 +1145,7 @@ public class PxlExcelZipExporter {
          * {@link #withExtension(String, PxlFileFormat)}, so no kind spells it out again.</p>
          *
          * <p>Private throughout: instances are created only by the enclosing builder and read only by
-         * {@link PxlExcelZipExporter}, a nestmate of both. The methods below are package-private rather than
+         * {@link PxlZipExporter}, a nestmate of both. The methods below are package-private rather than
          * {@code private} only because an abstract method cannot be {@code private}, and the helper matches
          * them; the type declaring them is itself {@code private}, so nothing is reachable from outside.</p>
          */

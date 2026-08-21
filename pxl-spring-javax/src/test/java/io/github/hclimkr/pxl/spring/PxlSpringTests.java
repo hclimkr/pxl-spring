@@ -76,13 +76,13 @@ class PxlSpringTests {
     }
 
     @Test
-    void exportExcelZip_producesArchiveThroughTheFacade() throws PxlException, IOException {
+    void exportZip_producesArchiveThroughTheFacade() throws PxlException, IOException {
         final TestWorkbook workbook = new TestWorkbook();
         workbook.setWorkbookName("first");
         workbook.setUsers(users());
 
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                 .workbook(workbook)
                 .toStream(baos);
 
@@ -152,11 +152,11 @@ class PxlSpringTests {
                         return super.exportSampleExcel();
                     }
                 },
-                new PxlExcelZipExporter() {
+                new PxlZipExporter() {
                     @Override
-                    public Builder exportExcelZip() {
+                    public Builder exportZip() {
                         delegated[4] = true;
-                        return super.exportExcelZip();
+                        return super.exportZip();
                     }
                 },
                 new PxlCsvExporter() {
@@ -178,7 +178,7 @@ class PxlSpringTests {
         assertThat(facade.importCsv()).isNotNull();
         assertThat(facade.exportExcel()).isNotNull();
         assertThat(facade.exportSampleExcel()).isNotNull();
-        assertThat(facade.exportExcelZip()).isNotNull();
+        assertThat(facade.exportZip()).isNotNull();
         assertThat(facade.exportCsv()).isNotNull();
         assertThat(facade.exportSampleCsv()).isNotNull();
 
@@ -205,7 +205,7 @@ class PxlSpringTests {
             assertThat(context.getBean(PxlCsvImporter.class)).isNotNull();
             assertThat(context.getBean(PxlExcelExporter.class)).isNotNull();
             assertThat(context.getBean(PxlSampleExcelExporter.class)).isNotNull();
-            assertThat(context.getBean(PxlExcelZipExporter.class)).isNotNull();
+            assertThat(context.getBean(PxlZipExporter.class)).isNotNull();
             assertThat(context.getBean(PxlCsvExporter.class)).isNotNull();
             assertThat(context.getBean(PxlSampleCsvExporter.class)).isNotNull();
 
@@ -223,7 +223,7 @@ class PxlSpringTests {
         // builders are single-use and not thread-safe, so two calls must never hand back the same instance
         assertThat(pxlSpring.exportExcel()).isNotSameAs(pxlSpring.exportExcel());
         assertThat(pxlSpring.exportSampleExcel()).isNotSameAs(pxlSpring.exportSampleExcel());
-        assertThat(pxlSpring.exportExcelZip()).isNotSameAs(pxlSpring.exportExcelZip());
+        assertThat(pxlSpring.exportZip()).isNotSameAs(pxlSpring.exportZip());
         assertThat(pxlSpring.exportCsv()).isNotSameAs(pxlSpring.exportCsv());
         assertThat(pxlSpring.exportSampleCsv()).isNotSameAs(pxlSpring.exportSampleCsv());
         assertThat(pxlSpring.importExcel()).isNotSameAs(pxlSpring.importExcel());

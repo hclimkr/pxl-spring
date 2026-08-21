@@ -67,8 +67,8 @@ class PxlValidationTests {
         }
 
         @Bean
-        PxlExcelZipExporter pxlExcelZipExporter() {
-            return new PxlExcelZipExporter();
+        PxlZipExporter pxlZipExporter() {
+            return new PxlZipExporter();
         }
 
         @Bean
@@ -86,11 +86,11 @@ class PxlValidationTests {
                             final PxlCsvImporter csvImporter,
                             final PxlExcelExporter excelExporter,
                             final PxlSampleExcelExporter sampleExcelExporter,
-                            final PxlExcelZipExporter excelZipExporter,
+                            final PxlZipExporter zipExporter,
                             final PxlCsvExporter csvExporter,
                             final PxlSampleCsvExporter sampleCsvExporter) {
             return new PxlSpring(excelImporter, csvImporter, excelExporter, sampleExcelExporter,
-                    excelZipExporter, csvExporter, sampleCsvExporter);
+                    zipExporter, csvExporter, sampleCsvExporter);
         }
     }
 
@@ -107,7 +107,7 @@ class PxlValidationTests {
     private PxlCsvImporter pxlCsvImporter;
 
     @Autowired
-    private PxlExcelZipExporter pxlExcelZipExporter;
+    private PxlZipExporter pxlZipExporter;
 
     @Autowired
     private PxlCsvExporter pxlCsvExporter;
@@ -199,7 +199,7 @@ class PxlValidationTests {
         // same shape as nullDestination_violatesNotNull, for the zip exporter's own (builder, destination)
         // back-ends - proves its terminals really do re-enter the component through the Spring proxy
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().workbook(new TestWorkbook()).toStream(null))
+                pxlZipExporter.exportZip().workbook(new TestWorkbook()).toStream(null))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
@@ -244,7 +244,7 @@ class PxlValidationTests {
                 pxlSpring.exportSampleExcel().sheet(TestUser.class, "Users").toStream(null))
                 .isInstanceOf(ConstraintViolationException.class);
         assertThatThrownBy(() ->
-                pxlSpring.exportExcelZip().workbook(new TestWorkbook()).toStream(null))
+                pxlSpring.exportZip().workbook(new TestWorkbook()).toStream(null))
                 .isInstanceOf(ConstraintViolationException.class);
         assertThatThrownBy(() ->
                 pxlSpring.exportCsv().sheet(TestUser.class, users(), "Users").toStream(null))
@@ -305,13 +305,13 @@ class PxlValidationTests {
     @Test
     void nullZipFileAndResponseDestinations_violateNotNull() {
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().workbook(new TestWorkbook()).toFile(null))
+                pxlZipExporter.exportZip().workbook(new TestWorkbook()).toFile(null))
                 .isInstanceOf(ConstraintViolationException.class);
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().workbook(new TestWorkbook()).toResponse(null, "archive"))
+                pxlZipExporter.exportZip().workbook(new TestWorkbook()).toResponse(null, "archive"))
                 .isInstanceOf(ConstraintViolationException.class);
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().workbook(new TestWorkbook()).toResponseStreaming(null, "archive"))
+                pxlZipExporter.exportZip().workbook(new TestWorkbook()).toResponseStreaming(null, "archive"))
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
@@ -346,14 +346,14 @@ class PxlValidationTests {
         // the archive name is required, and through the proxy it is the @NotBlank constraint that enforces it -
         // a plain instance falls through to resolveZipFilename(String), which raises PxlArgumentException
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().workbook(new TestWorkbook())
+                pxlZipExporter.exportZip().workbook(new TestWorkbook())
                         .toResponse(new MockHttpServletResponse(), "  "))
                 .isInstanceOf(ConstraintViolationException.class);
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().workbook(new TestWorkbook()).toResponseEntity(null))
+                pxlZipExporter.exportZip().workbook(new TestWorkbook()).toResponseEntity(null))
                 .isInstanceOf(ConstraintViolationException.class);
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().workbook(new TestWorkbook())
+                pxlZipExporter.exportZip().workbook(new TestWorkbook())
                         .toResponseStreaming(new MockHttpServletResponse(), null))
                 .isInstanceOf(ConstraintViolationException.class);
     }
@@ -418,7 +418,7 @@ class PxlValidationTests {
         // Spring bean - the container-element constraint List<@NotNull ?> that used to guard them is gone,
         // so the builder rejects a null entry itself.
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().workbook(null))
+                pxlZipExporter.exportZip().workbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
     }
 
@@ -427,23 +427,23 @@ class PxlValidationTests {
         // the same holds for every kind of entry: adding one is a builder call, so it stays outside bean
         // validation's reach even here, where the component is proxied
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().poiWorkbook(null))
+                pxlZipExporter.exportZip().poiWorkbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
 
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().poiWorkbook(null, "secret"))
+                pxlZipExporter.exportZip().poiWorkbook(null, "secret"))
                 .isInstanceOf(PxlNullPointerException.class);
 
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().sampleWorkbook(null))
+                pxlZipExporter.exportZip().sampleWorkbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
 
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().csvSheet(TestUser.class, users(), null))
+                pxlZipExporter.exportZip().csvSheet(TestUser.class, users(), null))
                 .isInstanceOf(PxlNullPointerException.class);
 
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().sampleCsvSheet(null, "Users"))
+                pxlZipExporter.exportZip().sampleCsvSheet(null, "Users"))
                 .isInstanceOf(PxlNullPointerException.class);
     }
 
@@ -453,11 +453,11 @@ class PxlValidationTests {
         // core's own PxlArgumentException, raised by the builder at the call that adds the entry so that it
         // beats the file and the headers
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().csvSheet(TestUser.class, users(), "  "))
+                pxlZipExporter.exportZip().csvSheet(TestUser.class, users(), "  "))
                 .isInstanceOf(PxlArgumentException.class);
 
         assertThatThrownBy(() ->
-                pxlExcelZipExporter.exportExcelZip().sampleCsvSheet(TestUser.class, "  "))
+                pxlZipExporter.exportZip().sampleCsvSheet(TestUser.class, "  "))
                 .isInstanceOf(PxlArgumentException.class);
     }
 }

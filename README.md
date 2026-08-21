@@ -61,7 +61,7 @@ For PXL behavior — annotation attributes, supported types, the full set of opt
 ## Features
 
 - **One bean for every direction** — inject `PxlSpring` and each operation is a method chain off it:
-  `exportExcel()`, `exportSampleExcel()`, `exportExcelZip()`, `exportCsv()`, `exportSampleCsv()`,
+  `exportExcel()`, `exportSampleExcel()`, `exportZip()`, `exportCsv()`, `exportSampleCsv()`,
   `importExcel()`, `importCsv()`.
 - **Multipart upload straight to objects** — `fromMultipartFile(...)` / `fromMultipartFiles(...)` turn an
   upload into a `List<Employee>` or a whole workbook object, with the extension checked before parsing.
@@ -76,9 +76,9 @@ For PXL behavior — annotation attributes, supported types, the full set of opt
 - **Constant heap for large downloads** — `toResponseStreaming(...)` skips the download buffer; paired with
   the `SXSSF` engine, or with a CSV export's 4 MiB spill to a temporary file, an export costs roughly the
   same heap whatever the row count.
-- **Several workbooks as one zip** — `exportExcelZip()` bundles one Excel entry per workbook, stores an
-  already-compressed `.xlsx` without recompressing it, and never leaves an openable archive behind when
-  the export fails.
+- **Several spreadsheets as one zip** — `exportZip()` takes an entry from any of the other exporters,
+  Excel or CSV, stores an already-compressed `.xlsx` without recompressing it, and never leaves an
+  openable archive behind when the export fails.
 - **Sample templates from a class alone** — `exportSampleExcel()` / `exportSampleCsv()` produce a header
   row plus one filled example row to hand out and collect back through the importers.
 - **Validation at the edge** — an unsupported extension is refused as `HttpMediaTypeNotSupportedException`
@@ -192,7 +192,7 @@ Boot does three pieces of wiring for you that you now have to declare yourself. 
 |---------------------------------|------------------------------------------------------------------------------|
 | `pxlSpring.exportExcel()`       | Java objects → Excel (Stream/File/Response/ResponseStreaming/ResponseEntity) |
 | `pxlSpring.exportSampleExcel()` | Class → Excel carrying a single sample data row                              |
-| `pxlSpring.exportExcelZip()`    | Several workbooks → one zip                                                  |
+| `pxlSpring.exportZip()`         | Several spreadsheets (Excel or CSV) → one zip                                |
 | `pxlSpring.exportCsv()`         | Java objects → CSV (the same five destinations)                              |
 | `pxlSpring.exportSampleCsv()`   | Class → CSV carrying a single sample data record                             |
 | `pxlSpring.importExcel()`       | Excel file → Java objects                                                    |
@@ -220,7 +220,7 @@ private PxlSpring pxlSpring;
 
 // pxlSpring.exportExcel()
 // pxlSpring.exportSampleExcel()
-// pxlSpring.exportExcelZip()
+// pxlSpring.exportZip()
 // pxlSpring.exportCsv()
 // pxlSpring.exportSampleCsv()
 // pxlSpring.importExcel()
@@ -396,7 +396,7 @@ Every operation is handled through a single method chain like the examples above
 |---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Excel export        | `pxlSpring.exportExcel()`<br/>→ `.workbook(...) / .sheet(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Sample Excel export | `pxlSpring.exportSampleExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
-| Excel ZIP export    | `pxlSpring.exportExcelZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...) / .csvSheet(...) / .sampleCsvSheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
+| ZIP export          | `pxlSpring.exportZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...) / .csvSheet(...) / .sampleCsvSheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | CSV export          | `pxlSpring.exportCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Sample CSV export   | `pxlSpring.exportSampleCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Excel import        | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
@@ -613,7 +613,7 @@ public void writeSampleTemplate(File file) throws Exception {
 }
 ```
 
-### `PxlExcelZipExporter`
+### `PxlZipExporter`
 
 **A zip of several workbooks downloaded**
 
@@ -625,7 +625,7 @@ public ResponseEntity<Resource> downloadQuarter() throws Exception {
     Company january = ...;    // workbookName = "january"
     Company february = ...;   // workbookName = "february"
 
-    return pxlSpring.exportExcelZip()
+    return pxlSpring.exportZip()
                     .workbook(january)
                     .workbook(february)
                     .toResponseEntity("archive");   // -> archive.zip  (entries: january.xlsx, february.xlsx)
@@ -644,7 +644,7 @@ public void downloadQuarterNamed(HttpServletResponse response) throws Exception 
                                                                 .exportExcelEngine(PxlExcelEngine.HSSF)
                                                                 .build();
 
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(january, null, "january-report")
              .workbook(february, hssfOption, "february-report")
              .toResponse(response, "quarterly-report");
@@ -663,7 +663,7 @@ public void downloadWithRawWorkbook(HttpServletResponse response) throws Excepti
     Company january = ...;
 
     try (Workbook chart = buildChartWorkbook()) {
-        pxlSpring.exportExcelZip()
+        pxlSpring.exportZip()
                  .workbook(january)
                  .poiWorkbook(chart, null, "chart")   // -> chart.xlsx (XSSF), chart.xls (HSSF)
                  .toResponse(response, "quarterly-report");
@@ -678,7 +678,7 @@ A sample template entry is what `exportSampleExcel()` produces, put in an archiv
 ```java
 @GetMapping("/forms/zip")
 public ResponseEntity<Resource> downloadUploadForms() throws Exception {
-    return pxlSpring.exportExcelZip()
+    return pxlSpring.exportZip()
                     .sampleWorkbook(EmployeeForm.class, null, "employees")
                     .sampleWorkbook(DepartmentForm.class, null, "departments")
                     .toResponseEntity("upload-forms");   // -> upload-forms.zip
@@ -694,7 +694,7 @@ public ResponseEntity<Resource> downloadUploadForms() throws Exception {
 public void downloadBundle(HttpServletResponse response) throws Exception {
     List<Employee> employees = ...;
 
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(report)                                        // report.xlsx
              .csvSheet(Employee.class, employees, "Employees")        // Employees.csv
              .sampleCsvSheet(Employee.class, "Upload form")           // Upload form.csv
@@ -709,7 +709,7 @@ public void writeQuarterArchive(File zipFile) throws Exception {
     Company january = ...;
     Company february = ...;
 
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(january)
              .workbook(february)
              .toFile(zipFile);   // a failed export leaves bytes that cannot be opened as an archive
@@ -951,7 +951,7 @@ The single bean to inject. Each method hands back the builder for that operation
 ```java
 PxlExcelExporter.Builder       exportExcel()
 PxlSampleExcelExporter.Builder exportSampleExcel()
-PxlExcelZipExporter.Builder    exportExcelZip()
+PxlZipExporter.Builder         exportZip()
 PxlCsvExporter.Builder         exportCsv()
 PxlSampleCsvExporter.Builder   exportSampleCsv()
 PxlExcelImporter.Builder       importExcel()
@@ -1009,13 +1009,13 @@ ResponseEntity<Resource> toResponseEntity(String excelFilename)
 
 - For a multi-sheet sample Excel, call `sheet(...)` several times.
 
-### `PxlExcelZipExporter`
+### `PxlZipExporter`
 
 Turns several spreadsheets into one entry each and bundles them into a single zip.
 
 ```java
 // start
-PxlExcelZipExporter.Builder exportExcelZip()
+PxlZipExporter.Builder exportZip()
 
 // configuration (each call adds one entry)
 workbook(Object workbookObject)                                                              // @PxlWorkbook object
@@ -1286,8 +1286,8 @@ Yes — `exportCsv()` / `importCsv()`, with the same DTOs and annotations as Exc
 sheet, so several uploaded CSVs can be read into a single workbook object, one file per `@PxlSheet` field.
 
 **How do I let the user download several Excel files at once?**
-`exportExcelZip()` takes one `workbook(...)` call per file and bundles them into a single zip download —
-see [`PxlExcelZipExporter`](#pxlexcelzipexporter).
+`exportZip()` takes one configuration call per file - `workbook(...)`, `csvSheet(...)` and the rest - and
+bundles them into a single zip download; see [`PxlZipExporter`](#pxlzipexporter).
 
 **Can I read a spreadsheet outside a web request — in a batch job or a test?**
 Yes. `fromResource(...)` / `fromResources(...)` take any Spring `Resource`, so no `MultipartFile` and no

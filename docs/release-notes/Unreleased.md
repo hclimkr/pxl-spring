@@ -6,14 +6,26 @@ kind of output this library produces rather than one: a raw POI workbook you bui
 template, a CSV sheet, and a CSV template. Built against [PXL](https://github.com/hclimkr/pxl) 0.9.4,
 unchanged.
 
-Pre-1.0 release carrying **breaking** changes: a collision raises `PxlArgumentException` where it used to
-raise `PxlIOException`, two entry names differing only in case are refused where they used to produce an
-archive, and a per-entry `exportExcelEngine` now changes the entry's extension as well as its content — see
-the highlights below.
+Pre-1.0 release carrying **breaking** changes: the ZIP exporter and its start method are renamed, a collision
+raises `PxlArgumentException` where it used to raise `PxlIOException`, two entry names differing only in case
+are refused where they used to produce an archive, and a per-entry `exportExcelEngine` now changes the
+entry's extension as well as its content — see the highlights below.
 
 ## Highlights
 
-  - **A ZIP entry can be a raw POI workbook.** `PxlExcelZipExporter` bundled one kind of source only, a
+  - **`PxlExcelZipExporter` is now `PxlZipExporter`, and `exportExcelZip()` is now `exportZip()`.** With CSV
+    members in the archive the `Excel` in those names claimed something untrue, and this is the release that
+    made it untrue — so it goes now rather than being carried to 1.0. The rename is the whole change: the
+    builder is still the nested `PxlZipExporter.Builder`, every configuration and terminal method keeps its
+    name, and component scanning is unaffected. Rename the call, and the injection point too if you inject
+    the component rather than the `PxlSpring` facade.
+    ```java
+    pxlSpring.exportZip()   // was pxlSpring.exportExcelZip()
+             .workbook(report)
+             .csvSheet(Employee.class, employees, "Employees")
+             .toResponse(response, "bundle");
+    ```
+  - **A ZIP entry can be a raw POI workbook.** `PxlZipExporter` bundled one kind of source only, a
     `@PxlWorkbook`-annotated object — so a workbook the application had already built, which
     `exportExcel().poiWorkbook(...)` writes happily on its own, could not go into an archive at all.
     `poiWorkbook(workbook)`, `poiWorkbook(workbook, password)` and
@@ -24,7 +36,7 @@ the highlights below.
     `PxlExcelExporter`. This kind has no workbook name to fall back to, so an unnamed entry goes straight to
     `Pxl{index}`; the duplicate-name check below spans every kind of entry alike.
     ```java
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(januaryReport)             // -> january.xlsx, bound from the annotated object
              .poiWorkbook(chart, null, "chart")   // -> chart.xlsx, written as-is
              .toResponse(response, "quarterly-report");
@@ -39,7 +51,7 @@ the highlights below.
     `PxlSample{index}`. The index is there because entries share an archive and have to come out distinct;
     `PxlSampleExcelExporter` falls back to a bare `PxlSample` because it names a single download.
     ```java
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .sampleWorkbook(EmployeeForm.class, null, "employees")
              .sampleWorkbook(DepartmentForm.class, null, "departments")
              .toResponseEntity("upload-forms");
@@ -55,7 +67,7 @@ the highlights below.
     index-suffixed default; the flip side is that two entries under one sheet name collide, rejected before
     anything is written. A blank sheet name is refused at the call that adds the entry, not mid-write.
     ```java
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(report)                                   // report.xlsx
              .csvSheet(Employee.class, employees, "Employees")   // Employees.csv
              .sampleCsvSheet(Employee.class, "Upload form")      // Upload form.csv
@@ -83,7 +95,7 @@ the highlights below.
     members and overwrite one another when extracted on Windows or macOS. Give colliding entries an explicit
     name.
     ```java
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(january, null, "january")    // both declare workbookName = "report"
              .workbook(february, null, "february")
              .toResponse(response, "quarterly-report");
@@ -96,7 +108,7 @@ the highlights below.
     `PxlExcelExporter` already used, and the entry's name, its content and its deflate level all follow that
     one answer. An option carrying no engine still falls through to the class.
     ```java
-    pxlSpring.exportExcelZip()
+    pxlSpring.exportZip()
              .workbook(report, hssfOption)   // -> report.xls, OLE2 bytes, deflated
              .toResponse(response, "archive");
     ```

@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - An already-built raw POI `Workbook` can go into a ZIP archive:
-  `exportExcelZip().poiWorkbook(workbook)`, with `poiWorkbook(workbook, password)` and
+  `exportZip().poiWorkbook(workbook)`, with `poiWorkbook(workbook, password)` and
   `poiWorkbook(workbook, password, entryName)` alongside it. The workbook is written as-is, the
   way `exportExcel().poiWorkbook(...)` already writes one on its own, so there is no per-entry
   export option — nothing is bound for one to override. The entry's extension is read back off
@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is the format its body is written in; encryption keeps that extension, as it does on
   `PxlExcelExporter`. This kind carries no workbook name, so an unnamed entry falls straight to
   `Pxl{index}`. Duplicate entry names are still rejected across every kind of entry alike.
-- A sample template can go into a ZIP archive too: `exportExcelZip().sampleWorkbook(workbookClass)`,
+- A sample template can go into a ZIP archive too: `exportZip().sampleWorkbook(workbookClass)`,
   with `sampleWorkbook(workbookClass, option)` and
   `sampleWorkbook(workbookClass, option, entryName)` alongside it — the header row plus one row of
   `@PxlColumn(exportSample = ...)` values, exactly what `exportSampleExcel()` produces on its own,
@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instance, so there is no workbook name to read: an unnamed entry falls straight to
   `PxlSample{index}` — with the index, unlike `PxlSampleExcelExporter`'s bare `PxlSample`, because
   entries share an archive and must come out distinct.
-- CSV can go into a ZIP archive as well, completing the set: `exportExcelZip().csvSheet(rowClass,
+- CSV can go into a ZIP archive as well, completing the set: `exportZip().csvSheet(rowClass,
   rows, sheetName)` writes a row collection as a `.csv` member and
   `sampleCsvSheet(rowClass, sheetName)` a CSV template, each with the same option and entry-name
   overloads as the other kinds — so "the spreadsheet plus the same data as CSV", or a set of CSV
@@ -39,6 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name is refused at the call that adds the entry rather than mid-write.
 
 ### Changed
+
+- **Breaking.** `PxlExcelZipExporter` is now `PxlZipExporter`, and its start method
+  `exportExcelZip()` is now `exportZip()` — on the `PxlSpring` facade too. The archive holds CSV
+  members as well as Excel ones now, so `Excel` in the name claimed something that is no longer
+  true. Nothing else about the type moves: the builder is still the nested `PxlZipExporter.Builder`,
+  every configuration and terminal method keeps its name, and component scanning is unaffected.
+  Rename the call if you go through the facade, and the injection point as well if you inject the
+  component directly.
 
 - A ZIP entry name carrying a path separator is now rejected before anything is written, alongside
   the duplicate-name check it belongs with. It used to be checked per entry inside the write loop,
