@@ -221,12 +221,12 @@ class PxlSpringTests {
     @Test
     void eachEntryPoint_returnsAFreshBuilder() {
         // builders are single-use and not thread-safe, so two calls must never hand back the same instance
+        assertThat(pxlSpring.importExcel()).isNotSameAs(pxlSpring.importExcel());
+        assertThat(pxlSpring.importCsv()).isNotSameAs(pxlSpring.importCsv());
         assertThat(pxlSpring.exportExcel()).isNotSameAs(pxlSpring.exportExcel());
         assertThat(pxlSpring.exportSampleExcel()).isNotSameAs(pxlSpring.exportSampleExcel());
         assertThat(pxlSpring.exportCsv()).isNotSameAs(pxlSpring.exportCsv());
         assertThat(pxlSpring.exportSampleCsv()).isNotSameAs(pxlSpring.exportSampleCsv());
         assertThat(pxlSpring.exportZip()).isNotSameAs(pxlSpring.exportZip());
-        assertThat(pxlSpring.importExcel()).isNotSameAs(pxlSpring.importExcel());
-        assertThat(pxlSpring.importCsv()).isNotSameAs(pxlSpring.importCsv());
     }
 }

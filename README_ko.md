@@ -61,8 +61,8 @@ public ResponseEntity<Resource> download() throws Exception {
 ## 주요 기능
 
 - **빈 하나로 모든 방향** — `PxlSpring`을 주입하면 각 작업이 거기서 시작하는 메서드 체인이 된다.
-  `exportExcel()`, `exportSampleExcel()`, `exportCsv()`, `exportSampleCsv()`, `exportZip()`,
-  `importExcel()`, `importCsv()`.
+  `importExcel()`, `importCsv()`, `exportExcel()`, `exportSampleExcel()`, `exportCsv()`,
+  `exportSampleCsv()`, `exportZip()`.
 - **멀티파트 업로드를 곧바로 객체로** — `fromMultipartFile(...)` / `fromMultipartFiles(...)`가 업로드를
   `List<Employee>`나 워크북 객체 하나로 만들며, 파싱하기 전에 확장자를 먼저 확인한다.
 - **업로드만이 아니다** — `fromResource(...)` / `fromResources(...)`는 스프링 `Resource`를 그대로 받으므로
@@ -190,13 +190,13 @@ implementation 'io.github.hclimkr:pxl-spring-jakarta:0.9.2'
 
 | 시작 메서드                          | 역할                                                                   |
 |---------------------------------|----------------------------------------------------------------------|
+| `pxlSpring.importExcel()`       | 엑셀 파일 → Java 객체                                                      |
+| `pxlSpring.importCsv()`         | CSV 파일 → Java 객체                                                     |
 | `pxlSpring.exportExcel()`       | Java 객체 → 엑셀 (Stream/File/Response/ResponseStreaming/ResponseEntity) |
 | `pxlSpring.exportSampleExcel()` | 클래스 → 샘플 데이터 한 줄이 든 엑셀                                               |
 | `pxlSpring.exportCsv()`         | Java 객체 → CSV (목적지 다섯 개는 동일)                                         |
 | `pxlSpring.exportSampleCsv()`   | 클래스 → 샘플 데이터 한 줄이 든 CSV                                              |
 | `pxlSpring.exportZip()`         | 여러 스프레드시트(엑셀·CSV) → 하나의 zip                                   |
-| `pxlSpring.importExcel()`       | 엑셀 파일 → Java 객체                                                      |
-| `pxlSpring.importCsv()`         | CSV 파일 → Java 객체                                                     |
 
 `io.github.hclimkr.pxl.spring` 패키지를 스캔 대상에 넣어야 `PxlSpring`과 성능 로깅 Aspect가 빈으로 등록된다. 하위 패키지도 함께 스캔되므로 이 한 줄이면 전부 포함된다.
 
@@ -218,13 +218,13 @@ public class MyApplication {
 @Autowired
 private PxlSpring pxlSpring;
 
+// pxlSpring.importExcel()
+// pxlSpring.importCsv()
 // pxlSpring.exportExcel()
 // pxlSpring.exportSampleExcel()
 // pxlSpring.exportCsv()
 // pxlSpring.exportSampleCsv()
 // pxlSpring.exportZip()
-// pxlSpring.importExcel()
-// pxlSpring.importCsv()
 ```
 
 ---
@@ -341,6 +341,24 @@ public class Company {
 
 ## 한눈에 보는 사용법
 
+### Import
+
+```java
+import io.github.hclimkr.pxl.spring.PxlSpring;
+
+import org.springframework.web.multipart.MultipartFile;
+import java.util.List;
+
+// Import: Multipart 엑셀 업로드 → Employee 행 객체 목록
+@PostMapping("/employees/import")
+public int upload(@RequestParam MultipartFile file) throws Exception {
+    List<Employee> employees = pxlSpring.importExcel()
+                                        .sheet(Employee.class, "Employees")
+                                        .fromMultipartFile(file);
+    return employees.size();
+}
+```
+
 ### Export
 
 ```java
@@ -372,46 +390,29 @@ public ResponseEntity<Resource> download() throws Exception {
 }
 ```
 
-### Import
+---
 
-```java
-import io.github.hclimkr.pxl.spring.PxlSpring;
-
-import org.springframework.web.multipart.MultipartFile;
-import java.util.List;
-
-// Import: Multipart 엑셀 업로드 → Employee 행 객체 목록
-@PostMapping("/employees/import")
-public int upload(@RequestParam MultipartFile file) throws Exception {
-    List<Employee> employees = pxlSpring.importExcel()
-                                        .sheet(Employee.class, "Employees")
-                                        .fromMultipartFile(file);
-    return employees.size();
-}
-```
-
-모든 작업은 위 예제처럼 하나의 메서드 체인으로 처리한다. 시작 메서드가 작업의 방향(내보내기/가져오기)과 형식(엑셀/CSV/샘플/ZIP)을 나타내며, 이어서 대상을 지정한 뒤 마지막 메서드에서 실행된다.
+모든 작업은 위 예제처럼 하나의 메서드 체인으로 처리한다. 시작 메서드가 작업의 방향(가져오기/내보내기)과 형식(엑셀/CSV/샘플/ZIP)을 나타내며, 이어서 대상을 지정한 뒤 마지막 메서드에서 실행된다.
 
 | 용도             | 메서드 체인 (시작 → 구성 → 실행)                                                                                                                                                                                             |
 |----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 엑셀 import      | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
+| CSV import     | `pxlSpring.importCsv()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)` / `.fromMultipartFiles(List<MultipartFile>)`                                                          |
 | 엑셀 export      | `pxlSpring.exportExcel()`<br/>→ `.workbook(...) / .sheet(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | 샘플 엑셀 export   | `pxlSpring.exportSampleExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                    |
 | CSV export     | `pxlSpring.exportCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                              |
 | 샘플 CSV export  | `pxlSpring.exportSampleCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                        |
 | ZIP export       | `pxlSpring.exportZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...) / .csvSheet(...) / .sampleCsvSheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                      |
-| 엑셀 import      | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
-| CSV import     | `pxlSpring.importCsv()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)` / `.fromMultipartFiles(List<MultipartFile>)`                                                          |
 
-- export에서 구성 단계의 `.workbook(...)`과 `.sheet(...)`, `.poiWorkbook(...)`은 서로 배타적이다 — 한 체인에서 둘 이상을 함께 지정하면 `PxlArgumentException`이 발생한다(셋 다 생략해도 같다).
-- export는 `.sheet(...)`를 여러 번 호출해 여러 시트를 만든다. `exportSampleExcel()`도 동일하다.
-- CSV export는 파일 하나가 시트 하나라 `.workbook(...)` 자체가 없고, `.sheet(...)`를 두 번 불러도 시트가 늘지 않고 마지막 메서드에서 `PxlArgumentException`이 발생한다. `exportSampleCsv()`도 동일하다.
 - import는 `.sheet(...)`를 연달아 체인할 수 없다. 여러 시트를 읽는 방법은 두 가지다.
     - 워크북 형태로 한 번에: `@PxlWorkbook` 클래스를 `.workbook(...)`에 주면 `@PxlSheet` 필드별로 여러 시트가 한 번에 바인딩된다.  
     - 시트별로 나눠서: 시트마다 체인을 새로 시작해 각각 `.fromMultipartFile(...)`까지 실행한다.
+- export에서 구성 단계의 `.workbook(...)`과 `.sheet(...)`, `.poiWorkbook(...)`은 서로 배타적이다 — 한 체인에서 둘 이상을 함께 지정하면 `PxlArgumentException`이 발생한다(셋 다 생략해도 같다).
+- export는 `.sheet(...)`를 여러 번 호출해 여러 시트를 만든다. `exportSampleExcel()`도 동일하다.
+- CSV export는 파일 하나가 시트 하나라 `.workbook(...)` 자체가 없고, `.sheet(...)`를 두 번 불러도 시트가 늘지 않고 마지막 메서드에서 `PxlArgumentException`이 발생한다. `exportSampleCsv()`도 동일하다.
 
 체인 중간에 `override(...)`(코어 옵션), `workbookName(...)`(워크북명)을 선택적으로 끼워 넣을 수 있다. 순서는 자유이며, 같은 값을 두 번 지정하면 나중 값이 최종 사용된다.
 
----
 
 ## API 사용
 
@@ -427,6 +428,165 @@ public class ExcelController {
     // 아래 핸들러 메서드는 모두 이런 컨트롤러 안에 있다고 본다
 }
 ```
+
+### `PxlExcelImporter`
+
+**단일 시트 업로드**
+
+후보 시트명 중 처음 매칭되는 시트를 읽으며, 캐스팅이 필요 없다.
+
+```java
+@PostMapping("/employees/import")
+public int importEmployees(@RequestParam MultipartFile file) throws Exception {
+    List<Employee> employees = pxlSpring.importExcel()
+                                        .sheet(Employee.class, "Employees", "직원")
+                                        .fromMultipartFile(file);
+
+    return employees.size();
+}
+```
+
+**엑셀 파일 전체를 워크북 객체로 업로드**
+
+`workbookName`을 생략하면 파일명에서 유추한다.
+
+```java
+@PostMapping("/company/import")
+public int importCompany(@RequestParam MultipartFile file) throws Exception {
+    Company company = pxlSpring.importExcel()
+                               .workbook(Company.class)
+                               .fromMultipartFile(file);
+
+    return company.getEmployees().size() + company.getDepartments().size();
+}
+```
+
+**시트의 컬렉션 타입 지정**
+
+`Set.class`가 raw로 묶이므로 결과도 raw로 돌아온다.
+
+```java
+@PostMapping("/employees/import-unique")
+public int importUniqueEmployees(@RequestParam MultipartFile file) throws Exception {
+    @SuppressWarnings("unchecked")
+    final Set<Employee> unique = pxlSpring.importExcel()
+                                          .sheet(Employee.class, Set.class, "Employees")
+                                          .fromMultipartFile(file);
+
+    return unique.size();
+}
+```
+
+**암호가 걸린 엑셀 파일 업로드**
+
+```java
+@PostMapping("/company/import-locked")
+public int importLockedCompany(@RequestParam MultipartFile file) throws Exception {
+    Company company = pxlSpring.importExcel()
+                               .override(PxlImportWorkbookOption.builder().importPassword("secret").build())
+                               .workbook(Company.class)
+                               .fromMultipartFile(file);
+
+    return company.getEmployees().size() + company.getDepartments().size();
+}
+```
+
+**다중 시트 업로드**
+
+Import시 `sheet(...)`는 연달아 체인할 수 없으므로 시트마다 체인을 새로 시작한다. 같은 file을 그대로 다시 넘기면 된다 — 호출할 때마다 새 `InputStream`이 열린다.
+
+```java
+@PostMapping("/company/import-sheets")
+public int importCompanySheets(@RequestParam MultipartFile file) throws Exception {
+    List<Employee> employees = pxlSpring.importExcel()
+                                        .sheet(Employee.class, "Employees")
+                                        .fromMultipartFile(file);
+
+    List<Department> departments = pxlSpring.importExcel()
+                                            .sheet(Department.class, "Departments")
+                                            .fromMultipartFile(file);
+
+    return employees.size() + departments.size();
+}
+```
+
+**업로드가 아닌 엑셀 파일**
+
+`fromResource(...)`는 스프링 `Resource`면 무엇이든 받는다 — 디스크의 파일, 클래스패스 항목, 그 추상화 뒤의 무엇이든. 그래서 배치 잡·시드 로더·테스트에 `MultipartFile`이 필요 없다. 다만 리소스에 파일명이 있어야 한다 — 검증 대상인 확장자와 워크북명 폴백이 거기서 나온다.
+
+```java
+@Scheduled(cron = "0 0 3 * * *")
+public void importNightlyFeed() throws Exception {
+    Company company = pxlSpring.importExcel()
+                               .workbook(Company.class)
+                               .fromResource(new FileSystemResource("/var/feed/company.xlsx"));
+
+    save(company);
+}
+```
+
+### `PxlCsvImporter`
+
+**단일 시트 업로드**
+
+```java
+@PostMapping("/employees/import-csv")
+public int importEmployeesCsv(@RequestParam MultipartFile csvFile) throws Exception {
+    List<Employee> employees = pxlSpring.importCsv()
+                                        .sheet(Employee.class)
+                                        .fromMultipartFile(csvFile);
+
+    return employees.size();
+}
+```
+
+**CSV 여러 개를 워크북 객체로 업로드**
+
+CSV 파일 1개가 시트 1개이고, 파일명이 `@PxlSheet(name = ...)`에 매칭된다. CSV의 `sheet(...)` 형식은 파일을 정확히 하나만 받으므로, 여러 시트는 이 워크북 형태로 읽는다.
+
+```java
+@PostMapping("/company/import-csv")
+public int importCompanyCsv(@RequestParam List<MultipartFile> csvFiles) throws Exception {
+    Company company = pxlSpring.importCsv()
+                               .workbook(Company.class)
+                               .fromMultipartFiles(csvFiles);
+
+    return company.getEmployees().size() + company.getDepartments().size();
+}
+```
+
+**구분자 등 옵션 지정**
+
+```java
+@PostMapping("/employees/import-csv-semicolon")
+public int importSemicolonCsv(@RequestParam MultipartFile csvFile) throws Exception {
+    List<Employee> employees = pxlSpring.importCsv()
+                                        .override(PxlImportWorkbookOption.builder().importCsvDelimiter(';').build())
+                                        .sheet(Employee.class)
+                                        .fromMultipartFile(csvFile);
+
+    return employees.size();
+}
+```
+
+**업로드가 아닌 CSV 파일**
+
+`fromResource(...)` / `fromResources(...)`는 스프링 `Resource`에 대한 같은 짝이다. 리소스의 파일명이 곧 시트명이므로 여기서도 파일명이 있어야 한다.
+
+```java
+@EventListener(ApplicationReadyEvent.class)
+public void loadSeedData() throws Exception {
+    Company company = pxlSpring.importCsv()
+                               .workbook(Company.class)
+                               .fromResources(Arrays.asList(
+                                       new ClassPathResource("seed/Employees.csv"),
+                                       new ClassPathResource("seed/Departments.csv")));
+
+    save(company);
+}
+```
+
+---
 
 ### `PxlExcelExporter`
 
@@ -783,165 +943,6 @@ public void writeQuarterArchive(File zipFile) throws Exception {
 }
 ```
 
-### `PxlExcelImporter`
-
-**단일 시트 업로드**
-
-후보 시트명 중 처음 매칭되는 시트를 읽으며, 캐스팅이 필요 없다.
-
-```java
-@PostMapping("/employees/import")
-public int importEmployees(@RequestParam MultipartFile file) throws Exception {
-    List<Employee> employees = pxlSpring.importExcel()
-                                        .sheet(Employee.class, "Employees", "직원")
-                                        .fromMultipartFile(file);
-
-    return employees.size();
-}
-```
-
-**엑셀 파일 전체를 워크북 객체로 업로드**
-
-`workbookName`을 생략하면 파일명에서 유추한다.
-
-```java
-@PostMapping("/company/import")
-public int importCompany(@RequestParam MultipartFile file) throws Exception {
-    Company company = pxlSpring.importExcel()
-                               .workbook(Company.class)
-                               .fromMultipartFile(file);
-
-    return company.getEmployees().size() + company.getDepartments().size();
-}
-```
-
-**시트의 컬렉션 타입 지정**
-
-`Set.class`가 raw로 묶이므로 결과도 raw로 돌아온다.
-
-```java
-@PostMapping("/employees/import-unique")
-public int importUniqueEmployees(@RequestParam MultipartFile file) throws Exception {
-    @SuppressWarnings("unchecked")
-    final Set<Employee> unique = pxlSpring.importExcel()
-                                          .sheet(Employee.class, Set.class, "Employees")
-                                          .fromMultipartFile(file);
-
-    return unique.size();
-}
-```
-
-**암호가 걸린 엑셀 파일 업로드**
-
-```java
-@PostMapping("/company/import-locked")
-public int importLockedCompany(@RequestParam MultipartFile file) throws Exception {
-    Company company = pxlSpring.importExcel()
-                               .override(PxlImportWorkbookOption.builder().importPassword("secret").build())
-                               .workbook(Company.class)
-                               .fromMultipartFile(file);
-
-    return company.getEmployees().size() + company.getDepartments().size();
-}
-```
-
-**다중 시트 업로드**
-
-Import시 `sheet(...)`는 연달아 체인할 수 없으므로 시트마다 체인을 새로 시작한다. 같은 file을 그대로 다시 넘기면 된다 — 호출할 때마다 새 `InputStream`이 열린다.
-
-```java
-@PostMapping("/company/import-sheets")
-public int importCompanySheets(@RequestParam MultipartFile file) throws Exception {
-    List<Employee> employees = pxlSpring.importExcel()
-                                        .sheet(Employee.class, "Employees")
-                                        .fromMultipartFile(file);
-
-    List<Department> departments = pxlSpring.importExcel()
-                                            .sheet(Department.class, "Departments")
-                                            .fromMultipartFile(file);
-
-    return employees.size() + departments.size();
-}
-```
-
-**업로드가 아닌 엑셀 파일**
-
-`fromResource(...)`는 스프링 `Resource`면 무엇이든 받는다 — 디스크의 파일, 클래스패스 항목, 그 추상화 뒤의 무엇이든. 그래서 배치 잡·시드 로더·테스트에 `MultipartFile`이 필요 없다. 다만 리소스에 파일명이 있어야 한다 — 검증 대상인 확장자와 워크북명 폴백이 거기서 나온다.
-
-```java
-@Scheduled(cron = "0 0 3 * * *")
-public void importNightlyFeed() throws Exception {
-    Company company = pxlSpring.importExcel()
-                               .workbook(Company.class)
-                               .fromResource(new FileSystemResource("/var/feed/company.xlsx"));
-
-    save(company);
-}
-```
-
-### `PxlCsvImporter`
-
-**단일 시트 업로드**
-
-```java
-@PostMapping("/employees/import-csv")
-public int importEmployeesCsv(@RequestParam MultipartFile csvFile) throws Exception {
-    List<Employee> employees = pxlSpring.importCsv()
-                                        .sheet(Employee.class)
-                                        .fromMultipartFile(csvFile);
-
-    return employees.size();
-}
-```
-
-**CSV 여러 개를 워크북 객체로 업로드**
-
-CSV 파일 1개가 시트 1개이고, 파일명이 `@PxlSheet(name = ...)`에 매칭된다. CSV의 `sheet(...)` 형식은 파일을 정확히 하나만 받으므로, 여러 시트는 이 워크북 형태로 읽는다.
-
-```java
-@PostMapping("/company/import-csv")
-public int importCompanyCsv(@RequestParam List<MultipartFile> csvFiles) throws Exception {
-    Company company = pxlSpring.importCsv()
-                               .workbook(Company.class)
-                               .fromMultipartFiles(csvFiles);
-
-    return company.getEmployees().size() + company.getDepartments().size();
-}
-```
-
-**구분자 등 옵션 지정**
-
-```java
-@PostMapping("/employees/import-csv-semicolon")
-public int importSemicolonCsv(@RequestParam MultipartFile csvFile) throws Exception {
-    List<Employee> employees = pxlSpring.importCsv()
-                                        .override(PxlImportWorkbookOption.builder().importCsvDelimiter(';').build())
-                                        .sheet(Employee.class)
-                                        .fromMultipartFile(csvFile);
-
-    return employees.size();
-}
-```
-
-**업로드가 아닌 CSV 파일**
-
-`fromResource(...)` / `fromResources(...)`는 스프링 `Resource`에 대한 같은 짝이다. 리소스의 파일명이 곧 시트명이므로 여기서도 파일명이 있어야 한다.
-
-```java
-@EventListener(ApplicationReadyEvent.class)
-public void loadSeedData() throws Exception {
-    Company company = pxlSpring.importCsv()
-                               .workbook(Company.class)
-                               .fromResources(Arrays.asList(
-                                       new ClassPathResource("seed/Employees.csv"),
-                                       new ClassPathResource("seed/Departments.csv")));
-
-    save(company);
-}
-```
-
----
-
 ## API 레퍼런스
 
 ### `PxlSpring`
@@ -949,14 +950,70 @@ public void loadSeedData() throws Exception {
 `PxlSpring`이 주입할 단 하나의 빈이다. 각 메서드는 해당 기능의 빌더를 돌려준다.
 
 ```java
+PxlExcelImporter.Builder       importExcel()
+PxlCsvImporter.Builder         importCsv()
 PxlExcelExporter.Builder       exportExcel()
 PxlSampleExcelExporter.Builder exportSampleExcel()
 PxlCsvExporter.Builder         exportCsv()
 PxlSampleCsvExporter.Builder   exportSampleCsv()
 PxlZipExporter.Builder         exportZip()
-PxlExcelImporter.Builder       importExcel()
-PxlCsvImporter.Builder         importCsv()
 ```
+
+### `PxlExcelImporter`
+
+엑셀 소스(`.xls` / `.xlsx`) — Multipart 업로드 또는 스프링 `Resource` — 를 워크북 객체 또는 시트 컬렉션으로 변환한다.
+
+```java
+// 시작
+PxlExcelImporter.Builder importExcel()
+
+// 구성 (하나만). 타입이 실린 Source<R>를 돌려준다
+<W>                       Source<W>       workbook(Class<W> workbookClass)
+<T>                       Source<List<T>> sheet(Class<T> rowClass, String... candidateSheetNames)
+<T>                       Source<List<T>> sheet(Class<T> rowClass, List<String> candidateSheetNames)
+<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass, String... candidateSheetNames)
+<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass, List<String> candidateSheetNames)
+
+// 옵션 (구성 지정 전후 어디서든. 나중에 지정한 값이 이긴다)
+Builder / Source<R> workbookName(String workbookName)
+Builder / Source<R> override(PxlImportWorkbookOption option)
+
+// 실행
+R fromMultipartFile(MultipartFile excelFile)  // 업로드
+R fromResource(Resource excelFile)            // 파일, 클래스패스 항목, 그 밖의 모든 Resource
+```
+
+- 컬렉션 타입을 지정하는 형식에는 `List.class` / `Set.class` 등을 넘긴다. 행 클래스만 주는 형식은 `List`로 고정이다.
+- `Resource`에는 파일명이 있어야 한다 — 검증 대상인 확장자가 거기서 나온다. 파일명이 없는 것(예: 그냥 만든 `ByteArrayResource`)은 지원하지 않는 확장자와 마찬가지로 `HttpMediaTypeNotSupportedException`으로 거절된다.
+
+### `PxlCsvImporter`
+
+CSV 소스(`.csv`) — Multipart 업로드 또는 스프링 `Resource` — 를 워크북 객체 또는 시트 컬렉션으로 변환한다.
+
+```java
+// 시작
+PxlCsvImporter.Builder importCsv()
+
+// 구성 (하나만). 타입이 실린 Source<R>를 돌려준다
+<W>                       Source<W>       workbook(Class<W> workbookClass)
+<T>                       Source<List<T>> sheet(Class<T> rowClass)
+<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass)
+
+// 옵션 (구성 지정 전후 어디서든. 나중에 지정한 값이 이긴다)
+Builder / Source<R> workbookName(String workbookName)
+Builder / Source<R> override(PxlImportWorkbookOption option)
+
+// 실행
+R fromMultipartFile(MultipartFile csvFile)          // 업로드 1개
+R fromMultipartFiles(List<MultipartFile> csvFiles)  // 업로드 여러 개
+R fromResource(Resource csvFile)                    // 리소스 1개
+R fromResources(List<Resource> csvFiles)            // 리소스 여러 개
+```
+
+- `workbook(...)` 형식은 소스 여러 개를 시트별로 나눠 담고, `sheet(...)` 형식은 정확히 하나만 받는다. `sheet(...)` 형식에서 `fromMultipartFiles(...)` / `fromResources(...)`로 파일을 둘 이상 넘기면 `PxlArgumentException`이 발생한다.
+- 여기서도 `Resource`에는 파일명이 있어야 하며, 그 이름이 두 몫을 한다 — 검증 대상인 확장자이자 시트명이다.
+
+---
 
 ### `PxlExcelExporter`
 
@@ -1099,62 +1156,6 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 - 엔트리명은 대소문자를 무시하고 서로 달라야 하며 경로 구분자를 담아서는 안 된다. 둘 다 아무것도 기록되기 전에 `PxlArgumentException`으로 거절되므로, 실패한 export는 파일을 만들지도 응답을 건드리지도 않는다. 같은 이름으로 정해질 엔트리가 둘 있으면 이름을 명시할 것.
 - 아카이브명은 필수다.
 
-### `PxlExcelImporter`
-
-엑셀 소스(`.xls` / `.xlsx`) — Multipart 업로드 또는 스프링 `Resource` — 를 워크북 객체 또는 시트 컬렉션으로 변환한다.
-
-```java
-// 시작
-PxlExcelImporter.Builder importExcel()
-
-// 구성 (하나만). 타입이 실린 Source<R>를 돌려준다
-<W>                       Source<W>       workbook(Class<W> workbookClass)
-<T>                       Source<List<T>> sheet(Class<T> rowClass, String... candidateSheetNames)
-<T>                       Source<List<T>> sheet(Class<T> rowClass, List<String> candidateSheetNames)
-<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass, String... candidateSheetNames)
-<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass, List<String> candidateSheetNames)
-
-// 옵션 (구성 지정 전후 어디서든. 나중에 지정한 값이 이긴다)
-Builder / Source<R> workbookName(String workbookName)
-Builder / Source<R> override(PxlImportWorkbookOption option)
-
-// 실행
-R fromMultipartFile(MultipartFile excelFile)  // 업로드
-R fromResource(Resource excelFile)            // 파일, 클래스패스 항목, 그 밖의 모든 Resource
-```
-
-- 컬렉션 타입을 지정하는 형식에는 `List.class` / `Set.class` 등을 넘긴다. 행 클래스만 주는 형식은 `List`로 고정이다.
-- `Resource`에는 파일명이 있어야 한다 — 검증 대상인 확장자가 거기서 나온다. 파일명이 없는 것(예: 그냥 만든 `ByteArrayResource`)은 지원하지 않는 확장자와 마찬가지로 `HttpMediaTypeNotSupportedException`으로 거절된다.
-
-### `PxlCsvImporter`
-
-CSV 소스(`.csv`) — Multipart 업로드 또는 스프링 `Resource` — 를 워크북 객체 또는 시트 컬렉션으로 변환한다.
-
-```java
-// 시작
-PxlCsvImporter.Builder importCsv()
-
-// 구성 (하나만). 타입이 실린 Source<R>를 돌려준다
-<W>                       Source<W>       workbook(Class<W> workbookClass)
-<T>                       Source<List<T>> sheet(Class<T> rowClass)
-<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass)
-
-// 옵션 (구성 지정 전후 어디서든. 나중에 지정한 값이 이긴다)
-Builder / Source<R> workbookName(String workbookName)
-Builder / Source<R> override(PxlImportWorkbookOption option)
-
-// 실행
-R fromMultipartFile(MultipartFile csvFile)          // 업로드 1개
-R fromMultipartFiles(List<MultipartFile> csvFiles)  // 업로드 여러 개
-R fromResource(Resource csvFile)                    // 리소스 1개
-R fromResources(List<Resource> csvFiles)            // 리소스 여러 개
-```
-
-- `workbook(...)` 형식은 소스 여러 개를 시트별로 나눠 담고, `sheet(...)` 형식은 정확히 하나만 받는다. `sheet(...)` 형식에서 `fromMultipartFiles(...)` / `fromResources(...)`로 파일을 둘 이상 넘기면 `PxlArgumentException`이 발생한다.
-- 여기서도 `Resource`에는 파일명이 있어야 하며, 그 이름이 두 몫을 한다 — 검증 대상인 확장자이자 시트명이다.
-
----
-
 ## 유의 사항
 
 - **매핑 클래스 요구사항**  
@@ -1167,6 +1168,23 @@ R fromResources(List<Resource> csvFiles)            // 리소스 여러 개
 ## 크기 & 메모리
 
 아래는 전부 Heap 이야기다. 양방향 모두 기본적으로 워크북 전체를 메모리에 올리며, 평범한 경우에는 문제가 없지만 대용량에서 가장 먼저 한계에 부딪히는 지점이다.
+
+### Import: 업로드
+
+업로드된 워크북은 스트리밍을 켜지 않는 한 POI가 전부 파싱한다. 스트리밍을 켜면 시트를 슬라이딩 윈도우로 읽는다.
+
+```java
+@PxlWorkbook(importUsingStreamReader = true, importStreamReaderRowCacheSize = 100)
+public class Company { ... }
+```
+
+- 스트리밍 읽기는 `.xlsx` 전용이다. `.xls` 업로드는 이 설정과 무관하게 전량 파싱으로 처리된다.
+- 애초에 들어올 수 있는 크기를 제한하는 편이 낫다. 서블릿 컨테이너의 제한은 이 코드가 실행되기 전에 적용된다.
+
+```properties
+spring.servlet.multipart.max-file-size=20MB
+spring.servlet.multipart.max-request-size=100MB
+```
 
 ### Export: 워크북 모델
 
@@ -1219,23 +1237,6 @@ pxlSpring.exportExcel()
 - **도중에 실패하면 되돌릴 수 없다.** 응답이 이미 `200 OK`와 다운로드 헤더로 커밋된 상태라, 클라이언트는 성공한 다운로드처럼 보이는 잘린 파일을 받는다. 이미 나간 바이트는 취소할 수 없다.
 - **`Content-Length`가 없다.** 첫 바이트를 보내기 전에는 크기를 알 수 없어 chunked로 나가고, 클라이언트는 진행률을 표시하지 못한다. 대신 중단된 chunked 전송은 "완료"가 아니라 "실패"로 인식된다는 이점이 있다.
 
-### Import: 업로드
-
-업로드된 워크북은 스트리밍을 켜지 않는 한 POI가 전부 파싱한다. 스트리밍을 켜면 시트를 슬라이딩 윈도우로 읽는다.
-
-```java
-@PxlWorkbook(importUsingStreamReader = true, importStreamReaderRowCacheSize = 100)
-public class Company { ... }
-```
-
-- 스트리밍 읽기는 `.xlsx` 전용이다. `.xls` 업로드는 이 설정과 무관하게 전량 파싱으로 처리된다.
-- 애초에 들어올 수 있는 크기를 제한하는 편이 낫다. 서블릿 컨테이너의 제한은 이 코드가 실행되기 전에 적용된다.
-
-```properties
-spring.servlet.multipart.max-file-size=20MB
-spring.servlet.multipart.max-request-size=100MB
-```
-
 ---
 
 ## 성능 로깅 (선택)
@@ -1256,15 +1257,15 @@ pxl.performance.logging.low-performance-in-ms=5000
 
 ## 자주 묻는 질문
 
-**스프링 컨트롤러에서 엑셀 파일을 다운로드로 어떻게 내려주나?**
-`PxlSpring`을 주입하고 응답 목적지로 체인을 끝낸다.
-`pxlSpring.exportExcel().sheet(Employee.class, employees, "Employees").toResponseEntity("report")`가
-다운로드 헤더까지 설정된 `ResponseEntity<Resource>`를 돌려준다 — [API 사용](#api-사용) 참고.
-
 **업로드된 엑셀 파일을 자바 객체 리스트로 어떻게 읽나?**
 `pxlSpring.importExcel().sheet(Employee.class, "Employees").fromMultipartFile(file)`을 호출하면 모든 셀이
 필드 타입으로 변환된 `List<Employee>`가 반환된다. 업로드의 확장자를 먼저 검증하며, `.xls`도 `.xlsx`와
 똑같이 읽는다 — [`PxlExcelImporter`](#pxlexcelimporter) 참고.
+
+**스프링 컨트롤러에서 엑셀 파일을 다운로드로 어떻게 내려주나?**
+`PxlSpring`을 주입하고 응답 목적지로 체인을 끝낸다.
+`pxlSpring.exportExcel().sheet(Employee.class, employees, "Employees").toResponseEntity("report")`가
+다운로드 헤더까지 설정된 `ResponseEntity<Resource>`를 돌려준다 — [API 사용](#api-사용) 참고.
 
 **`HttpServletResponse`와 `ResponseEntity` 중 무엇을 쓰나?**
 어느 쪽이든 완성된 출력을 1벌 들고 있는 것은 같다. 핸들러가 `void`를 반환하면 `toResponse(...)`를,
@@ -1283,7 +1284,7 @@ pxl.performance.logging.low-performance-in-ms=5000
 한다.
 
 **CSV도 지원하나?**
-`exportCsv()` / `importCsv()`로 지원하며 DTO와 애노테이션은 엑셀과 같다. CSV는 파일 하나가 시트 하나라,
+`importCsv()` / `exportCsv()`로 지원하며 DTO와 애노테이션은 엑셀과 같다. CSV는 파일 하나가 시트 하나라,
 업로드된 CSV 여러 개를 `@PxlSheet` 필드마다 하나씩 묶어 워크북 객체 하나로 읽을 수 있다.
 
 **엑셀 파일 여러 개를 한 번에 내려받게 하려면?**

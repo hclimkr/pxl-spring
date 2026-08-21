@@ -61,8 +61,8 @@ For PXL behavior — annotation attributes, supported types, the full set of opt
 ## Features
 
 - **One bean for every direction** — inject `PxlSpring` and each operation is a method chain off it:
-  `exportExcel()`, `exportSampleExcel()`, `exportCsv()`, `exportSampleCsv()`, `exportZip()`,
-  `importExcel()`, `importCsv()`.
+  `importExcel()`, `importCsv()`, `exportExcel()`, `exportSampleExcel()`, `exportCsv()`,
+  `exportSampleCsv()`, `exportZip()`.
 - **Multipart upload straight to objects** — `fromMultipartFile(...)` / `fromMultipartFiles(...)` turn an
   upload into a `List<Employee>` or a whole workbook object, with the extension checked before parsing.
 - **Not only uploads** — `fromResource(...)` / `fromResources(...)` accept any Spring `Resource`, so batch
@@ -190,13 +190,13 @@ Boot does three pieces of wiring for you that you now have to declare yourself. 
 
 | Start method                    | What it does                                                                 |
 |---------------------------------|------------------------------------------------------------------------------|
+| `pxlSpring.importExcel()`       | Excel file → Java objects                                                    |
+| `pxlSpring.importCsv()`         | CSV file → Java objects                                                      |
 | `pxlSpring.exportExcel()`       | Java objects → Excel (Stream/File/Response/ResponseStreaming/ResponseEntity) |
 | `pxlSpring.exportSampleExcel()` | Class → Excel carrying a single sample data row                              |
 | `pxlSpring.exportCsv()`         | Java objects → CSV (the same five destinations)                              |
 | `pxlSpring.exportSampleCsv()`   | Class → CSV carrying a single sample data record                             |
 | `pxlSpring.exportZip()`         | Several spreadsheets (Excel or CSV) → one zip                                |
-| `pxlSpring.importExcel()`       | Excel file → Java objects                                                    |
-| `pxlSpring.importCsv()`         | CSV file → Java objects                                                      |
 
 The `io.github.hclimkr.pxl.spring` package must be in your component scan for `PxlSpring` and the performance-logging aspect to be registered as beans. Sub-packages are scanned along with it, so this one entry covers everything.
 
@@ -218,13 +218,13 @@ Then inject it wherever you need it. Every example in this document assumes the 
 @Autowired
 private PxlSpring pxlSpring;
 
+// pxlSpring.importExcel()
+// pxlSpring.importCsv()
 // pxlSpring.exportExcel()
 // pxlSpring.exportSampleExcel()
 // pxlSpring.exportCsv()
 // pxlSpring.exportSampleCsv()
 // pxlSpring.exportZip()
-// pxlSpring.importExcel()
-// pxlSpring.importCsv()
 ```
 
 ---
@@ -341,6 +341,24 @@ public class Company {
 
 ## Usage at a Glance
 
+### Import
+
+```java
+import io.github.hclimkr.pxl.spring.PxlSpring;
+
+import org.springframework.web.multipart.MultipartFile;
+import java.util.List;
+
+// Import: multipart Excel upload → list of Employee row objects
+@PostMapping("/employees/import")
+public int upload(@RequestParam MultipartFile file) throws Exception {
+    List<Employee> employees = pxlSpring.importExcel()
+                                        .sheet(Employee.class, "Employees")
+                                        .fromMultipartFile(file);
+    return employees.size();
+}
+```
+
 ### Export
 
 ```java
@@ -372,46 +390,28 @@ public ResponseEntity<Resource> download() throws Exception {
 }
 ```
 
-### Import
+---
 
-```java
-import io.github.hclimkr.pxl.spring.PxlSpring;
-
-import org.springframework.web.multipart.MultipartFile;
-import java.util.List;
-
-// Import: multipart Excel upload → list of Employee row objects
-@PostMapping("/employees/import")
-public int upload(@RequestParam MultipartFile file) throws Exception {
-    List<Employee> employees = pxlSpring.importExcel()
-                                        .sheet(Employee.class, "Employees")
-                                        .fromMultipartFile(file);
-    return employees.size();
-}
-```
-
-Every operation is handled through a single method chain like the examples above. The start method indicates the direction of the operation (export/import) and the format (Excel/CSV/sample/ZIP), then you specify the target, and it is executed in the final method.
+Every operation is handled through a single method chain like the examples above. The start method indicates the direction of the operation (import/export) and the format (Excel/CSV/sample/ZIP), then you specify the target, and it is executed in the final method.
 
 | Use case            | Method chain (start → configure → execute)                                                                                                                                                                 |
 |---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Excel import        | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
+| CSV import          | `pxlSpring.importCsv()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)` / `.fromMultipartFiles(List<MultipartFile>)`                                                          |
 | Excel export        | `pxlSpring.exportExcel()`<br/>→ `.workbook(...) / .sheet(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Sample Excel export | `pxlSpring.exportSampleExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | CSV export          | `pxlSpring.exportCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | Sample CSV export   | `pxlSpring.exportSampleCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | ZIP export          | `pxlSpring.exportZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...) / .csvSheet(...) / .sampleCsvSheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
-| Excel import        | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
-| CSV import          | `pxlSpring.importCsv()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)` / `.fromMultipartFiles(List<MultipartFile>)`                                                          |
 
-- For export, the configuration steps `.workbook(...)`, `.sheet(...)` and `.poiWorkbook(...)` are mutually exclusive — specifying more than one in a chain throws `PxlArgumentException` (as does omitting all of them).
-- For export, calling `.sheet(...)` multiple times creates multiple sheets. `exportSampleExcel()` works the same way.
-- For CSV export, one file is one sheet — there is no `.workbook(...)` to call, and a second `.sheet(...)` call does not add a sheet, it makes the final method throw `PxlArgumentException`. `exportSampleCsv()` works the same way.
 - For import, `.sheet(...)` cannot be chained consecutively. There are two ways to read multiple sheets.
     - All at once, in workbook form: passing a `@PxlWorkbook` class to `.workbook(...)` binds multiple sheets at once, one per `@PxlSheet` field.  
     - One sheet at a time: start a fresh chain per sheet and run each through `.fromMultipartFile(...)`.
+- For export, the configuration steps `.workbook(...)`, `.sheet(...)` and `.poiWorkbook(...)` are mutually exclusive — specifying more than one in a chain throws `PxlArgumentException` (as does omitting all of them).
+- For export, calling `.sheet(...)` multiple times creates multiple sheets. `exportSampleExcel()` works the same way.
+- For CSV export, one file is one sheet — there is no `.workbook(...)` to call, and a second `.sheet(...)` call does not add a sheet, it makes the final method throw `PxlArgumentException`. `exportSampleCsv()` works the same way.
 
 You can insert `override(...)` (core option) and `workbookName(...)` (workbook name) anywhere in the chain. The order is free, and if you set the same value twice the later one is the one used.
-
----
 
 ## API Usage
 
@@ -427,6 +427,165 @@ public class ExcelController {
     // every handler method below lives in a controller like this one
 }
 ```
+
+### `PxlExcelImporter`
+
+**A single sheet uploaded**
+
+The first matching candidate sheet name is read, and no cast is needed.
+
+```java
+@PostMapping("/employees/import")
+public int importEmployees(@RequestParam MultipartFile file) throws Exception {
+    List<Employee> employees = pxlSpring.importExcel()
+                                        .sheet(Employee.class, "Employees", "Staff")
+                                        .fromMultipartFile(file);
+
+    return employees.size();
+}
+```
+
+**A whole Excel file uploaded into a workbook object**
+
+Omit `workbookName` and it is derived from the file name.
+
+```java
+@PostMapping("/company/import")
+public int importCompany(@RequestParam MultipartFile file) throws Exception {
+    Company company = pxlSpring.importExcel()
+                               .workbook(Company.class)
+                               .fromMultipartFile(file);
+
+    return company.getEmployees().size() + company.getDepartments().size();
+}
+```
+
+**Choosing the sheet's collection type**
+
+`Set.class` binds raw, so the result arrives raw too.
+
+```java
+@PostMapping("/employees/import-unique")
+public int importUniqueEmployees(@RequestParam MultipartFile file) throws Exception {
+    @SuppressWarnings("unchecked")
+    final Set<Employee> unique = pxlSpring.importExcel()
+                                          .sheet(Employee.class, Set.class, "Employees")
+                                          .fromMultipartFile(file);
+
+    return unique.size();
+}
+```
+
+**A password-protected Excel file uploaded**
+
+```java
+@PostMapping("/company/import-locked")
+public int importLockedCompany(@RequestParam MultipartFile file) throws Exception {
+    Company company = pxlSpring.importExcel()
+                               .override(PxlImportWorkbookOption.builder().importPassword("secret").build())
+                               .workbook(Company.class)
+                               .fromMultipartFile(file);
+
+    return company.getEmployees().size() + company.getDepartments().size();
+}
+```
+
+**Multiple sheets uploaded**
+
+On import, `sheet(...)` cannot be chained consecutively, so start a fresh chain per sheet. Hand the same file over again — a fresh `InputStream` is opened per call.
+
+```java
+@PostMapping("/company/import-sheets")
+public int importCompanySheets(@RequestParam MultipartFile file) throws Exception {
+    List<Employee> employees = pxlSpring.importExcel()
+                                        .sheet(Employee.class, "Employees")
+                                        .fromMultipartFile(file);
+
+    List<Department> departments = pxlSpring.importExcel()
+                                            .sheet(Department.class, "Departments")
+                                            .fromMultipartFile(file);
+
+    return employees.size() + departments.size();
+}
+```
+
+**An Excel file that is not an upload**
+
+`fromResource(...)` takes any Spring `Resource` — a file on disk, a classpath entry, anything else behind that abstraction — so batch jobs, seed loaders and tests need no `MultipartFile`. The resource must report a file name: it carries the extension that is validated, and the workbook-name fallback.
+
+```java
+@Scheduled(cron = "0 0 3 * * *")
+public void importNightlyFeed() throws Exception {
+    Company company = pxlSpring.importExcel()
+                               .workbook(Company.class)
+                               .fromResource(new FileSystemResource("/var/feed/company.xlsx"));
+
+    save(company);
+}
+```
+
+### `PxlCsvImporter`
+
+**A single sheet uploaded**
+
+```java
+@PostMapping("/employees/import-csv")
+public int importEmployeesCsv(@RequestParam MultipartFile csvFile) throws Exception {
+    List<Employee> employees = pxlSpring.importCsv()
+                                        .sheet(Employee.class)
+                                        .fromMultipartFile(csvFile);
+
+    return employees.size();
+}
+```
+
+**Several CSVs uploaded into a workbook object**
+
+One CSV file is one sheet, and the file name matches `@PxlSheet(name = ...)`. The CSV `sheet(...)` form takes exactly one file, so several sheets means this workbook form.
+
+```java
+@PostMapping("/company/import-csv")
+public int importCompanyCsv(@RequestParam List<MultipartFile> csvFiles) throws Exception {
+    Company company = pxlSpring.importCsv()
+                               .workbook(Company.class)
+                               .fromMultipartFiles(csvFiles);
+
+    return company.getEmployees().size() + company.getDepartments().size();
+}
+```
+
+**Setting options such as the delimiter**
+
+```java
+@PostMapping("/employees/import-csv-semicolon")
+public int importSemicolonCsv(@RequestParam MultipartFile csvFile) throws Exception {
+    List<Employee> employees = pxlSpring.importCsv()
+                                        .override(PxlImportWorkbookOption.builder().importCsvDelimiter(';').build())
+                                        .sheet(Employee.class)
+                                        .fromMultipartFile(csvFile);
+
+    return employees.size();
+}
+```
+
+**CSV files that are not uploads**
+
+`fromResource(...)` / `fromResources(...)` are the same pair for any Spring `Resource`. A resource's file name still names its sheet, so it has to report one.
+
+```java
+@EventListener(ApplicationReadyEvent.class)
+public void loadSeedData() throws Exception {
+    Company company = pxlSpring.importCsv()
+                               .workbook(Company.class)
+                               .fromResources(Arrays.asList(
+                                       new ClassPathResource("seed/Employees.csv"),
+                                       new ClassPathResource("seed/Departments.csv")));
+
+    save(company);
+}
+```
+
+---
 
 ### `PxlExcelExporter`
 
@@ -783,165 +942,6 @@ public void writeQuarterArchive(File zipFile) throws Exception {
 }
 ```
 
-### `PxlExcelImporter`
-
-**A single sheet uploaded**
-
-The first matching candidate sheet name is read, and no cast is needed.
-
-```java
-@PostMapping("/employees/import")
-public int importEmployees(@RequestParam MultipartFile file) throws Exception {
-    List<Employee> employees = pxlSpring.importExcel()
-                                        .sheet(Employee.class, "Employees", "Staff")
-                                        .fromMultipartFile(file);
-
-    return employees.size();
-}
-```
-
-**A whole Excel file uploaded into a workbook object**
-
-Omit `workbookName` and it is derived from the file name.
-
-```java
-@PostMapping("/company/import")
-public int importCompany(@RequestParam MultipartFile file) throws Exception {
-    Company company = pxlSpring.importExcel()
-                               .workbook(Company.class)
-                               .fromMultipartFile(file);
-
-    return company.getEmployees().size() + company.getDepartments().size();
-}
-```
-
-**Choosing the sheet's collection type**
-
-`Set.class` binds raw, so the result arrives raw too.
-
-```java
-@PostMapping("/employees/import-unique")
-public int importUniqueEmployees(@RequestParam MultipartFile file) throws Exception {
-    @SuppressWarnings("unchecked")
-    final Set<Employee> unique = pxlSpring.importExcel()
-                                          .sheet(Employee.class, Set.class, "Employees")
-                                          .fromMultipartFile(file);
-
-    return unique.size();
-}
-```
-
-**A password-protected Excel file uploaded**
-
-```java
-@PostMapping("/company/import-locked")
-public int importLockedCompany(@RequestParam MultipartFile file) throws Exception {
-    Company company = pxlSpring.importExcel()
-                               .override(PxlImportWorkbookOption.builder().importPassword("secret").build())
-                               .workbook(Company.class)
-                               .fromMultipartFile(file);
-
-    return company.getEmployees().size() + company.getDepartments().size();
-}
-```
-
-**Multiple sheets uploaded**
-
-On import, `sheet(...)` cannot be chained consecutively, so start a fresh chain per sheet. Hand the same file over again — a fresh `InputStream` is opened per call.
-
-```java
-@PostMapping("/company/import-sheets")
-public int importCompanySheets(@RequestParam MultipartFile file) throws Exception {
-    List<Employee> employees = pxlSpring.importExcel()
-                                        .sheet(Employee.class, "Employees")
-                                        .fromMultipartFile(file);
-
-    List<Department> departments = pxlSpring.importExcel()
-                                            .sheet(Department.class, "Departments")
-                                            .fromMultipartFile(file);
-
-    return employees.size() + departments.size();
-}
-```
-
-**An Excel file that is not an upload**
-
-`fromResource(...)` takes any Spring `Resource` — a file on disk, a classpath entry, anything else behind that abstraction — so batch jobs, seed loaders and tests need no `MultipartFile`. The resource must report a file name: it carries the extension that is validated, and the workbook-name fallback.
-
-```java
-@Scheduled(cron = "0 0 3 * * *")
-public void importNightlyFeed() throws Exception {
-    Company company = pxlSpring.importExcel()
-                               .workbook(Company.class)
-                               .fromResource(new FileSystemResource("/var/feed/company.xlsx"));
-
-    save(company);
-}
-```
-
-### `PxlCsvImporter`
-
-**A single sheet uploaded**
-
-```java
-@PostMapping("/employees/import-csv")
-public int importEmployeesCsv(@RequestParam MultipartFile csvFile) throws Exception {
-    List<Employee> employees = pxlSpring.importCsv()
-                                        .sheet(Employee.class)
-                                        .fromMultipartFile(csvFile);
-
-    return employees.size();
-}
-```
-
-**Several CSVs uploaded into a workbook object**
-
-One CSV file is one sheet, and the file name matches `@PxlSheet(name = ...)`. The CSV `sheet(...)` form takes exactly one file, so several sheets means this workbook form.
-
-```java
-@PostMapping("/company/import-csv")
-public int importCompanyCsv(@RequestParam List<MultipartFile> csvFiles) throws Exception {
-    Company company = pxlSpring.importCsv()
-                               .workbook(Company.class)
-                               .fromMultipartFiles(csvFiles);
-
-    return company.getEmployees().size() + company.getDepartments().size();
-}
-```
-
-**Setting options such as the delimiter**
-
-```java
-@PostMapping("/employees/import-csv-semicolon")
-public int importSemicolonCsv(@RequestParam MultipartFile csvFile) throws Exception {
-    List<Employee> employees = pxlSpring.importCsv()
-                                        .override(PxlImportWorkbookOption.builder().importCsvDelimiter(';').build())
-                                        .sheet(Employee.class)
-                                        .fromMultipartFile(csvFile);
-
-    return employees.size();
-}
-```
-
-**CSV files that are not uploads**
-
-`fromResource(...)` / `fromResources(...)` are the same pair for any Spring `Resource`. A resource's file name still names its sheet, so it has to report one.
-
-```java
-@EventListener(ApplicationReadyEvent.class)
-public void loadSeedData() throws Exception {
-    Company company = pxlSpring.importCsv()
-                               .workbook(Company.class)
-                               .fromResources(Arrays.asList(
-                                       new ClassPathResource("seed/Employees.csv"),
-                                       new ClassPathResource("seed/Departments.csv")));
-
-    save(company);
-}
-```
-
----
-
 ## API Reference
 
 ### `PxlSpring`
@@ -949,14 +949,70 @@ public void loadSeedData() throws Exception {
 The single bean to inject. Each method hands back the builder for that operation.
 
 ```java
+PxlExcelImporter.Builder       importExcel()
+PxlCsvImporter.Builder         importCsv()
 PxlExcelExporter.Builder       exportExcel()
 PxlSampleExcelExporter.Builder exportSampleExcel()
 PxlCsvExporter.Builder         exportCsv()
 PxlSampleCsvExporter.Builder   exportSampleCsv()
 PxlZipExporter.Builder         exportZip()
-PxlExcelImporter.Builder       importExcel()
-PxlCsvImporter.Builder         importCsv()
 ```
+
+### `PxlExcelImporter`
+
+Converts an Excel source (`.xls` / `.xlsx`) — a multipart upload or a Spring `Resource` — into a workbook object or a sheet collection.
+
+```java
+// start
+PxlExcelImporter.Builder importExcel()
+
+// configuration (exactly one). Hands back a typed Source<R>
+<W>                       Source<W>       workbook(Class<W> workbookClass)
+<T>                       Source<List<T>> sheet(Class<T> rowClass, String... candidateSheetNames)
+<T>                       Source<List<T>> sheet(Class<T> rowClass, List<String> candidateSheetNames)
+<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass, String... candidateSheetNames)
+<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass, List<String> candidateSheetNames)
+
+// options (before or after the configuration; the value set last wins)
+Builder / Source<R> workbookName(String workbookName)
+Builder / Source<R> override(PxlImportWorkbookOption option)
+
+// execution
+R fromMultipartFile(MultipartFile excelFile)  // an upload
+R fromResource(Resource excelFile)            // a file, a classpath entry, any Resource
+```
+
+- For the forms that take a collection type, pass `List.class` / `Set.class` and so on. The forms that take only a row class are fixed to `List`.
+- A `Resource` must report a file name — it carries the extension that is validated. One that does not, such as a bare `ByteArrayResource`, is rejected with `HttpMediaTypeNotSupportedException` just like an unsupported extension.
+
+### `PxlCsvImporter`
+
+Converts a CSV source (`.csv`) — a multipart upload or a Spring `Resource` — into a workbook object or a sheet collection.
+
+```java
+// start
+PxlCsvImporter.Builder importCsv()
+
+// configuration (exactly one). Hands back a typed Source<R>
+<W>                       Source<W>       workbook(Class<W> workbookClass)
+<T>                       Source<List<T>> sheet(Class<T> rowClass)
+<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass)
+
+// options (before or after the configuration; the value set last wins)
+Builder / Source<R> workbookName(String workbookName)
+Builder / Source<R> override(PxlImportWorkbookOption option)
+
+// execution
+R fromMultipartFile(MultipartFile csvFile)          // one upload
+R fromMultipartFiles(List<MultipartFile> csvFiles)  // several uploads
+R fromResource(Resource csvFile)                    // one resource
+R fromResources(List<Resource> csvFiles)            // several resources
+```
+
+- The `workbook(...)` form spreads several sources across sheets; the `sheet(...)` forms accept exactly one. With a `sheet(...)` form, passing more than one file to `fromMultipartFiles(...)` / `fromResources(...)` raises `PxlArgumentException`.
+- A `Resource` must report a file name here too, and it does double duty: it carries the validated extension, and it names the sheet.
+
+---
 
 ### `PxlExcelExporter`
 
@@ -1099,62 +1155,6 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 - Entry names must come out distinct, ignoring case, and must not carry a path separator. Either is refused with `PxlArgumentException` before anything is written, so a failed export creates no file and touches no response. Name entries explicitly where two would otherwise resolve to the same one.
 - The archive name is required.
 
-### `PxlExcelImporter`
-
-Converts an Excel source (`.xls` / `.xlsx`) — a multipart upload or a Spring `Resource` — into a workbook object or a sheet collection.
-
-```java
-// start
-PxlExcelImporter.Builder importExcel()
-
-// configuration (exactly one). Hands back a typed Source<R>
-<W>                       Source<W>       workbook(Class<W> workbookClass)
-<T>                       Source<List<T>> sheet(Class<T> rowClass, String... candidateSheetNames)
-<T>                       Source<List<T>> sheet(Class<T> rowClass, List<String> candidateSheetNames)
-<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass, String... candidateSheetNames)
-<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass, List<String> candidateSheetNames)
-
-// options (before or after the configuration; the value set last wins)
-Builder / Source<R> workbookName(String workbookName)
-Builder / Source<R> override(PxlImportWorkbookOption option)
-
-// execution
-R fromMultipartFile(MultipartFile excelFile)  // an upload
-R fromResource(Resource excelFile)            // a file, a classpath entry, any Resource
-```
-
-- For the forms that take a collection type, pass `List.class` / `Set.class` and so on. The forms that take only a row class are fixed to `List`.
-- A `Resource` must report a file name — it carries the extension that is validated. One that does not, such as a bare `ByteArrayResource`, is rejected with `HttpMediaTypeNotSupportedException` just like an unsupported extension.
-
-### `PxlCsvImporter`
-
-Converts a CSV source (`.csv`) — a multipart upload or a Spring `Resource` — into a workbook object or a sheet collection.
-
-```java
-// start
-PxlCsvImporter.Builder importCsv()
-
-// configuration (exactly one). Hands back a typed Source<R>
-<W>                       Source<W>       workbook(Class<W> workbookClass)
-<T>                       Source<List<T>> sheet(Class<T> rowClass)
-<C extends Collection<?>> Source<C>       sheet(Class<?> rowClass, Class<C> collectionClass)
-
-// options (before or after the configuration; the value set last wins)
-Builder / Source<R> workbookName(String workbookName)
-Builder / Source<R> override(PxlImportWorkbookOption option)
-
-// execution
-R fromMultipartFile(MultipartFile csvFile)          // one upload
-R fromMultipartFiles(List<MultipartFile> csvFiles)  // several uploads
-R fromResource(Resource csvFile)                    // one resource
-R fromResources(List<Resource> csvFiles)            // several resources
-```
-
-- The `workbook(...)` form spreads several sources across sheets; the `sheet(...)` forms accept exactly one. With a `sheet(...)` form, passing more than one file to `fromMultipartFiles(...)` / `fromResources(...)` raises `PxlArgumentException`.
-- A `Resource` must report a file name here too, and it does double duty: it carries the validated extension, and it names the sheet.
-
----
-
 ## Notes
 
 - **Mapping class requirements**  
@@ -1167,6 +1167,23 @@ R fromResources(List<Resource> csvFiles)            // several resources
 ## Size & Memory
 
 Everything below is about heap. Both directions hold a whole workbook in memory by default, which is fine for the ordinary case and is what runs out first on a large one.
+
+### Import: the upload
+
+The uploaded workbook is parsed by POI in full unless streaming is switched on, which reads the sheet in a sliding window instead:
+
+```java
+@PxlWorkbook(importUsingStreamReader = true, importStreamReaderRowCacheSize = 100)
+public class Company { ... }
+```
+
+- Streaming reads `.xlsx` only. An `.xls` upload falls back to a full parse regardless of the setting.
+- Cap what can arrive in the first place — the servlet container's own limits apply before any of this code runs:
+
+```properties
+spring.servlet.multipart.max-file-size=20MB
+spring.servlet.multipart.max-request-size=100MB
+```
 
 ### Export: the workbook model
 
@@ -1219,23 +1236,6 @@ Pair it with `SXSSF`. Together the two make an export cost roughly constant heap
 - **A failure part-way through cannot be taken back.** The response is already committed with `200 OK` and the download headers, so the client receives a truncated file that looks like a successful download. Nothing can undo bytes already sent.
 - **No `Content-Length`.** The size is not known before the first byte, so the response goes out chunked and clients show no download progress. The upside is that an aborted chunked transfer at least reads as a failed download rather than a complete one.
 
-### Import: the upload
-
-The uploaded workbook is parsed by POI in full unless streaming is switched on, which reads the sheet in a sliding window instead:
-
-```java
-@PxlWorkbook(importUsingStreamReader = true, importStreamReaderRowCacheSize = 100)
-public class Company { ... }
-```
-
-- Streaming reads `.xlsx` only. An `.xls` upload falls back to a full parse regardless of the setting.
-- Cap what can arrive in the first place — the servlet container's own limits apply before any of this code runs:
-
-```properties
-spring.servlet.multipart.max-file-size=20MB
-spring.servlet.multipart.max-request-size=100MB
-```
-
 ---
 
 ## Performance Logging (Optional)
@@ -1256,15 +1256,15 @@ The switch behaves the same in a Boot application and in a plain Spring one.
 
 ## FAQ
 
-**How do I return an Excel file as a download from a Spring controller?**
-Inject `PxlSpring` and finish the chain on a response destination:
-`pxlSpring.exportExcel().sheet(Employee.class, employees, "Employees").toResponseEntity("report")` hands
-back a `ResponseEntity<Resource>` with the download headers already set — see [API Usage](#api-usage).
-
 **How do I read an uploaded Excel file into a list of Java objects?**
 `pxlSpring.importExcel().sheet(Employee.class, "Employees").fromMultipartFile(file)` returns a
 `List<Employee>` with every cell already converted to the field's type. The upload's extension is validated
 first, and an `.xls` is read as readily as an `.xlsx` — see [`PxlExcelImporter`](#pxlexcelimporter).
+
+**How do I return an Excel file as a download from a Spring controller?**
+Inject `PxlSpring` and finish the chain on a response destination:
+`pxlSpring.exportExcel().sheet(Employee.class, employees, "Employees").toResponseEntity("report")` hands
+back a `ResponseEntity<Resource>` with the download headers already set — see [API Usage](#api-usage).
 
 **`HttpServletResponse` or `ResponseEntity` — which one should I use?**
 Either; both hold the same single copy of the finished output. Use `toResponse(...)` when the handler
@@ -1283,7 +1283,7 @@ substitute of the same length and extension. The name is used exactly as given, 
 if you need NFC.
 
 **Does it handle CSV too?**
-Yes — `exportCsv()` / `importCsv()`, with the same DTOs and annotations as Excel. One CSV file is one
+Yes — `importCsv()` / `exportCsv()`, with the same DTOs and annotations as Excel. One CSV file is one
 sheet, so several uploaded CSVs can be read into a single workbook object, one file per `@PxlSheet` field.
 
 **How do I let the user download several Excel files at once?**
