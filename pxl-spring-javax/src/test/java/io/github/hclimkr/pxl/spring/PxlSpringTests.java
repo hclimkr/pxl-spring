@@ -57,15 +57,6 @@ class PxlSpringTests {
     }
 
     @Test
-    void importCsv_readsTheUploadThroughTheFacade() throws PxlException, HttpMediaTypeNotSupportedException {
-        final List<TestUser> rows = pxlSpring.importCsv()
-                .sheet(TestUser.class)
-                .fromMultipartFile(file("Users.csv", USERS_CSV));
-
-        assertThat(rows).extracting(TestUser::getName).containsExactly("Alice", "Bob");
-    }
-
-    @Test
     void exportSampleExcel_producesTemplateThroughTheFacade() throws PxlException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         pxlSpring.exportSampleExcel()
@@ -117,6 +108,15 @@ class PxlSpringTests {
     }
 
     @Test
+    void importCsv_readsTheUploadThroughTheFacade() throws PxlException, HttpMediaTypeNotSupportedException {
+        final List<TestUser> rows = pxlSpring.importCsv()
+                .sheet(TestUser.class)
+                .fromMultipartFile(file("Users.csv", USERS_CSV));
+
+        assertThat(rows).extracting(TestUser::getName).containsExactly("Alice", "Bob");
+    }
+
+    @Test
     void everyEntryPoint_delegatesToTheInjectedComponent() {
         // Spring injects the container's proxied components here, so the facade must return *their* builders:
         // a builder built any other way would re-enter an unproxied component and silently lose @Validated
@@ -124,63 +124,63 @@ class PxlSpringTests {
         final boolean[] delegated = new boolean[7];
 
         final PxlSpring facade = new PxlSpring(
-                new PxlExcelImporter() {
-                    @Override
-                    public Builder importExcel() {
-                        delegated[0] = true;
-                        return super.importExcel();
-                    }
-                },
-                new PxlCsvImporter() {
-                    @Override
-                    public Builder importCsv() {
-                        delegated[1] = true;
-                        return super.importCsv();
-                    }
-                },
                 new PxlExcelExporter() {
                     @Override
                     public Builder exportExcel() {
-                        delegated[2] = true;
+                        delegated[0] = true;
                         return super.exportExcel();
                     }
                 },
                 new PxlSampleExcelExporter() {
                     @Override
                     public Builder exportSampleExcel() {
-                        delegated[3] = true;
+                        delegated[1] = true;
                         return super.exportSampleExcel();
                     }
                 },
                 new PxlCsvExporter() {
                     @Override
                     public Builder exportCsv() {
-                        delegated[4] = true;
+                        delegated[2] = true;
                         return super.exportCsv();
                     }
                 },
                 new PxlSampleCsvExporter() {
                     @Override
                     public Builder exportSampleCsv() {
-                        delegated[5] = true;
+                        delegated[3] = true;
                         return super.exportSampleCsv();
                     }
                 },
                 new PxlZipExporter() {
                     @Override
                     public Builder exportZip() {
-                        delegated[6] = true;
+                        delegated[4] = true;
                         return super.exportZip();
+                    }
+                },
+                new PxlExcelImporter() {
+                    @Override
+                    public Builder importExcel() {
+                        delegated[5] = true;
+                        return super.importExcel();
+                    }
+                },
+                new PxlCsvImporter() {
+                    @Override
+                    public Builder importCsv() {
+                        delegated[6] = true;
+                        return super.importCsv();
                     }
                 });
 
-        assertThat(facade.importExcel()).isNotNull();
-        assertThat(facade.importCsv()).isNotNull();
         assertThat(facade.exportExcel()).isNotNull();
         assertThat(facade.exportSampleExcel()).isNotNull();
         assertThat(facade.exportCsv()).isNotNull();
         assertThat(facade.exportSampleCsv()).isNotNull();
         assertThat(facade.exportZip()).isNotNull();
+        assertThat(facade.importExcel()).isNotNull();
+        assertThat(facade.importCsv()).isNotNull();
 
         assertThat(delegated).containsOnly(true);
     }
@@ -201,13 +201,13 @@ class PxlSpringTests {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(ScanConfig.class)) {
             // one bean each: the facade must not need any manual wiring beyond the documented scan
             final PxlSpring facade = context.getBean(PxlSpring.class);
-            assertThat(context.getBean(PxlExcelImporter.class)).isNotNull();
-            assertThat(context.getBean(PxlCsvImporter.class)).isNotNull();
             assertThat(context.getBean(PxlExcelExporter.class)).isNotNull();
             assertThat(context.getBean(PxlSampleExcelExporter.class)).isNotNull();
             assertThat(context.getBean(PxlCsvExporter.class)).isNotNull();
             assertThat(context.getBean(PxlSampleCsvExporter.class)).isNotNull();
             assertThat(context.getBean(PxlZipExporter.class)).isNotNull();
+            assertThat(context.getBean(PxlExcelImporter.class)).isNotNull();
+            assertThat(context.getBean(PxlCsvImporter.class)).isNotNull();
 
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
             facade.exportExcel()
@@ -221,12 +221,12 @@ class PxlSpringTests {
     @Test
     void eachEntryPoint_returnsAFreshBuilder() {
         // builders are single-use and not thread-safe, so two calls must never hand back the same instance
-        assertThat(pxlSpring.importExcel()).isNotSameAs(pxlSpring.importExcel());
-        assertThat(pxlSpring.importCsv()).isNotSameAs(pxlSpring.importCsv());
         assertThat(pxlSpring.exportExcel()).isNotSameAs(pxlSpring.exportExcel());
         assertThat(pxlSpring.exportSampleExcel()).isNotSameAs(pxlSpring.exportSampleExcel());
         assertThat(pxlSpring.exportCsv()).isNotSameAs(pxlSpring.exportCsv());
         assertThat(pxlSpring.exportSampleCsv()).isNotSameAs(pxlSpring.exportSampleCsv());
         assertThat(pxlSpring.exportZip()).isNotSameAs(pxlSpring.exportZip());
+        assertThat(pxlSpring.importExcel()).isNotSameAs(pxlSpring.importExcel());
+        assertThat(pxlSpring.importCsv()).isNotSameAs(pxlSpring.importCsv());
     }
 }

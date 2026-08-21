@@ -7,7 +7,7 @@ template, a CSV sheet, and a CSV template. Built against [PXL](https://github.co
 unchanged.
 
 Pre-1.0 release carrying **breaking** changes: the ZIP exporter and its start method are renamed, `PxlSpring`'s
-constructor takes its exporters in a new order, a collision
+constructor takes its components in a new order, a collision
 raises `PxlArgumentException` where it used to raise `PxlIOException`, two entry names differing only in case
 are refused where they used to produce an archive, and a per-entry `exportExcelEngine` now changes the
 entry's extension as well as its content — see the highlights below.
@@ -26,10 +26,11 @@ entry's extension as well as its content — see the highlights below.
              .csvSheet(Employee.class, employees, "Employees")
              .toResponse(response, "bundle");
     ```
-  - **`PxlSpring`'s constructor takes its exporters in a new order:** Excel, sample Excel, CSV, sample CSV,
-    ZIP. Format first, ZIP last because its members come from the other four. Only an application that
-    builds the facade by hand feels it, and the three arguments that moved have distinct types, so this is
-    a compile error rather than wiring that goes quietly wrong. Component scanning and the no-arg
+  - **`PxlSpring`'s constructor takes its components in a new order:** the five exporters first — Excel,
+    sample Excel, CSV, sample CSV, ZIP — then the two importers, Excel and CSV. Export ahead of import,
+    format before sample, and ZIP last among the exporters because its members come from the other four.
+    Only an application that builds the facade by hand feels it, and every argument has a distinct type, so
+    this is a compile error rather than wiring that goes quietly wrong. Component scanning and the no-arg
     constructor are unaffected. The start methods and both READMEs follow the same order now.
   - **A ZIP entry can be a raw POI workbook.** `PxlZipExporter` bundled one kind of source only, a
     `@PxlWorkbook`-annotated object — so a workbook the application had already built, which

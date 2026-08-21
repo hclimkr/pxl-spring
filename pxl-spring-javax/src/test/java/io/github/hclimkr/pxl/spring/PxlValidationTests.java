@@ -47,16 +47,6 @@ class PxlValidationTests {
         }
 
         @Bean
-        PxlExcelImporter pxlExcelImporter() {
-            return new PxlExcelImporter();
-        }
-
-        @Bean
-        PxlCsvImporter pxlCsvImporter() {
-            return new PxlCsvImporter();
-        }
-
-        @Bean
         PxlExcelExporter pxlExcelExporter() {
             return new PxlExcelExporter();
         }
@@ -82,23 +72,27 @@ class PxlValidationTests {
         }
 
         @Bean
-        PxlSpring pxlSpring(final PxlExcelImporter excelImporter,
-                            final PxlCsvImporter csvImporter,
-                            final PxlExcelExporter excelExporter,
+        PxlExcelImporter pxlExcelImporter() {
+            return new PxlExcelImporter();
+        }
+
+        @Bean
+        PxlCsvImporter pxlCsvImporter() {
+            return new PxlCsvImporter();
+        }
+
+        @Bean
+        PxlSpring pxlSpring(final PxlExcelExporter excelExporter,
                             final PxlSampleExcelExporter sampleExcelExporter,
                             final PxlCsvExporter csvExporter,
                             final PxlSampleCsvExporter sampleCsvExporter,
-                            final PxlZipExporter zipExporter) {
-            return new PxlSpring(excelImporter, csvImporter, excelExporter, sampleExcelExporter,
-                    csvExporter, sampleCsvExporter, zipExporter);
+                            final PxlZipExporter zipExporter,
+                            final PxlExcelImporter excelImporter,
+                            final PxlCsvImporter csvImporter) {
+            return new PxlSpring(excelExporter, sampleExcelExporter, csvExporter, sampleCsvExporter,
+                    zipExporter, excelImporter, csvImporter);
         }
     }
-
-    @Autowired
-    private PxlExcelImporter pxlExcelImporter;
-
-    @Autowired
-    private PxlCsvImporter pxlCsvImporter;
 
     @Autowired
     private PxlExcelExporter pxlExcelExporter;
@@ -116,86 +110,13 @@ class PxlValidationTests {
     private PxlZipExporter pxlZipExporter;
 
     @Autowired
+    private PxlExcelImporter pxlExcelImporter;
+
+    @Autowired
+    private PxlCsvImporter pxlCsvImporter;
+
+    @Autowired
     private PxlSpring pxlSpring;
-
-    // ----- import: the multipart source form -----
-
-    @Test
-    void nullExcelFile_violatesNotNull() {
-        // the importer's own arguments are now just (source, upload); the terminal re-enters the component
-        // through its Spring proxy, so @Validated still fires on the upload argument
-        assertThatThrownBy(() ->
-                pxlExcelImporter.importExcel().workbook(TestWorkbook.class).fromMultipartFile(null))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
-
-    @Test
-    void nullExcelWorkbookClass_throwsPxlNullPointer() {
-        // parse-target arguments are collected by the fluent builder, which is a plain object rather than a
-        // Spring bean - the core builder's own assertions guard them instead
-        assertThatThrownBy(() ->
-                pxlExcelImporter.importExcel().workbook(null))
-                .isInstanceOf(PxlNullPointerException.class);
-    }
-
-    @Test
-    void nullCsvFile_violatesNotNullElement() {
-        // fromMultipartFile(...) wraps the upload in a singleton list, so the null lands on the back-end's
-        // container-element constraint List<@NotNull MultipartFile> rather than on @NotEmpty
-        assertThatThrownBy(() ->
-                pxlCsvImporter.importCsv().sheet(TestUser.class, List.class).fromMultipartFile(null))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
-
-    @Test
-    void nullCsvFileList_violatesNotNull() {
-        // fromMultipartFiles(null) reaches the back-end's @NotEmpty, which rejects null as well as empty
-        assertThatThrownBy(() ->
-                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromMultipartFiles(null))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
-
-    @Test
-    void emptyCsvFileList_violatesNotEmpty() {
-        // the back-end declares @NotEmpty List<@NotNull MultipartFile> - an empty list must be rejected
-        assertThatThrownBy(() ->
-                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromMultipartFiles(Collections.emptyList()))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
-
-    // ----- import: the same constraints on the Resource source form -----
-    // Each source form re-enters its component through a separate annotated back-end, so the multipart
-    // constraints above prove nothing about these. Both importers carry two back-ends for that reason.
-
-    @Test
-    void nullExcelResource_violatesNotNull() {
-        assertThatThrownBy(() ->
-                pxlExcelImporter.importExcel().workbook(TestWorkbook.class).fromResource(null))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
-
-    @Test
-    void nullCsvResource_violatesNotNullElement() {
-        // fromResource(...) wraps the resource in a singleton list, so the null lands on the back-end's
-        // container-element constraint List<@NotNull Resource> rather than on @NotEmpty
-        assertThatThrownBy(() ->
-                pxlCsvImporter.importCsv().sheet(TestUser.class, List.class).fromResource(null))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
-
-    @Test
-    void nullCsvResourceList_violatesNotNull() {
-        assertThatThrownBy(() ->
-                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromResources(null))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
-
-    @Test
-    void emptyCsvResourceList_violatesNotEmpty() {
-        assertThatThrownBy(() ->
-                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromResources(Collections.emptyList()))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
 
     // ----- export: the destination and the configuration arguments -----
 
@@ -411,32 +332,89 @@ class PxlValidationTests {
                 .isInstanceOf(ConstraintViolationException.class);
     }
 
+    // ----- import: the multipart source form -----
+
+    @Test
+    void nullExcelFile_violatesNotNull() {
+        // the importer's own arguments are now just (source, upload); the terminal re-enters the component
+        // through its Spring proxy, so @Validated still fires on the upload argument
+        assertThatThrownBy(() ->
+                pxlExcelImporter.importExcel().workbook(TestWorkbook.class).fromMultipartFile(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void nullExcelWorkbookClass_throwsPxlNullPointer() {
+        // parse-target arguments are collected by the fluent builder, which is a plain object rather than a
+        // Spring bean - the core builder's own assertions guard them instead
+        assertThatThrownBy(() ->
+                pxlExcelImporter.importExcel().workbook(null))
+                .isInstanceOf(PxlNullPointerException.class);
+    }
+
+    @Test
+    void nullCsvFile_violatesNotNullElement() {
+        // fromMultipartFile(...) wraps the upload in a singleton list, so the null lands on the back-end's
+        // container-element constraint List<@NotNull MultipartFile> rather than on @NotEmpty
+        assertThatThrownBy(() ->
+                pxlCsvImporter.importCsv().sheet(TestUser.class, List.class).fromMultipartFile(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void nullCsvFileList_violatesNotNull() {
+        // fromMultipartFiles(null) reaches the back-end's @NotEmpty, which rejects null as well as empty
+        assertThatThrownBy(() ->
+                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromMultipartFiles(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void emptyCsvFileList_violatesNotEmpty() {
+        // the back-end declares @NotEmpty List<@NotNull MultipartFile> - an empty list must be rejected
+        assertThatThrownBy(() ->
+                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromMultipartFiles(Collections.emptyList()))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    // ----- import: the same constraints on the Resource source form -----
+    // Each source form re-enters its component through a separate annotated back-end, so the multipart
+    // constraints above prove nothing about these. Both importers carry two back-ends for that reason.
+
+    @Test
+    void nullExcelResource_violatesNotNull() {
+        assertThatThrownBy(() ->
+                pxlExcelImporter.importExcel().workbook(TestWorkbook.class).fromResource(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void nullCsvResource_violatesNotNullElement() {
+        // fromResource(...) wraps the resource in a singleton list, so the null lands on the back-end's
+        // container-element constraint List<@NotNull Resource> rather than on @NotEmpty
+        assertThatThrownBy(() ->
+                pxlCsvImporter.importCsv().sheet(TestUser.class, List.class).fromResource(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void nullCsvResourceList_violatesNotNull() {
+        assertThatThrownBy(() ->
+                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromResources(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void emptyCsvResourceList_violatesNotEmpty() {
+        assertThatThrownBy(() ->
+                pxlCsvImporter.importCsv().workbook(TestWorkbook.class).fromResources(Collections.emptyList()))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
     // ----- the same constraints, reached through the PxlSpring facade -----
     // The facade is the documented default entry point, and it only holds up if the builder it hands out
     // still belongs to the *proxied* component. A facade that built its own builder, or that was handed
     // unproxied components, would silently skip validation instead of failing here.
-
-    @Test
-    void facadeImportDestination_violatesNotNull() {
-        assertThatThrownBy(() ->
-                pxlSpring.importExcel().workbook(TestWorkbook.class).fromMultipartFile(null))
-                .isInstanceOf(ConstraintViolationException.class);
-        assertThatThrownBy(() ->
-                pxlSpring.importCsv().sheet(TestUser.class, List.class).fromMultipartFile(null))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
-
-    @Test
-    void facadeImportResource_violatesNotNull() {
-        // the facade hands back the proxied component's builder, so the resource terminals are validated
-        // through it too
-        assertThatThrownBy(() ->
-                pxlSpring.importExcel().workbook(TestWorkbook.class).fromResource(null))
-                .isInstanceOf(ConstraintViolationException.class);
-        assertThatThrownBy(() ->
-                pxlSpring.importCsv().sheet(TestUser.class, List.class).fromResource(null))
-                .isInstanceOf(ConstraintViolationException.class);
-    }
 
     @Test
     void facadeExportDestination_violatesNotNull() {
@@ -463,5 +441,27 @@ class PxlValidationTests {
         // core's assertions rather than with ConstraintViolationException
         assertThatThrownBy(() -> pxlSpring.exportExcel().workbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
+    }
+
+    @Test
+    void facadeImportDestination_violatesNotNull() {
+        assertThatThrownBy(() ->
+                pxlSpring.importExcel().workbook(TestWorkbook.class).fromMultipartFile(null))
+                .isInstanceOf(ConstraintViolationException.class);
+        assertThatThrownBy(() ->
+                pxlSpring.importCsv().sheet(TestUser.class, List.class).fromMultipartFile(null))
+                .isInstanceOf(ConstraintViolationException.class);
+    }
+
+    @Test
+    void facadeImportResource_violatesNotNull() {
+        // the facade hands back the proxied component's builder, so the resource terminals are validated
+        // through it too
+        assertThatThrownBy(() ->
+                pxlSpring.importExcel().workbook(TestWorkbook.class).fromResource(null))
+                .isInstanceOf(ConstraintViolationException.class);
+        assertThatThrownBy(() ->
+                pxlSpring.importCsv().sheet(TestUser.class, List.class).fromResource(null))
+                .isInstanceOf(ConstraintViolationException.class);
     }
 }

@@ -46,13 +46,13 @@ class PxlCoreSupportTests {
     @Test
     void everyComponent_takesItsCoreFromTheSharedHolder() throws NoSuchFieldException, IllegalAccessException {
         // freshly constructed instances, i.e. the plain (non-Spring) path a consumer can also take
-        assertThat(coreOf(new PxlExcelImporter())).isSameAs(PxlCoreSupport.core());
-        assertThat(coreOf(new PxlCsvImporter())).isSameAs(PxlCoreSupport.core());
         assertThat(coreOf(new PxlExcelExporter())).isSameAs(PxlCoreSupport.core());
         assertThat(coreOf(new PxlSampleExcelExporter())).isSameAs(PxlCoreSupport.core());
         assertThat(coreOf(new PxlCsvExporter())).isSameAs(PxlCoreSupport.core());
         assertThat(coreOf(new PxlSampleCsvExporter())).isSameAs(PxlCoreSupport.core());
         assertThat(coreOf(new PxlZipExporter())).isSameAs(PxlCoreSupport.core());
+        assertThat(coreOf(new PxlExcelImporter())).isSameAs(PxlCoreSupport.core());
+        assertThat(coreOf(new PxlCsvImporter())).isSameAs(PxlCoreSupport.core());
     }
 
     /**

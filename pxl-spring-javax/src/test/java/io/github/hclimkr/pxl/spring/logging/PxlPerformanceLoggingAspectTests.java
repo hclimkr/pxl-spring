@@ -171,16 +171,12 @@ class PxlPerformanceLoggingAspectTests {
 
     /**
      * Each component with its fluent entry point and the back-end methods that must carry the annotation.
-     * Twenty-nine back-ends in total: two per importer (one per source form - a multipart upload and a Spring
-     * {@code Resource}), five destinations per exporter - the two response shapes (buffered and streaming)
-     * are separate terminals, so each has its own back-end.
+     * Twenty-nine back-ends in total: five destinations per exporter - the two response shapes (buffered and
+     * streaming) are separate terminals, so each has its own back-end - and two per importer, one per source
+     * form (a multipart upload and a Spring {@code Resource}).
      */
     static Stream<Arguments> componentBackEnds() {
         return Stream.of(
-                Arguments.of(PxlExcelImporter.class, "importExcel",
-                        Arrays.asList("importExcelFromMultipartFile", "importExcelFromResource")),
-                Arguments.of(PxlCsvImporter.class, "importCsv",
-                        Arrays.asList("importCsvFromMultipartFiles", "importCsvFromResources")),
                 Arguments.of(PxlExcelExporter.class, "exportExcel",
                         Arrays.asList("exportExcelToStream", "exportExcelToFile",
                                 "exportExcelToResponse", "exportExcelToResponseStreaming",
@@ -200,7 +196,11 @@ class PxlPerformanceLoggingAspectTests {
                 Arguments.of(PxlZipExporter.class, "exportZip",
                         Arrays.asList("exportZipToStream", "exportZipToFile",
                                 "exportZipToResponse", "exportZipToResponseStreaming",
-                                "exportZipToResponseEntity")));
+                                "exportZipToResponseEntity")),
+                Arguments.of(PxlExcelImporter.class, "importExcel",
+                        Arrays.asList("importExcelFromMultipartFile", "importExcelFromResource")),
+                Arguments.of(PxlCsvImporter.class, "importCsv",
+                        Arrays.asList("importCsvFromMultipartFiles", "importCsvFromResources")));
     }
 
     @ParameterizedTest(name = "{0}")

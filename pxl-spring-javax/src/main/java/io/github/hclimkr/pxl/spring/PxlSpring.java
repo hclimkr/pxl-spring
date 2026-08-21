@@ -12,10 +12,10 @@ import org.springframework.stereotype.Component;
  * is the one addition, archive bundling being a pxl-spring concern with nothing to mirror:</p>
  *
  * <pre>{@code
- * List<User> users = pxlSpring.importExcel().sheet(User.class, "Users").fromMultipartFile(upload);
  * pxlSpring.exportExcel().sheet(User.class, users, "Users").toResponse(response, "report");
  * pxlSpring.exportCsv().sheet(User.class, users, "Users").toResponse(response, "report");
  * pxlSpring.exportZip().workbook(first).workbook(second).toResponseEntity("archive");
+ * List<User> uploaded = pxlSpring.importExcel().sheet(User.class, "Users").fromMultipartFile(upload);
  * }</pre>
  *
  * <p>Each method just hands back the builder of the component that owns the operation, so everything those
@@ -38,10 +38,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class PxlSpring {
 
-    private final PxlExcelImporter excelImporter;
-
-    private final PxlCsvImporter csvImporter;
-
     private final PxlExcelExporter excelExporter;
 
     private final PxlSampleExcelExporter sampleExcelExporter;
@@ -52,34 +48,38 @@ public class PxlSpring {
 
     private final PxlZipExporter zipExporter;
 
+    private final PxlExcelImporter excelImporter;
+
+    private final PxlCsvImporter csvImporter;
+
     /**
      * Creates a facade over the given components. Spring injects the container's own (proxied) instances
      * here, which is what keeps {@code @Validated} and the performance log in place.
      *
-     * @param excelImporter       the Excel import component
-     * @param csvImporter         the CSV import component
      * @param excelExporter       the Excel export component
      * @param sampleExcelExporter the Excel sample-template export component
      * @param csvExporter         the CSV export component
      * @param sampleCsvExporter   the CSV sample-template export component
      * @param zipExporter         the ZIP export component
+     * @param excelImporter       the Excel import component
+     * @param csvImporter         the CSV import component
      */
     @Autowired
-    public PxlSpring(final PxlExcelImporter excelImporter,
-                     final PxlCsvImporter csvImporter,
-                     final PxlExcelExporter excelExporter,
+    public PxlSpring(final PxlExcelExporter excelExporter,
                      final PxlSampleExcelExporter sampleExcelExporter,
                      final PxlCsvExporter csvExporter,
                      final PxlSampleCsvExporter sampleCsvExporter,
-                     final PxlZipExporter zipExporter) {
+                     final PxlZipExporter zipExporter,
+                     final PxlExcelImporter excelImporter,
+                     final PxlCsvImporter csvImporter) {
 
-        this.excelImporter = excelImporter;
-        this.csvImporter = csvImporter;
         this.excelExporter = excelExporter;
         this.sampleExcelExporter = sampleExcelExporter;
         this.csvExporter = csvExporter;
         this.sampleCsvExporter = sampleCsvExporter;
         this.zipExporter = zipExporter;
+        this.excelImporter = excelImporter;
+        this.csvImporter = csvImporter;
     }
 
     /**
@@ -87,35 +87,13 @@ public class PxlSpring {
      */
     public PxlSpring() {
 
-        this(new PxlExcelImporter(),
-                new PxlCsvImporter(),
-                new PxlExcelExporter(),
+        this(new PxlExcelExporter(),
                 new PxlSampleExcelExporter(),
                 new PxlCsvExporter(),
                 new PxlSampleCsvExporter(),
-                new PxlZipExporter());
-    }
-
-    /**
-     * Starts a fluent Excel import, from a multipart upload or a Spring {@code Resource}.
-     *
-     * @return a new builder bound to the Excel import component
-     * @see PxlExcelImporter#importExcel()
-     */
-    public PxlExcelImporter.Builder importExcel() {
-
-        return excelImporter.importExcel();
-    }
-
-    /**
-     * Starts a fluent CSV import, from multipart uploads or Spring {@code Resource}s.
-     *
-     * @return a new builder bound to the CSV import component
-     * @see PxlCsvImporter#importCsv()
-     */
-    public PxlCsvImporter.Builder importCsv() {
-
-        return csvImporter.importCsv();
+                new PxlZipExporter(),
+                new PxlExcelImporter(),
+                new PxlCsvImporter());
     }
 
     /**
@@ -171,6 +149,28 @@ public class PxlSpring {
     public PxlZipExporter.Builder exportZip() {
 
         return zipExporter.exportZip();
+    }
+
+    /**
+     * Starts a fluent Excel import, from a multipart upload or a Spring {@code Resource}.
+     *
+     * @return a new builder bound to the Excel import component
+     * @see PxlExcelImporter#importExcel()
+     */
+    public PxlExcelImporter.Builder importExcel() {
+
+        return excelImporter.importExcel();
+    }
+
+    /**
+     * Starts a fluent CSV import, from multipart uploads or Spring {@code Resource}s.
+     *
+     * @return a new builder bound to the CSV import component
+     * @see PxlCsvImporter#importCsv()
+     */
+    public PxlCsvImporter.Builder importCsv() {
+
+        return csvImporter.importCsv();
     }
 
 }
