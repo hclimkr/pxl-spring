@@ -62,20 +62,22 @@ import java.util.zip.ZipOutputStream;
  *         .toResponse(response, "quarterly-report");
  * }</pre>
  *
- * <p>An archive holds whatever mix of those it is given; the name says {@code Excel} because that is what it
- * was built for and the start method is public API, not because a CSV member is an afterthought.</p>
+ * <p>An archive holds any mix of the five - nothing ties one archive to a single kind.</p>
  *
  * <p>An entry's file name falls back to the name its source carries - the workbook object name for
  * {@code workbook(...)}, the sheet name for the two CSV kinds - and then, for the kinds whose source carries
- * none, to an index-suffixed default ({@code Pxl{index}}, or {@code PxlSample{index}} for a sample template).
- * It must be a plain name - one carrying a path separator is rejected with {@link PxlArgumentException}
- * before any byte is written, so the archive can never hand a traversal path to whoever extracts it.</p>
+ * none, to an index-suffixed default ({@code Pxl{index}}, or {@code PxlSample{index}} for a sample
+ * template). The CSV kinds never reach that last step: a sheet name is required of them, so there is always
+ * something to take. It must be a plain name - one carrying a path separator is rejected with
+ * {@link PxlArgumentException} before any byte is written, so the archive can never hand a traversal path
+ * to whoever extracts it.</p>
  *
- * <p>The index fallback only applies when no earlier step yields a name, so it does not make names unique:
- * two entries built from the same workbook class, both relying on the same declared workbook name, resolve to
- * the same entry name. That is rejected with {@link PxlArgumentException} before any byte is written - see
- * {@code Builder.validateEntries} for why the check sits there and why it ignores case. Give such entries an
- * explicit name.</p>
+ * <p>Only the index-suffixed defaults come out unique, the index being appended every time. A name taken
+ * from the source does not: two entries built from the same workbook class, both relying on the same
+ * declared workbook name, resolve to one entry name, and so do two CSV entries sharing a sheet name. That
+ * is rejected with {@link PxlArgumentException} before any byte is written - see
+ * {@code Builder.validateEntries} for why both name checks sit there and why the duplicate one ignores
+ * case. Give such entries an explicit name.</p>
  *
  * <p>That builder is the nested {@link Builder}. A fluent chain never has to name it; on the rare occasion
  * you hold one in a variable, spell it {@code PxlZipExporter.Builder}.</p>
@@ -480,7 +482,7 @@ public class PxlZipExporter {
      * Spring-proxied, {@code @PxlPerformanceLogging}-annotated method.</p>
      *
      * <p>Nested in the component on purpose: everything the component reads off the builder - its constructor,
-     * the collected {@code entries} and their {@code Entry} type, {@code validateEntries()},
+     * the collected {@code entries} and the whole {@code Entry} hierarchy, {@code validateEntries()},
      * {@code resolveZipFilename(String)} - is {@code private} and stays reachable only because the two are
      * nestmates. The public surface is exactly the entry and terminal methods. The one exception is inside
      * {@code Entry}, whose own methods are package-private because an abstract method cannot be
@@ -503,6 +505,9 @@ public class PxlZipExporter {
         /**
          * Entry file name prefix used when no earlier step - an explicit name, or the workbook object name
          * where the kind of entry has one - yields a name; the entry's zero-based index is appended.
+         *
+         * <p>Only the Excel kinds reach it. A CSV entry is required to have a sheet name, so it always has
+         * one to fall back on and never needs a default of its own.</p>
          */
         private static final String DEFAULT_EXPORT_EXCEL_FILENAME = "Pxl";
 
@@ -588,9 +593,9 @@ public class PxlZipExporter {
          * is appended from the format that option - or, failing that, the workbook class - resolves to.</p>
          *
          * <p>Entry names have to come out distinct, ignoring case. Nothing is checked at this call - the
-         * fallbacks are only resolved once the archive is written - so a collision surfaces from the terminal,
-         * as {@link PxlArgumentException}. Naming entries explicitly is how two workbooks that declare the
-         * same name go into one archive.</p>
+         * fallbacks are resolved by the terminal's up-front validation - so a collision surfaces from the
+         * terminal as {@link PxlArgumentException}, still before any byte is written. Naming entries
+         * explicitly is how two workbooks that declare the same name go into one archive.</p>
          *
          * @param workbookObject the {@code @PxlWorkbook}-annotated source object
          * @param workbookOption the export option for this entry, or {@code null}
@@ -1137,12 +1142,17 @@ public class PxlZipExporter {
          * change how the existing ones behave.</p>
          *
          * <p>{@link #resolveEntryName(int)} is declared here rather than computed here because a kind decides
-         * for itself what its name falls back to when none was given. What must stay true is not the formula
-         * but the <strong>single call site</strong>: {@code validateEntries} asks an entry for its name to
-         * find collisions and {@code writeEntries} asks the same entry for it to name the {@link ZipEntry},
-         * so the name a collision was reported for is the name that would have been written. The part every
-         * kind does share - the format's extension on the end - lives in
+         * for itself what its name falls back to when none was given - a workbook name, a sheet name, an
+         * index-suffixed default. What must stay true is not the formula but the <strong>single call
+         * site</strong>: {@code validateEntries} asks an entry for its name to run both name checks on it,
+         * and {@code writeEntries} asks the same entry for it to name the {@link ZipEntry}, so the name a
+         * failure was reported for is the name that would have been written. The part every kind does
+         * share - the format's extension on the end - lives in
          * {@link #withExtension(String, PxlFileFormat)}, so no kind spells it out again.</p>
+         *
+         * <p>{@code resolveFileFormat()} is deliberately <em>not</em> part of this contract. Two kinds have
+         * no format to resolve - CSV is all they write - so it stays a private detail of the kinds that do
+         * have a choice.</p>
          *
          * <p>Private throughout: instances are created only by the enclosing builder and read only by
          * {@link PxlZipExporter}, a nestmate of both. The methods below are package-private rather than
@@ -1154,7 +1164,8 @@ public class PxlZipExporter {
             /**
              * Resolves the name this entry takes inside the archive, extension included.
              *
-             * @param index the entry's zero-based index in the archive
+             * @param index the entry's zero-based index in the archive; a kind whose source always carries
+             *              a name of its own ignores it
              * @return the entry name, extension included
              */
             abstract String resolveEntryName(int index);

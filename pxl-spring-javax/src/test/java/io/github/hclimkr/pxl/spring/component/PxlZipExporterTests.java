@@ -861,6 +861,26 @@ class PxlZipExporterTests {
         assertThat(centralDirectoryEntryNames(bytes)).containsExactly("only.xlsx");
     }
 
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void everyEntryKindInOneArchive_isValidOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        // Each kind has its own sweep above, and eachEntryKindNamesItselfAfterTheBytesItWrites mixes all five
+        // - but only into a stream. This is the case the component exists for, so it gets the full matrix: an
+        // archive of every kind at once has to open through its central directory on every destination, with
+        // the names in call order.
+        try (Workbook raw = oneCell(new XSSFWorkbook())) {
+            final byte[] bytes = emit(pxlSpring.exportZip()
+                    .workbook(workbook("bound"))
+                    .poiWorkbook(raw, null, "raw")
+                    .sampleWorkbook(TestWorkbook.class, null, "template")
+                    .csvSheet(TestUser.class, users(), "Users")
+                    .sampleCsvSheet(TestUser.class, "Forms"), dest);
+
+            assertThat(centralDirectoryEntryNames(bytes))
+                    .containsExactly("bound.xlsx", "raw.xlsx", "template.xlsx", "Users.csv", "Forms.csv");
+        }
+    }
+
     // ----- per-entry export options -----
 
     @Test
@@ -1899,7 +1919,12 @@ class PxlZipExporterTests {
             }
         }
 
-        assertThat(kinds).as("at least one entry kind").isNotEmpty();
+        // Pinned as a roster rather than "at least one": with five kinds, a weaker assertion would pass just
+        // as happily if four of them were deleted. Adding a sixth is meant to touch this line - the modifier
+        // checks below then apply to it, and the design notes ask for the same list to grow elsewhere.
+        assertThat(kinds).extracting(Class::getSimpleName)
+                .containsExactlyInAnyOrder("WorkbookEntry", "PoiWorkbookEntry", "SampleWorkbookEntry",
+                        "CsvSheetEntry", "SampleCsvSheetEntry");
 
         for (final Class<?> kind : kinds) {
             final int modifiers = kind.getModifiers();

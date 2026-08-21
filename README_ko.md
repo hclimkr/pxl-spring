@@ -61,7 +61,7 @@ public ResponseEntity<Resource> download() throws Exception {
 ## 주요 기능
 
 - **빈 하나로 모든 방향** — `PxlSpring`을 주입하면 각 작업이 거기서 시작하는 메서드 체인이 된다.
-  `exportExcel()`, `exportSampleExcel()`, `exportZip()`, `exportCsv()`, `exportSampleCsv()`,
+  `exportExcel()`, `exportSampleExcel()`, `exportCsv()`, `exportSampleCsv()`, `exportZip()`,
   `importExcel()`, `importCsv()`.
 - **멀티파트 업로드를 곧바로 객체로** — `fromMultipartFile(...)` / `fromMultipartFiles(...)`가 업로드를
   `List<Employee>`나 워크북 객체 하나로 만들며, 파싱하기 전에 확장자를 먼저 확인한다.
@@ -76,11 +76,11 @@ public ResponseEntity<Resource> download() throws Exception {
 - **대용량 다운로드에서도 일정한 Heap** — `toResponseStreaming(...)`이 다운로드 버퍼를 건너뛴다. `SXSSF`
   엔진이나 CSV export의 4 MiB 임시 파일 분할과 함께 쓰면 행 수가 얼마든 export가 쓰는 Heap이 거의
   일정해진다.
+- **클래스만으로 샘플 양식** — `exportSampleExcel()` / `exportSampleCsv()`가 헤더 행과 예시 값이 채워진
+  데이터 행 하나를 만들어 준다. 배포한 뒤 채워 받아 importer로 그대로 되읽을 수 있다.
 - **여러 스프레드시트를 zip 하나로** — `exportZip()`은 다른 익스포터가 만드는 것을 엑셀이든 CSV든
   엔트리로 받는다. 이미 압축된 `.xlsx`는 다시 압축하지 않으며, export가 실패하면 아카이브로 열리는
   파일을 남기지 않는다.
-- **클래스만으로 샘플 양식** — `exportSampleExcel()` / `exportSampleCsv()`가 헤더 행과 예시 값이 채워진
-  데이터 행 하나를 만들어 준다. 배포한 뒤 채워 받아 importer로 그대로 되읽을 수 있다.
 - **경계에서의 검증** — 지원하지 않는 확장자는 파싱 전에 `HttpMediaTypeNotSupportedException`으로,
   `null` 목적지는 스프링 프록시 뒤에서 `ConstraintViolationException`으로 거절되고, 나머지는 PXL 자체의
   `PxlException`이 담당한다.
@@ -192,9 +192,9 @@ implementation 'io.github.hclimkr:pxl-spring-jakarta:0.9.2'
 |---------------------------------|----------------------------------------------------------------------|
 | `pxlSpring.exportExcel()`       | Java 객체 → 엑셀 (Stream/File/Response/ResponseStreaming/ResponseEntity) |
 | `pxlSpring.exportSampleExcel()` | 클래스 → 샘플 데이터 한 줄이 든 엑셀                                               |
-| `pxlSpring.exportZip()`         | 여러 스프레드시트(엑셀·CSV) → 하나의 zip                                   |
 | `pxlSpring.exportCsv()`         | Java 객체 → CSV (목적지 다섯 개는 동일)                                         |
 | `pxlSpring.exportSampleCsv()`   | 클래스 → 샘플 데이터 한 줄이 든 CSV                                              |
+| `pxlSpring.exportZip()`         | 여러 스프레드시트(엑셀·CSV) → 하나의 zip                                   |
 | `pxlSpring.importExcel()`       | 엑셀 파일 → Java 객체                                                      |
 | `pxlSpring.importCsv()`         | CSV 파일 → Java 객체                                                     |
 
@@ -220,9 +220,9 @@ private PxlSpring pxlSpring;
 
 // pxlSpring.exportExcel()
 // pxlSpring.exportSampleExcel()
-// pxlSpring.exportZip()
 // pxlSpring.exportCsv()
 // pxlSpring.exportSampleCsv()
+// pxlSpring.exportZip()
 // pxlSpring.importExcel()
 // pxlSpring.importCsv()
 ```
@@ -396,9 +396,9 @@ public int upload(@RequestParam MultipartFile file) throws Exception {
 |----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 엑셀 export      | `pxlSpring.exportExcel()`<br/>→ `.workbook(...) / .sheet(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | 샘플 엑셀 export   | `pxlSpring.exportSampleExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                    |
-| ZIP export       | `pxlSpring.exportZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...) / .csvSheet(...) / .sampleCsvSheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                      |
 | CSV export     | `pxlSpring.exportCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                              |
 | 샘플 CSV export  | `pxlSpring.exportSampleCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                        |
+| ZIP export       | `pxlSpring.exportZip()`<br/>→ `.workbook(...) / .poiWorkbook(...) / .sampleWorkbook(...) / .csvSheet(...) / .sampleCsvSheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                      |
 | 엑셀 import      | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
 | CSV import     | `pxlSpring.importCsv()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)` / `.fromMultipartFiles(List<MultipartFile>)`                                                          |
 
@@ -613,11 +613,78 @@ public void writeSampleTemplate(File file) throws Exception {
 }
 ```
 
+### `PxlCsvExporter`
+
+같은 DTO, 같은 옵션을 엑셀 대신 CSV로 쓴다. CSV 파일 하나가 시트 하나라 `sheet(...)`만 있다.
+
+**시트 하나를 `ResponseEntity`로 다운로드**
+
+```java
+@GetMapping("/employees/csv")
+public ResponseEntity<Resource> downloadEmployeesCsv() throws Exception {
+    List<Employee> employees = ...;
+
+    // 이름을 비우면 시트명, 그 다음 "Pxl" 순으로 폴백한다
+    return pxlSpring.exportCsv()
+                    .sheet(Employee.class, employees, "Employees")
+                    .toResponseEntity(null);   // -> Employees.csv
+}
+```
+
+**문자셋 · 구분자 · BOM 지정**
+
+클래스에 `@PxlWorkbook`/`@PxlSheet`로 선언하거나 호출마다 `override(...)`로 준다. BOM은 UTF-8 · UTF-16LE · UTF-16BE에만 기록된다.
+
+```java
+@GetMapping("/employees/csv-legacy")
+public void downloadForExcelKorean(HttpServletResponse response) throws Exception {
+    List<Employee> employees = ...;
+
+    PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                                                            .exportCsvCharset("MS949")
+                                                            .exportCsvDelimiter(';')
+                                                            .build();
+
+    pxlSpring.exportCsv()
+             .sheet(Employee.class, employees, "Employees")
+             .override(option)
+             .toResponse(response, "employee-list");
+}
+```
+
+**파일이나 스트림에 저장**
+
+```java
+public void writeMonthlyCsv(File file) throws Exception {
+    List<Employee> employees = ...;
+
+    pxlSpring.exportCsv()
+             .sheet(Employee.class, employees, "Employees")
+             .toFile(file);
+}
+```
+
+스타일러 · 컬럼 너비 · 틀 고정 · 엑셀 엔진처럼 CSV가 담을 수 없는 설정은 무시된다. 예외는 `exportPassword` 하나로, 무시가 아니라 `PxlArgumentException`으로 거절된다 — CSV는 암호화할 수 없고 평문으로 쓰면 유출이기 때문이다.
+
+### `PxlSampleCsvExporter`
+
+`PxlSampleExcelExporter`의 CSV 판이다. 헤더 레코드 하나와 `@PxlColumn(exportSample=...)`로 채운 샘플 레코드 하나를 쓰며, 받은 쪽이 채워서 `importCsv()`로 되돌려 보낼 수 있다.
+
+```java
+@GetMapping("/employees/csv-sample")
+public ResponseEntity<Resource> employeeCsvSample() throws Exception {
+    // 이름을 비우면 "PxlSample"이 된다
+    return pxlSpring.exportSampleCsv()
+                    .sheet(Employee.class, "Employees")
+                    .toResponseEntity(null);
+}
+```
+
 ### `PxlZipExporter`
 
-**여러 워크북으로 구성된 압축파일 다운로드**
+**여러 스프레드시트로 구성된 압축파일 다운로드**
 
-생략하면 워크북명 → `Pxl{index}` 순으로 채워진다.
+아카이브는 다른 익스포터가 만드는 것을 무엇이든 엔트리로 받는다 — 워크북 객체, raw POI 워크북, 샘플 템플릿, CSV 시트, CSV 템플릿. 엔트리명을 생략하면 그 엔트리의 소재가 지닌 이름, 다음으로 인덱스가 붙는 기본값 순으로 채워진다.
 
 ```java
 @GetMapping("/company/zip")
@@ -713,73 +780,6 @@ public void writeQuarterArchive(File zipFile) throws Exception {
              .workbook(january)
              .workbook(february)
              .toFile(zipFile);   // 실패한 export는 아카이브로 열 수 없는 바이트만 남긴다
-}
-```
-
-### `PxlCsvExporter`
-
-같은 DTO, 같은 옵션을 엑셀 대신 CSV로 쓴다. CSV 파일 하나가 시트 하나라 `sheet(...)`만 있다.
-
-**시트 하나를 `ResponseEntity`로 다운로드**
-
-```java
-@GetMapping("/employees/csv")
-public ResponseEntity<Resource> downloadEmployeesCsv() throws Exception {
-    List<Employee> employees = ...;
-
-    // 이름을 비우면 시트명, 그 다음 "Pxl" 순으로 폴백한다
-    return pxlSpring.exportCsv()
-                    .sheet(Employee.class, employees, "Employees")
-                    .toResponseEntity(null);   // -> Employees.csv
-}
-```
-
-**문자셋 · 구분자 · BOM 지정**
-
-클래스에 `@PxlWorkbook`/`@PxlSheet`로 선언하거나 호출마다 `override(...)`로 준다. BOM은 UTF-8 · UTF-16LE · UTF-16BE에만 기록된다.
-
-```java
-@GetMapping("/employees/csv-legacy")
-public void downloadForExcelKorean(HttpServletResponse response) throws Exception {
-    List<Employee> employees = ...;
-
-    PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
-                                                            .exportCsvCharset("MS949")
-                                                            .exportCsvDelimiter(';')
-                                                            .build();
-
-    pxlSpring.exportCsv()
-             .sheet(Employee.class, employees, "Employees")
-             .override(option)
-             .toResponse(response, "employee-list");
-}
-```
-
-**파일이나 스트림에 저장**
-
-```java
-public void writeMonthlyCsv(File file) throws Exception {
-    List<Employee> employees = ...;
-
-    pxlSpring.exportCsv()
-             .sheet(Employee.class, employees, "Employees")
-             .toFile(file);
-}
-```
-
-스타일러 · 컬럼 너비 · 틀 고정 · 엑셀 엔진처럼 CSV가 담을 수 없는 설정은 무시된다. 예외는 `exportPassword` 하나로, 무시가 아니라 `PxlArgumentException`으로 거절된다 — CSV는 암호화할 수 없고 평문으로 쓰면 유출이기 때문이다.
-
-### `PxlSampleCsvExporter`
-
-`PxlSampleExcelExporter`의 CSV 판이다. 헤더 레코드 하나와 `@PxlColumn(exportSample=...)`로 채운 샘플 레코드 하나를 쓰며, 받은 쪽이 채워서 `importCsv()`로 되돌려 보낼 수 있다.
-
-```java
-@GetMapping("/employees/csv-sample")
-public ResponseEntity<Resource> employeeCsvSample() throws Exception {
-    // 이름을 비우면 "PxlSample"이 된다
-    return pxlSpring.exportSampleCsv()
-                    .sheet(Employee.class, "Employees")
-                    .toResponseEntity(null);
 }
 ```
 
@@ -951,9 +951,9 @@ public void loadSeedData() throws Exception {
 ```java
 PxlExcelExporter.Builder       exportExcel()
 PxlSampleExcelExporter.Builder exportSampleExcel()
-PxlZipExporter.Builder         exportZip()
 PxlCsvExporter.Builder         exportCsv()
 PxlSampleCsvExporter.Builder   exportSampleCsv()
+PxlZipExporter.Builder         exportZip()
 PxlExcelImporter.Builder       importExcel()
 PxlCsvImporter.Builder         importCsv()
 ```
@@ -1009,46 +1009,6 @@ ResponseEntity<Resource> toResponseEntity(String excelFilename)
 
 - 다중 시트 샘플 엑셀은 `sheet(...)`를 여러 번 호출하면 된다.
 
-### `PxlZipExporter`
-
-여러 스프레드시트를 각각 하나의 엔트리로 만들어 zip 하나로 묶는다.
-
-```java
-// 시작
-PxlZipExporter.Builder exportZip()
-
-// 구성 (호출할 때마다 엔트리 하나씩 추가)
-workbook(Object workbookObject)                                                              // @PxlWorkbook 객체
-workbook(Object workbookObject, PxlExportWorkbookOption option)
-workbook(Object workbookObject, PxlExportWorkbookOption option, String excelFilename)
-poiWorkbook(Workbook workbook)                                                               // POI 워크북 그대로
-poiWorkbook(Workbook workbook, String password)                                              // 암호화해서 기록
-poiWorkbook(Workbook workbook, String password, String excelFilename)
-sampleWorkbook(Class<?> workbookClass)                                                       // 샘플 템플릿
-sampleWorkbook(Class<?> workbookClass, PxlExportWorkbookOption option)
-sampleWorkbook(Class<?> workbookClass, PxlExportWorkbookOption option, String excelFilename)
-<T> csvSheet(Class<T> rowClass, Collection<T> rows, String sheetName)                        // 행을 CSV로
-<T> csvSheet(Class<T> rowClass, Collection<T> rows, String sheetName, PxlExportWorkbookOption option)
-<T> csvSheet(Class<T> rowClass, Collection<T> rows, String sheetName, PxlExportWorkbookOption option, String csvFilename)
-sampleCsvSheet(Class<?> rowClass, String sheetName)                                          // CSV 템플릿
-sampleCsvSheet(Class<?> rowClass, String sheetName, PxlExportWorkbookOption option)
-sampleCsvSheet(Class<?> rowClass, String sheetName, PxlExportWorkbookOption option, String csvFilename)
-
-// 실행 — 응답 목적지는 아카이브 파일명을 인자로 받는다(필수)
-void                     toStream(OutputStream outputStream)
-void                     toFile(File zipFile)
-void                     toResponse(HttpServletResponse response, String zipFilename)
-void                     toResponseStreaming(HttpServletResponse response, String zipFilename)  // "크기 & 메모리" 참고
-ResponseEntity<Resource> toResponseEntity(String zipFilename)
-```
-
-- 엔트리명은 지정한 이름 → 워크북명 → `Pxl{index}` 순으로 정해진다. 지정한 이름이 공백이면 없는 것으로 보고 다음 순서로 넘어간다.
-- 확장자는 엔트리가 기록되는 포맷에서 붙는다 — 엔트리별 옵션의 export 엔진, 없으면 워크북 클래스가 선언한 엔진이다. 이름·바이트·deflate 레벨이 모두 그 하나의 답을 따른다.
-- `poiWorkbook(...)`은 바인딩을 거치지 않으므로 엔트리별 옵션도 워크북명도 없다 — 확장자는 워크북 자신의 타입에서 오고, 이름을 주지 않으면 곧바로 `Pxl{index}`가 된다. 암호화해도 확장자는 그대로이며, 이는 `PxlExcelExporter`와 같다.
-- `sampleWorkbook(...)`은 `workbook(...)`처럼 옵션을 받지만 인스턴스가 아니라 클래스를 받으므로 읽을 워크북명이 없다 — 이름을 주지 않으면 곧바로 `PxlSample{index}`가 된다. 인덱스가 이름 없는 엔트리들을 갈라 놓는 것이며, 다운로드 하나의 이름을 짓는 `PxlSampleExcelExporter`에는 그것이 필요 없다.
-- CSV 두 형태는 언제나 `.csv`를 쓰므로 옵션의 `exportExcelEngine`은 여기서 아무 의미가 없다 — 대신 문자셋·구분자·BOM이 그 옵션에서 온다. 이름을 주지 않으면 시트명을 쓰는데 시트명은 필수이므로 인덱스가 붙는 기본값이 없고, 같은 시트명을 둘 쓰면 충돌한다. 그럴 때는 이름을 줄 것.
-- 아카이브명은 필수다.
-
 ### `PxlCsvExporter`
 
 자바 객체를 CSV로 쓴다. CSV 파일 하나가 시트 하나라 워크북 형태가 없고, 마지막 메서드는 시트 하나를 기록한다.
@@ -1097,6 +1057,47 @@ ResponseEntity<Resource> toResponseEntity(String csvFilename)
 ```
 
 - `PxlCsvExporter`와 달리 다운로드 파일명에 시트명 폴백이 없다 — 템플릿은 데이터가 아니라 형태를 설명하기 때문이다.
+
+### `PxlZipExporter`
+
+여러 스프레드시트를 각각 하나의 엔트리로 만들어 zip 하나로 묶는다.
+
+```java
+// 시작
+PxlZipExporter.Builder exportZip()
+
+// 구성 (호출할 때마다 엔트리 하나씩 추가)
+workbook(Object workbookObject)                                                              // @PxlWorkbook 객체
+workbook(Object workbookObject, PxlExportWorkbookOption option)
+workbook(Object workbookObject, PxlExportWorkbookOption option, String excelFilename)
+poiWorkbook(Workbook workbook)                                                               // POI 워크북 그대로
+poiWorkbook(Workbook workbook, String password)                                              // 암호화해서 기록
+poiWorkbook(Workbook workbook, String password, String excelFilename)
+sampleWorkbook(Class<?> workbookClass)                                                       // 샘플 템플릿
+sampleWorkbook(Class<?> workbookClass, PxlExportWorkbookOption option)
+sampleWorkbook(Class<?> workbookClass, PxlExportWorkbookOption option, String excelFilename)
+<T> csvSheet(Class<T> rowClass, Collection<T> rows, String sheetName)                        // 행을 CSV로
+<T> csvSheet(Class<T> rowClass, Collection<T> rows, String sheetName, PxlExportWorkbookOption option)
+<T> csvSheet(Class<T> rowClass, Collection<T> rows, String sheetName, PxlExportWorkbookOption option, String csvFilename)
+sampleCsvSheet(Class<?> rowClass, String sheetName)                                          // CSV 템플릿
+sampleCsvSheet(Class<?> rowClass, String sheetName, PxlExportWorkbookOption option)
+sampleCsvSheet(Class<?> rowClass, String sheetName, PxlExportWorkbookOption option, String csvFilename)
+
+// 실행 — 응답 목적지는 아카이브 파일명을 인자로 받는다(필수)
+void                     toStream(OutputStream outputStream)
+void                     toFile(File zipFile)
+void                     toResponse(HttpServletResponse response, String zipFilename)
+void                     toResponseStreaming(HttpServletResponse response, String zipFilename)  // "크기 & 메모리" 참고
+ResponseEntity<Resource> toResponseEntity(String zipFilename)
+```
+
+- 엔트리명은 지정한 이름 → 그 엔트리의 소재가 지닌 이름 → 인덱스가 붙는 기본값 순으로 정해진다. 지정한 이름이 공백이면 없는 것으로 보고 다음 순서로 넘어간다. 소재별로 무엇을 지니는지는 아래에 있다.
+- 확장자는 엔트리가 기록되는 포맷에서 붙는다 — 엔트리별 옵션의 export 엔진, 없으면 워크북 클래스가 선언한 엔진이다. 이름·바이트·deflate 레벨이 모두 그 하나의 답을 따른다.
+- `poiWorkbook(...)`은 바인딩을 거치지 않으므로 엔트리별 옵션도 워크북명도 없다 — 확장자는 워크북 자신의 타입에서 오고, 이름을 주지 않으면 곧바로 `Pxl{index}`가 된다. 암호화해도 확장자는 그대로이며, 이는 `PxlExcelExporter`와 같다.
+- `sampleWorkbook(...)`은 `workbook(...)`처럼 옵션을 받지만 인스턴스가 아니라 클래스를 받으므로 읽을 워크북명이 없다 — 이름을 주지 않으면 곧바로 `PxlSample{index}`가 된다. 인덱스가 이름 없는 엔트리들을 갈라 놓는 것이며, 다운로드 하나의 이름을 짓는 `PxlSampleExcelExporter`에는 그것이 필요 없다.
+- CSV 두 형태는 언제나 `.csv`를 쓰므로 옵션의 `exportExcelEngine`은 여기서 아무 의미가 없다 — 대신 문자셋·구분자·BOM이 그 옵션에서 온다. 이름을 주지 않으면 시트명을 쓰는데 시트명은 필수이므로 인덱스가 붙는 기본값이 없고, 같은 시트명을 둘 쓰면 충돌한다. 그럴 때는 이름을 줄 것.
+- 엔트리명은 대소문자를 무시하고 서로 달라야 하며 경로 구분자를 담아서는 안 된다. 둘 다 아무것도 기록되기 전에 `PxlArgumentException`으로 거절되므로, 실패한 export는 파일을 만들지도 응답을 건드리지도 않는다. 같은 이름으로 정해질 엔트리가 둘 있으면 이름을 명시할 것.
+- 아카이브명은 필수다.
 
 ### `PxlExcelImporter`
 

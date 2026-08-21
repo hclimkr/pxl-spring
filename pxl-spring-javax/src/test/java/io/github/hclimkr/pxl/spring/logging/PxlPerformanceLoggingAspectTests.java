@@ -189,10 +189,6 @@ class PxlPerformanceLoggingAspectTests {
                         Arrays.asList("exportSampleExcelToStream", "exportSampleExcelToFile",
                                 "exportSampleExcelToResponse", "exportSampleExcelToResponseStreaming",
                                 "exportSampleExcelToResponseEntity")),
-                Arguments.of(PxlZipExporter.class, "exportZip",
-                        Arrays.asList("exportZipToStream", "exportZipToFile",
-                                "exportZipToResponse", "exportZipToResponseStreaming",
-                                "exportZipToResponseEntity")),
                 Arguments.of(PxlCsvExporter.class, "exportCsv",
                         Arrays.asList("exportCsvToStream", "exportCsvToFile",
                                 "exportCsvToResponse", "exportCsvToResponseStreaming",
@@ -200,7 +196,11 @@ class PxlPerformanceLoggingAspectTests {
                 Arguments.of(PxlSampleCsvExporter.class, "exportSampleCsv",
                         Arrays.asList("exportSampleCsvToStream", "exportSampleCsvToFile",
                                 "exportSampleCsvToResponse", "exportSampleCsvToResponseStreaming",
-                                "exportSampleCsvToResponseEntity")));
+                                "exportSampleCsvToResponseEntity")),
+                Arguments.of(PxlZipExporter.class, "exportZip",
+                        Arrays.asList("exportZipToStream", "exportZipToFile",
+                                "exportZipToResponse", "exportZipToResponseStreaming",
+                                "exportZipToResponseEntity")));
     }
 
     @ParameterizedTest(name = "{0}")

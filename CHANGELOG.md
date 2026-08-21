@@ -40,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking.** `PxlSpring`'s `@Autowired` constructor takes its exporters in a new order —
+  Excel, sample Excel, CSV, sample CSV, ZIP — so an application that builds the facade by hand
+  rather than by component scan has to reorder those arguments. The three that moved have
+  distinct types, so the compiler catches it rather than the wiring going quietly wrong. The
+  documented setup — scanning `io.github.hclimkr.pxl.spring` — is unaffected, and so is the
+  no-arg constructor. The start methods are declared in that order too, and the READMEs list
+  them that way; ZIP moves last because its members come from the other four.
+
 - **Breaking.** `PxlExcelZipExporter` is now `PxlZipExporter`, and its start method
   `exportExcelZip()` is now `exportZip()` — on the `PxlSpring` facade too. The archive holds CSV
   members as well as Excel ones now, so `Excel` in the name claimed something that is no longer

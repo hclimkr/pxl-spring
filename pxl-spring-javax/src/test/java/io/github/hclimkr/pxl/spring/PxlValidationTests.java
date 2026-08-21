@@ -67,11 +67,6 @@ class PxlValidationTests {
         }
 
         @Bean
-        PxlZipExporter pxlZipExporter() {
-            return new PxlZipExporter();
-        }
-
-        @Bean
         PxlCsvExporter pxlCsvExporter() {
             return new PxlCsvExporter();
         }
@@ -82,15 +77,20 @@ class PxlValidationTests {
         }
 
         @Bean
+        PxlZipExporter pxlZipExporter() {
+            return new PxlZipExporter();
+        }
+
+        @Bean
         PxlSpring pxlSpring(final PxlExcelImporter excelImporter,
                             final PxlCsvImporter csvImporter,
                             final PxlExcelExporter excelExporter,
                             final PxlSampleExcelExporter sampleExcelExporter,
-                            final PxlZipExporter zipExporter,
                             final PxlCsvExporter csvExporter,
-                            final PxlSampleCsvExporter sampleCsvExporter) {
+                            final PxlSampleCsvExporter sampleCsvExporter,
+                            final PxlZipExporter zipExporter) {
             return new PxlSpring(excelImporter, csvImporter, excelExporter, sampleExcelExporter,
-                    zipExporter, csvExporter, sampleCsvExporter);
+                    csvExporter, sampleCsvExporter, zipExporter);
         }
     }
 
@@ -107,13 +107,13 @@ class PxlValidationTests {
     private PxlCsvImporter pxlCsvImporter;
 
     @Autowired
-    private PxlZipExporter pxlZipExporter;
-
-    @Autowired
     private PxlCsvExporter pxlCsvExporter;
 
     @Autowired
     private PxlSampleCsvExporter pxlSampleCsvExporter;
+
+    @Autowired
+    private PxlZipExporter pxlZipExporter;
 
     @Autowired
     private PxlSpring pxlSpring;
