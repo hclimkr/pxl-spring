@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- An already-built raw POI `Workbook` can go into a ZIP archive:
+  `exportExcelZip().poiWorkbook(workbook)`, with `poiWorkbook(workbook, password)` and
+  `poiWorkbook(workbook, password, entryName)` alongside it. The workbook is written as-is, the
+  way `exportExcel().poiWorkbook(...)` already writes one on its own, so there is no per-entry
+  export option — nothing is bound for one to override. The entry's extension is read back off
+  the workbook itself (`HSSFWorkbook` → `.xls`, `XSSFWorkbook`/`SXSSFWorkbook` → `.xlsx`), which
+  is the format its body is written in; encryption keeps that extension, as it does on
+  `PxlExcelExporter`. This kind carries no workbook name, so an unnamed entry falls straight to
+  `Pxl{index}`. Duplicate entry names are still rejected across every kind of entry alike.
+
 ### Changed
 
 - **Breaking.** A ZIP entry-name collision is rejected before anything is written, as

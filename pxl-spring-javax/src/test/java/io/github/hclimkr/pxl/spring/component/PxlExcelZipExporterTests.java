@@ -9,6 +9,11 @@ import io.github.hclimkr.pxl.option.PxlExportWorkbookOption;
 import io.github.hclimkr.pxl.spring.PxlSpring;
 import io.github.hclimkr.pxl.spring.tcdata.*;
 import io.github.hclimkr.pxl.type.PxlExcelEngine;
+import io.github.hclimkr.pxl.util.PxlWorkbookUtils;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.streaming.SXSSFWorkbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
@@ -35,10 +40,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Behavioural tests for {@link PxlExcelZipExporter}, all driven through the
- * {@link PxlExcelZipExporter.Builder} fluent API: bundling multiple workbook objects into one ZIP across
- * every entry form and destination, entry naming (provided name &rarr; workbook name &rarr; index fallback),
- * per-entry export options, and archive validity via {@link ZipFile} (reads the central directory, not just
- * streamed local headers).
+ * {@link PxlExcelZipExporter.Builder} fluent API: bundling several Excel workbooks into one ZIP across every
+ * entry kind, entry form and destination, entry naming (provided name &rarr; workbook name &rarr; index
+ * fallback), per-entry export options, and archive validity via {@link ZipFile} (reads the central directory,
+ * not just streamed local headers). Two kinds of source reach an entry - a {@code @PxlWorkbook}-annotated
+ * object and a raw POI {@link Workbook} - and the invariants that hold them together (one resolved name per
+ * entry, an extension that follows the bytes, a duplicate check spanning every kind) are pinned across both.
  *
  * <p>The builder comes from {@link PxlSpring}, the entry point the documentation guides users to. The
  * facade hands back this component's own builder, so what is exercised here is still the component.</p>
@@ -911,6 +918,293 @@ class PxlExcelZipExporterTests {
         assertThat(contentDisposition).doesNotContain("보고서모음").contains("%");
         // the ZIP entry name is not a header, so it keeps its Korean characters
         assertThat(centralDirectoryEntryNames(bodyBytes(entity))).containsExactly("사용자.xlsx");
+    }
+
+    // ----- raw POI workbook entries -----
+    // The second kind of source: a workbook the application already built, written into the archive as-is.
+    // It goes nowhere near the binding layer, so it carries no export option and has no workbook name to fall
+    // back to - the two ways it differs from a @PxlWorkbook entry.
+
+    /**
+     * Puts one cell in the given workbook so an entry made from it holds real bytes, and hands it back.
+     */
+    private static <W extends Workbook> W oneCell(final W workbook) {
+        return oneCell(workbook, "hi");
+    }
+
+    /**
+     * As {@link #oneCell(Workbook)}, with the cell value given - so a round-trip can tell one workbook's
+     * bytes from another's.
+     */
+    private static <W extends Workbook> W oneCell(final W workbook, final String value) {
+        workbook.createSheet("S").createRow(0).createCell(0).setCellValue(value);
+        return workbook;
+    }
+
+    /**
+     * Reopens Excel bytes taken out of an archive and returns the one cell {@link #oneCell} put there,
+     * decrypting with {@code password} where one was used. Reading the value back is what proves the entry
+     * body arrived whole rather than merely starting with the right magic bytes.
+     */
+    private static String firstCellOf(final byte[] excelBytes, final String password)
+            throws PxlException, IOException {
+        try (Workbook workbook = PxlWorkbookUtils.openWorkbook(new ByteArrayInputStream(excelBytes), password)) {
+            return workbook.getSheetAt(0).getRow(0).getCell(0).getStringCellValue();
+        }
+    }
+
+    // The three arities, each swept across every destination - the same matrix the workbook(...) forms get.
+    // Without it the one- and two-argument overloads would only ever be reached by a single stream test.
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void poiWorkbookWithoutPassword_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        // no name given and none to fall back to: the workbook-name step reads the @PxlWorkbookName field off
+        // an annotated instance, and a raw POI workbook is not one. The index is always appended, so unnamed
+        // entries of this kind stay distinct from one another.
+        try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
+            final byte[] bytes = emit(pxlSpring.exportExcelZip()
+                    .poiWorkbook(xssf)
+                    .poiWorkbook(hssf), dest);
+
+            assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Pxl0.xlsx", "Pxl1.xls");
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void poiWorkbookWithPassword_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        // the two-argument overload, and the only place a password reaches the destination matrix: an
+        // encrypted entry is named exactly as an unencrypted one of the same workbook type
+        try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
+            final byte[] bytes = emit(pxlSpring.exportExcelZip()
+                    .poiWorkbook(xssf, "secret")
+                    .poiWorkbook(hssf, null), dest);
+
+            assertThat(centralDirectoryEntryNames(bytes)).containsExactly("Pxl0.xlsx", "Pxl1.xls");
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void poiWorkbookWithPasswordAndName_namesEntriesOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
+            final byte[] bytes = emit(pxlSpring.exportExcelZip()
+                    .poiWorkbook(xssf, null, "ooxml")
+                    .poiWorkbook(hssf, null, "ole2"), dest);
+
+            assertThat(centralDirectoryEntryNames(bytes)).containsExactly("ooxml.xlsx", "ole2.xls");
+        }
+    }
+
+    @Test
+    void blankEntryNameOnARawPoiWorkbook_fallsBackToPxlIndex() throws PxlException, IOException {
+        // a blank name is treated as absent, exactly as on a workbook(...) entry - only here there is no
+        // workbook name in between, so it goes straight to the index
+        try (Workbook xssf = oneCell(new XSSFWorkbook())) {
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            pxlSpring.exportExcelZip()
+                    .poiWorkbook(xssf, null, "  ")
+                    .toStream(baos);
+
+            assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("Pxl0.xlsx");
+        }
+    }
+
+    @Test
+    void poiWorkbookEntryBytes_reopenAsTheWorkbooksThatWentIn() throws PxlException, IOException {
+        // The counterpart of zipEntryContent_isReadableXlsx_andRoundTrips for this kind, and the check that
+        // costs the least to get wrong: PxlWorkbookUtils writes straight into the open archive stream, so a
+        // body that were truncated - or an entry that closed the stream out from under the next one - would
+        // still start with the right magic bytes. Distinct cell values also pin each entry to its own
+        // workbook rather than to whichever one was written last.
+        try (Workbook plain = oneCell(new XSSFWorkbook(), "plain");
+             Workbook locked = oneCell(new XSSFWorkbook(), "locked");
+             Workbook ole2 = oneCell(new HSSFWorkbook(), "ole2")) {
+
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            pxlSpring.exportExcelZip()
+                    .poiWorkbook(plain, null, "plain")
+                    .poiWorkbook(locked, "secret", "locked")
+                    .poiWorkbook(ole2, null, "ole2")
+                    .toStream(baos);
+
+            final byte[] archive = baos.toByteArray();
+            assertThat(firstCellOf(entryBytes(archive, "plain.xlsx"), null)).isEqualTo("plain");
+            assertThat(firstCellOf(entryBytes(archive, "locked.xlsx"), "secret")).isEqualTo("locked");
+            assertThat(firstCellOf(entryBytes(archive, "ole2.xls"), null)).isEqualTo("ole2");
+        }
+    }
+
+    @Test
+    void poiWorkbookEntrySxssf_isNamedXlsxLikeItsXssfBase() throws PxlException, IOException {
+        // SXSSFWorkbook wraps rather than extends XSSFWorkbook, so it is its own PxlExcelEngine - but both
+        // write the same OOXML container, one PxlFileFormat, and the entry is named off the format
+        try (SXSSFWorkbook sxssf = oneCell(new SXSSFWorkbook())) {
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            pxlSpring.exportExcelZip()
+                    .poiWorkbook(sxssf, null, "streamed")
+                    .toStream(baos);
+
+            assertThat(centralDirectoryEntryNames(baos.toByteArray())).containsExactly("streamed.xlsx");
+            assertThat(isXlsx(entryBytes(baos.toByteArray(), "streamed.xlsx"))).isTrue();
+        }
+    }
+
+    @Test
+    void poiWorkbookEntryWithPassword_keepsTheWorkbookTypeInTheEntryName() throws PxlException, IOException {
+        // Paired with PxlExcelExporterTests.poiWorkbookPassword_keepsTheWorkbookTypeInTheHeaders: encryption
+        // wraps the bytes in an OLE2 container whatever the workbook type, but the name still follows the
+        // workbook - which is how an encrypted OOXML file is normally distributed. The entry kind inherits
+        // that property rather than deciding its own.
+        try (Workbook xssf = oneCell(new XSSFWorkbook())) {
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            pxlSpring.exportExcelZip()
+                    .poiWorkbook(xssf, "secret", "locked")
+                    .toStream(baos);
+
+            final byte[] archive = baos.toByteArray();
+            assertThat(centralDirectoryEntryNames(archive)).containsExactly("locked.xlsx");
+            assertThat(isXlsx(entryBytes(archive, "locked.xlsx"))).isFalse();
+            assertThat(entryBytes(archive, "locked.xlsx")).isNotEmpty();
+        }
+    }
+
+    @Test
+    void nullPoiWorkbook_throwsPxlNullPointer() {
+        // every arity guards the workbook, not just the one the others delegate to - the delegation is an
+        // implementation detail a later refactor could undo
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().poiWorkbook(null))
+                .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().poiWorkbook(null, "secret"))
+                .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportExcelZip().poiWorkbook(null, "secret", "name"))
+                .isInstanceOf(PxlNullPointerException.class);
+    }
+
+    @Test
+    void eachEntryKindNamesItselfAfterTheBytesItWrites() throws PxlException, IOException {
+        // The extension follows the format the entry actually writes itself in, whichever kind resolves it:
+        // a bound entry asks its option then its class, a raw one asks the workbook. Both end up named after
+        // the bytes inside them, which is what the magic-byte assertions check.
+        try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            pxlSpring.exportExcelZip()
+                    .workbook(workbook("bound"))                              // -> bound.xlsx
+                    .workbook(new TestHssfWorkbook("bound-ole2", users()))    // -> bound-ole2.xls
+                    .poiWorkbook(xssf, null, "raw")                           // -> raw.xlsx
+                    .poiWorkbook(hssf, null, "raw-ole2")                      // -> raw-ole2.xls
+                    .toStream(baos);
+
+            final byte[] archive = baos.toByteArray();
+            assertThat(centralDirectoryEntryNames(archive))
+                    .containsExactly("bound.xlsx", "bound-ole2.xls", "raw.xlsx", "raw-ole2.xls");
+
+            assertThat(isXlsx(entryBytes(archive, "bound.xlsx"))).isTrue();
+            assertThat(isXlsx(entryBytes(archive, "bound-ole2.xls"))).isFalse();
+            assertThat(isXlsx(entryBytes(archive, "raw.xlsx"))).isTrue();
+            assertThat(isXlsx(entryBytes(archive, "raw-ole2.xls"))).isFalse();
+        }
+    }
+
+    @Test
+    void rawPoiEntries_areCompressedByWhatTheyActuallyHold() throws PxlException, IOException {
+        // the third thing hanging off that one answer: the deflate level is read back off the entry name, so
+        // a raw .xlsx is stored (it is already a deflated container) and a raw .xls is compressed
+        try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            pxlSpring.exportExcelZip()
+                    .poiWorkbook(xssf, null, "ooxml")
+                    .poiWorkbook(hssf, null, "ole2")
+                    .toStream(baos);
+
+            final File tmp = writeTempZip(baos.toByteArray());
+            try (ZipFile zipFile = new ZipFile(tmp)) {
+                final ZipEntry storedXlsx = zipFile.getEntry("ooxml.xlsx");
+                assertThat(storedXlsx.getCompressedSize()).isGreaterThan(storedXlsx.getSize());
+
+                final ZipEntry deflatedXls = zipFile.getEntry("ole2.xls");
+                assertThat(deflatedXls.getCompressedSize()).isLessThan(deflatedXls.getSize());
+            } finally {
+                tmp.delete();
+            }
+        }
+    }
+
+    @Test
+    void duplicateEntryNames_areDetectedAcrossEveryEntryKind() throws IOException {
+        // What the single entry list buys: validateEntries compares every entry against every other one
+        // regardless of what it is made of, so a bound entry and a raw POI entry resolving to the same name
+        // collide exactly as two bound ones do. Split into a list per kind, this would go into the archive.
+        try (Workbook xssf = oneCell(new XSSFWorkbook())) {
+            assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                    .workbook(workbook("report"))               // fallback -> report.xlsx
+                    .poiWorkbook(xssf, null, "report")          // explicit -> report.xlsx too
+                    .toStream(new ByteArrayOutputStream()))
+                    .isInstanceOf(PxlArgumentException.class)
+                    .hasMessageContaining("report.xlsx");
+        }
+    }
+
+    @Test
+    void entryNamesDifferingOnlyInCase_areRejectedAcrossKindsToo() throws IOException {
+        // the fold is in validateEntries, which never asks what an entry is made of - so it spans kinds as
+        // well, and one archive cannot carry Report.xlsx alongside a raw report.xlsx
+        try (Workbook xssf = oneCell(new XSSFWorkbook())) {
+            assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                    .workbook(workbook("Report"))
+                    .poiWorkbook(xssf, null, "report")
+                    .toStream(new ByteArrayOutputStream()))
+                    .isInstanceOf(PxlArgumentException.class);
+        }
+    }
+
+    @Test
+    void oneBaseNameUnderTwoWorkbookTypes_staysTwoRawEntries() throws PxlException, IOException {
+        // the other direction: the comparison is on the whole name, so the extension each workbook type
+        // resolves to keeps these apart - the raw counterpart of
+        // differingExtensions_makeTheSameBaseNameTwoDistinctEntries
+        try (Workbook xssf = oneCell(new XSSFWorkbook()); Workbook hssf = oneCell(new HSSFWorkbook())) {
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            pxlSpring.exportExcelZip()
+                    .poiWorkbook(xssf, null, "report")     // -> report.xlsx
+                    .poiWorkbook(hssf, null, "report")     // -> report.xls
+                    .toStream(baos);
+
+            assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+                    .containsExactly("report.xlsx", "report.xls");
+        }
+    }
+
+    @Test
+    void pathCarryingEntryName_isRejectedForEveryKind() throws IOException {
+        // the guard is in the write loop, which never asks what an entry is made of - so a new kind is
+        // covered by construction. Pinned anyway, because the archive would otherwise hand out a traversal
+        // path.
+        try (Workbook xssf = oneCell(new XSSFWorkbook())) {
+            assertThatThrownBy(() -> pxlSpring.exportExcelZip()
+                    .poiWorkbook(xssf, null, "sub/report")
+                    .toStream(new ByteArrayOutputStream()))
+                    .isInstanceOf(PxlArgumentException.class);
+        }
+    }
+
+    @Test
+    void mixedEntryKinds_areWrittenInCallOrder() throws PxlException, IOException {
+        // one list, one order: kinds interleave rather than being grouped by what they are made of
+        try (Workbook xssf = oneCell(new XSSFWorkbook())) {
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            pxlSpring.exportExcelZip()
+                    .poiWorkbook(xssf, null, "one")
+                    .workbook(workbook("two"))
+                    .workbook(workbook("ignored"), null, "three")
+                    .toStream(baos);
+
+            assertThat(centralDirectoryEntryNames(baos.toByteArray()))
+                    .containsExactly("one.xlsx", "two.xlsx", "three.xlsx");
+        }
     }
 
     // ----- entry kinds (structure) -----

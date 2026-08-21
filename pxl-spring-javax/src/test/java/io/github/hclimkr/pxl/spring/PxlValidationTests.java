@@ -421,4 +421,17 @@ class PxlValidationTests {
                 pxlExcelZipExporter.exportExcelZip().workbook(null))
                 .isInstanceOf(PxlNullPointerException.class);
     }
+
+    @Test
+    void nullPoiWorkbookInZipEntry_throwsPxlNullPointer() {
+        // the same holds for every kind of entry: adding one is a builder call, so it stays outside bean
+        // validation's reach even here, where the component is proxied
+        assertThatThrownBy(() ->
+                pxlExcelZipExporter.exportExcelZip().poiWorkbook(null))
+                .isInstanceOf(PxlNullPointerException.class);
+
+        assertThatThrownBy(() ->
+                pxlExcelZipExporter.exportExcelZip().poiWorkbook(null, "secret"))
+                .isInstanceOf(PxlNullPointerException.class);
+    }
 }

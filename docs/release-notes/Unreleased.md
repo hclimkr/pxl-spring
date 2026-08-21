@@ -1,8 +1,8 @@
 # PXL Spring (Unreleased)
 
-Correctness release for **PXL Spring**, both changes in the ZIP exporter: an entry-name collision is caught
-before the archive is written rather than from inside the zip stream, and an entry's name now agrees with the
-bytes in it. Built against [PXL](https://github.com/hclimkr/pxl) 0.9.4, unchanged.
+A release about the ZIP exporter. An entry-name collision is caught before the archive is written rather than
+from inside the zip stream, an entry's name now agrees with the bytes in it, and an archive can hold a raw POI
+workbook you built yourself. Built against [PXL](https://github.com/hclimkr/pxl) 0.9.4, unchanged.
 
 Pre-1.0 release carrying **breaking** changes: a collision raises `PxlArgumentException` where it used to
 raise `PxlIOException`, two entry names differing only in case are refused where they used to produce an
@@ -11,6 +11,22 @@ the highlights below.
 
 ## Highlights
 
+  - **A ZIP entry can be a raw POI workbook.** `PxlExcelZipExporter` bundled one kind of source only, a
+    `@PxlWorkbook`-annotated object — so a workbook the application had already built, which
+    `exportExcel().poiWorkbook(...)` writes happily on its own, could not go into an archive at all.
+    `poiWorkbook(workbook)`, `poiWorkbook(workbook, password)` and
+    `poiWorkbook(workbook, password, entryName)` now add one. The workbook is written as-is, with no PXL
+    binding and therefore no per-entry export option, and the entry's extension is read back off the workbook
+    itself (`HSSFWorkbook` → `.xls`, `XSSFWorkbook`/`SXSSFWorkbook` → `.xlsx`) — the same format its body is
+    written in, so name and bytes cannot disagree. Encryption keeps that extension, exactly as on
+    `PxlExcelExporter`. This kind has no workbook name to fall back to, so an unnamed entry goes straight to
+    `Pxl{index}`; the duplicate-name check below spans every kind of entry alike.
+    ```java
+    pxlSpring.exportExcelZip()
+             .workbook(januaryReport)             // -> january.xlsx, bound from the annotated object
+             .poiWorkbook(chart, null, "chart")   // -> chart.xlsx, written as-is
+             .toResponse(response, "quarterly-report");
+    ```
   - **A duplicate ZIP entry name fails before anything is written.** Entry names resolve as
     `explicit name` → `@PxlWorkbook` workbook name → `Pxl{index}`, and the index fallback applies only when
     neither of the first two yields a name — so two instances of the same workbook class, the ordinary case,

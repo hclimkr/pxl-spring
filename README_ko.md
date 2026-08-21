@@ -396,7 +396,7 @@ public int upload(@RequestParam MultipartFile file) throws Exception {
 |----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 엑셀 export      | `pxlSpring.exportExcel()`<br/>→ `.workbook(...) / .sheet(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)` |
 | 샘플 엑셀 export   | `pxlSpring.exportSampleExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                    |
-| 엑셀 ZIP export  | `pxlSpring.exportExcelZip()`<br/>→ `.workbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                      |
+| 엑셀 ZIP export  | `pxlSpring.exportExcelZip()`<br/>→ `.workbook(...) / .poiWorkbook(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                      |
 | CSV export     | `pxlSpring.exportCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                              |
 | 샘플 CSV export  | `pxlSpring.exportSampleCsv()`<br/>→ `.sheet(...)`<br/>→ `.toStream(OutputStream)` / `.toFile(File)` / `.toResponse(HttpServletResponse, String)` / `.toResponseStreaming(HttpServletResponse, String)` / `.toResponseEntity(String)`                                                                                                        |
 | 엑셀 import      | `pxlSpring.importExcel()`<br/>→ `.workbook(...) / .sheet(...)`<br/>→ `.fromMultipartFile(MultipartFile)`                                                                                                   |
@@ -652,6 +652,24 @@ public void downloadQuarterNamed(HttpServletResponse response) throws Exception 
 ```
 
 엔트리 확장자는 그 엔트리가 실제로 기록되는 엔진을 따른다 — 엔트리별 옵션이 먼저이고, 없으면 워크북 클래스가 선언한 엔진이다. 그래서 `2월보고서`는 `2월보고서.xls`로 들어가고 이름과 바이트가 어긋나지 않는다. deflate 레벨도 같은 답에서 고르므로, `.xls` 엔트리는 이미 deflate된 `.xlsx`처럼 그냥 저장되지 않고 제대로 압축된다.
+
+**직접 만들어 둔 워크북 묶기**
+
+raw POI `Workbook`은 `exportExcel().poiWorkbook(...)`이 단독으로 기록할 때와 똑같이 있는 그대로 아카이브에 들어간다. 바인딩을 거치지 않으므로 엔트리별 옵션이 없고(암호만 받는다) 이름은 워크북 자신의 타입을 따라 붙는다. 워크북명도 없으므로 이름을 주지 않은 이 종류의 엔트리는 곧바로 `Pxl{index}`가 된다.
+
+```java
+@GetMapping("/company/zip-raw")
+public void downloadWithRawWorkbook(HttpServletResponse response) throws Exception {
+    Company january = ...;
+
+    try (Workbook chart = buildChartWorkbook()) {
+        pxlSpring.exportExcelZip()
+                 .workbook(january)
+                 .poiWorkbook(chart, null, "차트")   // -> 차트.xlsx (XSSF), 차트.xls (HSSF)
+                 .toResponse(response, "분기보고서");
+    }
+}
+```
 
 **압축파일을 파일이나 스트림에 저장**
 
@@ -962,16 +980,19 @@ ResponseEntity<Resource> toResponseEntity(String excelFilename)
 
 ### `PxlExcelZipExporter`
 
-여러 워크북 객체를 각각 하나의 엑셀 엔트리로 만들어 zip 하나로 묶는다.
+여러 엑셀 워크북을 각각 하나의 엔트리로 만들어 zip 하나로 묶는다.
 
 ```java
 // 시작
 PxlExcelZipExporter.Builder exportExcelZip()
 
 // 구성 (호출할 때마다 엔트리 하나씩 추가)
-workbook(Object workbookObject)
+workbook(Object workbookObject)                                                              // @PxlWorkbook 객체
 workbook(Object workbookObject, PxlExportWorkbookOption option)
 workbook(Object workbookObject, PxlExportWorkbookOption option, String excelFilename)
+poiWorkbook(Workbook workbook)                                                               // POI 워크북 그대로
+poiWorkbook(Workbook workbook, String password)                                              // 암호화해서 기록
+poiWorkbook(Workbook workbook, String password, String excelFilename)
 
 // 실행 — 응답 목적지는 아카이브 파일명을 인자로 받는다(필수)
 void                     toStream(OutputStream outputStream)
@@ -983,6 +1004,7 @@ ResponseEntity<Resource> toResponseEntity(String zipFilename)
 
 - 엔트리명은 지정한 이름 → 워크북명 → `Pxl{index}` 순으로 정해진다. 지정한 이름이 공백이면 없는 것으로 보고 다음 순서로 넘어간다.
 - 확장자는 엔트리가 기록되는 포맷에서 붙는다 — 엔트리별 옵션의 export 엔진, 없으면 워크북 클래스가 선언한 엔진이다. 이름·바이트·deflate 레벨이 모두 그 하나의 답을 따른다.
+- `poiWorkbook(...)`은 바인딩을 거치지 않으므로 엔트리별 옵션도 워크북명도 없다 — 확장자는 워크북 자신의 타입에서 오고, 이름을 주지 않으면 곧바로 `Pxl{index}`가 된다. 암호화해도 확장자는 그대로이며, 이는 `PxlExcelExporter`와 같다.
 - 아카이브명은 필수다.
 
 ### `PxlCsvExporter`

@@ -18,6 +18,7 @@ import io.github.hclimkr.pxl.util.PxlWorkbookUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.output.CloseShieldOutputStream;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.Resource;
@@ -41,10 +42,11 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Spring component that bundles multiple workbook objects into a single ZIP archive.
+ * Spring component that bundles several Excel workbooks into a single ZIP archive.
  *
  * <p>Everything is configured through the fluent builder returned by {@link #exportExcelZip()} - add one
- * entry per {@code workbook(...)} call, then call a terminal ({@code toStream} / {@code toFile} /
+ * entry per call ({@code workbook(...)} for a {@code @PxlWorkbook}-annotated object, {@code poiWorkbook(...)}
+ * for a raw POI {@link Workbook} you built yourself), then call a terminal ({@code toStream} / {@code toFile} /
  * {@code toResponse} / {@code toResponseStreaming} / {@code toResponseEntity}); the response terminals take
  * the archive's own download file name as an argument, and it is required there - unlike an entry name it has
  * nothing to fall back to:</p>
@@ -53,18 +55,20 @@ import java.util.zip.ZipOutputStream;
  * pxlSpring.exportExcelZip()
  *         .workbook(januaryReport)
  *         .workbook(februaryReport, option, "February")
+ *         .poiWorkbook(alreadyBuilt, null, "raw")
  *         .toResponse(response, "quarterly-report");
  * }</pre>
  *
- * <p>An entry's file name falls back to the workbook object name, then to {@code Pxl{index}}. It must be a
- * plain name - one carrying a path separator is rejected with {@link PxlArgumentException}, so the archive
- * can never hand a traversal path to whoever extracts it.</p>
+ * <p>An entry's file name falls back to the workbook object name - a raw POI workbook carries none, so that
+ * kind falls straight through - and then to {@code Pxl{index}}. It must be a plain name - one carrying a path
+ * separator is rejected with {@link PxlArgumentException}, so the archive can never hand a traversal path to
+ * whoever extracts it.</p>
  *
- * <p>The index fallback only applies when neither of the earlier two yields a name, so it does not make names
- * unique: two entries built from the same workbook class, both relying on the same declared workbook name,
- * resolve to the same entry name. That is rejected with {@link PxlArgumentException} before any byte is
- * written - see {@code Builder.validateEntries} for why the check sits there and why it ignores case. Give
- * such entries an explicit name.</p>
+ * <p>The index fallback only applies when no earlier step yields a name, so it does not make names unique:
+ * two entries built from the same workbook class, both relying on the same declared workbook name, resolve to
+ * the same entry name. That is rejected with {@link PxlArgumentException} before any byte is written - see
+ * {@code Builder.validateEntries} for why the check sits there and why it ignores case. Give such entries an
+ * explicit name.</p>
  *
  * <p>That builder is the nested {@link Builder}. A fluent chain never has to name it; on the rare occasion
  * you hold one in a variable, spell it {@code PxlExcelZipExporter.Builder}.</p>
@@ -463,9 +467,9 @@ public class PxlExcelZipExporter {
      * bundling is a pxl-spring concern - so this builder simply collects archive entries and the archive's
      * own download name, then hands them to a terminal.</p>
      *
-     * <p>Each {@link #workbook(Object)} call adds one archive entry; there are no separate option methods,
-     * because an entry's export option and file name are arguments of the {@code workbook(...)} overload that
-     * adds it - they mean nothing except against that one entry. Terminal methods:
+     * <p>Each {@link #workbook(Object)} or {@link #poiWorkbook(Workbook)} call adds one archive entry; there
+     * are no separate option methods, because an entry's export option and file name are arguments of the
+     * overload that adds it - they mean nothing except against that one entry. Terminal methods:
      * {@link #toStream(OutputStream)}, {@link #toFile(File)}, {@link #toResponse(HttpServletResponse, String)},
      * {@link #toResponseStreaming(HttpServletResponse, String)}, {@link #toResponseEntity(String)}. Each
      * terminal delegates straight back to the enclosing component so the work still runs inside a
@@ -484,14 +488,15 @@ public class PxlExcelZipExporter {
      * pxlSpring.exportExcelZip()
      *         .workbook(januaryReport)
      *         .workbook(februaryReport, option, "February")
+     *         .poiWorkbook(alreadyBuilt, null, "raw")
      *         .toResponse(response, "quarterly-report");
      * }</pre>
      */
     public static final class Builder {
 
         /**
-         * Entry file name prefix used when neither an explicit name nor the workbook object name yields one;
-         * the entry's zero-based index is appended.
+         * Entry file name prefix used when no earlier step - an explicit name, or the workbook object name
+         * where the kind of entry has one - yields a name; the entry's zero-based index is appended.
          */
         private static final String DEFAULT_EXPORT_EXCEL_FILENAME = "Pxl";
 
@@ -589,6 +594,74 @@ public class PxlExcelZipExporter {
             }
 
             this.entries.add(new WorkbookEntry(workbookObject, workbookOption, excelFilename));
+            return this;
+        }
+
+        /**
+         * Adds one archive entry for an already-built raw POI {@link Workbook}, written as-is without any PXL
+         * binding.
+         *
+         * @param workbook the workbook to write into the archive
+         * @return this builder
+         * @throws PxlNullPointerException if {@code workbook} is {@code null}
+         */
+        public Builder poiWorkbook(final Workbook workbook)
+                throws PxlNullPointerException {
+
+            return poiWorkbook(workbook, null, null);
+        }
+
+        /**
+         * Adds one archive entry for a raw POI {@link Workbook} encrypted with the given password.
+         *
+         * <p>Encryption wraps the bytes in an OLE2 container whatever the workbook type, while the entry is
+         * still named after the workbook's own format - so an encrypted XSSF workbook goes in as OLE2 bytes
+         * under a {@code .xlsx} name, which is how an encrypted OOXML file is normally distributed. Same
+         * behaviour as {@code PxlExcelExporter.Builder.poiWorkbook(Workbook, String)}, deliberately.</p>
+         *
+         * @param workbook the workbook to write into the archive
+         * @param password the encryption password, or {@code null} for none
+         * @return this builder
+         * @throws PxlNullPointerException if {@code workbook} is {@code null}
+         */
+        public Builder poiWorkbook(final Workbook workbook,
+                                   @Nullable final String password)
+                throws PxlNullPointerException {
+
+            return poiWorkbook(workbook, password, null);
+        }
+
+        /**
+         * Adds one archive entry for a raw POI {@link Workbook}, with a password and an entry file name applied
+         * to that entry only.
+         *
+         * <p>There is no export option here: nothing is bound, so there would be nothing for one to override -
+         * exactly as on {@code PxlExcelExporter}. The entry's extension is not configurable either; it is read
+         * back off the workbook itself ({@code HSSFWorkbook} &rarr; {@code .xls},
+         * {@code XSSFWorkbook}/{@code SXSSFWorkbook} &rarr; {@code .xlsx}), which is the format its body is
+         * written in, so name and bytes cannot disagree.</p>
+         *
+         * <p>Entry names have to come out distinct, ignoring case, across every kind of entry; a collision
+         * surfaces from the terminal as {@link PxlArgumentException}. This kind has no workbook name to fall
+         * back to, so an unnamed one always resolves to {@code Pxl{index}}.</p>
+         *
+         * @param workbook      the workbook to write into the archive
+         * @param password      the encryption password, or {@code null} for none
+         * @param excelFilename the entry file name without extension; when blank it falls back to
+         *                      {@code Pxl{index}}
+         * @return this builder
+         * @throws PxlNullPointerException if {@code workbook} is {@code null}
+         */
+        public Builder poiWorkbook(final Workbook workbook,
+                                   @Nullable final String password,
+                                   @Nullable final String excelFilename)
+                throws PxlNullPointerException {
+
+            if (Objects.isNull(workbook)) {
+                throw new PxlNullPointerException("workbook must not be null");
+            }
+
+            this.entries.add(new PoiWorkbookEntry(workbook, password, excelFilename));
             return this;
         }
 
@@ -728,7 +801,7 @@ public class PxlExcelZipExporter {
                 throws PxlArgumentException {
 
             if (entries.isEmpty()) {
-                throw new PxlArgumentException("at least one workbook(...) entry must be specified");
+                throw new PxlArgumentException("at least one workbook(...) or poiWorkbook(...) entry must be specified");
             }
 
             final Set<String> seenEntryNames = new HashSet<>();
@@ -931,6 +1004,113 @@ public class PxlExcelZipExporter {
                 }
 
                 return DEFAULT_EXPORT_EXCEL_FILENAME + index;
+            }
+
+        }
+
+        /**
+         * An archive member built from an already-open POI {@link Workbook}: the workbook to write, its
+         * optional encryption password, and its optional entry file name.
+         *
+         * <p>Carries no export option, unlike {@code WorkbookEntry}: nothing is bound here, so there would be
+         * nothing for one to override - the same reason {@code PxlExcelExporter.Builder.override} does not
+         * reach its raw-workbook form.</p>
+         */
+        private static final class PoiWorkbookEntry extends Entry {
+
+            private final Workbook poiWorkbook;
+
+            private final String poiPassword;
+
+            private final String excelFilename;
+
+            /**
+             * Creates an archive entry.
+             *
+             * @param poiWorkbook   the workbook (never {@code null})
+             * @param poiPassword   the encryption password, or {@code null} for none
+             * @param excelFilename the entry file name without extension, or {@code null}/blank for the
+             *                      fallback
+             */
+            private PoiWorkbookEntry(final Workbook poiWorkbook,
+                                     final String poiPassword,
+                                     final String excelFilename) {
+
+                this.poiWorkbook = poiWorkbook;
+                this.poiPassword = poiPassword;
+                this.excelFilename = excelFilename;
+            }
+
+            /**
+             * Resolves the name this entry takes inside the archive: its file name plus the extension of the
+             * format it is written in - see {@link #resolveFileFormat()}.
+             *
+             * @param index the entry's zero-based index in the archive
+             * @return the entry name, extension included
+             */
+            @Override
+            String resolveEntryName(final int index) {
+
+                return withExtension(resolveExcelFilename(index), resolveFileFormat());
+            }
+
+            /**
+             * Resolves the format this entry is written in: the workbook's own.
+             *
+             * <p>Read back off the workbook because that is what the body is written in, so the extension and
+             * the bytes cannot disagree and there is nothing for the caller to configure - or to get wrong.
+             * It is {@link PxlFileFormat#fromPoiWorkbook} rather than {@link PxlExcelEngine#fromPoiWorkbook}
+             * that is asked, because a streaming-reader workbook is a reader and therefore has no engine, yet
+             * still holds XLSX bytes. Same reasoning as
+             * {@code PxlExcelExporter.Builder.resolveFileFormat}; that lookup already falls back to the
+             * default for a workbook type it does not recognise, and the {@link Optional} around it only
+             * guards against a future core that could return {@code null}.</p>
+             *
+             * <p>An encrypted workbook is an exception in appearance only: encryption wraps the bytes in an
+             * OLE2 container whatever the type, but the entry keeps the workbook's own extension, which is
+             * how an encrypted OOXML file is normally distributed.</p>
+             *
+             * @return the entry's file format
+             */
+            private PxlFileFormat resolveFileFormat() {
+
+                return Optional.ofNullable(PxlFileFormat.fromPoiWorkbook(poiWorkbook))
+                        .orElse(PxlConstants.DEFAULT_EXPORT_FILE_FORMAT);
+            }
+
+            /**
+             * Writes the workbook straight into the archive stream, encrypting it where a password was given.
+             *
+             * @param outputStream the open archive stream, positioned on this entry
+             * @param pxl          the shared core entry point; unused, because this form goes nowhere near
+             *                     the binding layer
+             * @throws PxlException if encryption is requested but the workbook type does not support it, or
+             *                      writing the workbook fails
+             */
+            @Override
+            void writeBody(final OutputStream outputStream,
+                           final Pxl pxl)
+                    throws PxlException {
+
+                PxlWorkbookUtils.writeToStream(poiWorkbook, outputStream, poiPassword);
+            }
+
+            /**
+             * Resolves this entry's file name: the explicit name, else {@code Pxl} followed by the entry
+             * index.
+             *
+             * <p>Shorter than {@code WorkbookEntry.resolveExcelFilename} by one step, and not by choice: a
+             * workbook name is read off a {@code @PxlWorkbook}-annotated object, and a raw POI workbook is
+             * not one.</p>
+             *
+             * @param index the entry's zero-based index in the archive
+             * @return the entry file name without extension
+             */
+            private String resolveExcelFilename(final int index) {
+
+                return StringUtils.isNotBlank(excelFilename)
+                        ? excelFilename
+                        : DEFAULT_EXPORT_EXCEL_FILENAME + index;
             }
 
         }
