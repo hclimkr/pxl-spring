@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-08-22
+
+Built against [pxl](https://github.com/hclimkr/pxl) 0.9.5, up from 0.9.4.
+
 ### Added
 
 - An already-built raw POI `Workbook` can go into a ZIP archive:
@@ -37,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its sheet name, which is required — there is no index-suffixed default behind it, so two entries
   under one sheet name collide and are rejected before anything is written. A blank or `null` sheet
   name is refused at the call that adds the entry rather than mid-write.
+- **Through the core.** `java.util.UUID` is a column type in both directions now,
+  `Collection<UUID>` included, so a DTO carrying one no longer fails while its column metadata is
+  resolved. Export wrote the canonical lower-case form already, through the custom-object path, and
+  writes exactly the same text; import takes that form only, refusing the hyphen-less, braced and
+  `urn:uuid:` spellings.
 
 ### Changed
 
@@ -88,6 +97,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   — so `workbook(report, hssfOption)` produces `report.xls` where it used to produce
   `report.xlsx` holding OLE2 bytes. The deflate level follows the same answer, so such an entry
   is compressed instead of being stored as if it were already-deflated OOXML.
+
+- **Breaking, through the core.** On import, a numeric or `java.util.Date` `pattern` has to match
+  the whole cell value now. A value it could read only the front of used to bind silently —
+  `"123abc"` as `123` under `"#,##0"`, `"2024-01-02 xxx"` as 2 January 2024 under `"yyyy-MM-dd"` —
+  and raises `PxlCellCodecException` instead. Values a pattern reads end to end are unaffected,
+  prefixes and suffixes included. Worth checking against your data: with `importTrim = false`,
+  trailing whitespace is itself unconsumed input and is now rejected.
+
+- **Through the core.** A `@PxlSheet` field marked `@Valid` no longer has its rows validated
+  twice. An export violation is therefore reported with its sheet name, which the duplicate pass
+  used to report without one, and a sheet the binder skips (`exportEnabled = false` on export,
+  `importEnabled = false` on import) has its rows left unvalidated even when the field carries
+  `@Valid`.
 
 ## [0.9.2] - 2026-08-11
 
@@ -179,7 +201,8 @@ javax variant, `pxl-jakarta` for the jakarta one.
 - `PxlSpring`, one bean fronting all five entry points, with Bean Validation, RFC 5987
   download names, and opt-in AOP performance logging.
 
-[Unreleased]: https://github.com/hclimkr/pxl-spring/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/hclimkr/pxl-spring/compare/v0.9.3...HEAD
+[0.9.3]: https://github.com/hclimkr/pxl-spring/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/hclimkr/pxl-spring/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/hclimkr/pxl-spring/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/hclimkr/pxl-spring/releases/tag/v0.9.0

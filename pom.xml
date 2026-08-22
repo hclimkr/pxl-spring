@@ -41,8 +41,8 @@
     </modules>
 
     <properties>
-        <revision>0.9.2</revision>
-        <pxlRevision>0.9.4</pxlRevision>
+        <revision>0.9.3</revision>
+        <pxlRevision>0.9.5</pxlRevision>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.release>17</maven.compiler.release>
