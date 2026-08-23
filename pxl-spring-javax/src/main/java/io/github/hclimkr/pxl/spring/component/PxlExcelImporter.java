@@ -154,11 +154,11 @@ public class PxlExcelImporter {
      * {@link PxlImportSupport#validateExcelExtension(Resource)} re-checks it. That validator also rejects a
      * resource reporting no file name, which is what makes the name derivation below safe.</p>
      *
-     * @param source    the configured source step
-     * @param excelFile the Excel resource ({@code .xls}/{@code .xlsx})
-     * @param <R>       the parsed result type
+     * @param source        the configured source step
+     * @param excelResource the Excel resource ({@code .xls}/{@code .xlsx})
+     * @param <R>           the parsed result type
      * @return the parsed workbook object or row collection
-     * @throws PxlException                       if {@code excelFile} is {@code null}, the source step's
+     * @throws PxlException                       if {@code excelResource} is {@code null}, the source step's
      *                                            parse target is invalid, the resource cannot be read, or
      *                                            parsing fails
      * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its extension is
@@ -166,15 +166,15 @@ public class PxlExcelImporter {
      */
     @PxlPerformanceLogging(TAG)
     public <R> R importExcelFromResource(@NotNull final Builder.Source<R> source,
-                                         @NotNull final Resource excelFile)
+                                         @NotNull final Resource excelResource)
             throws PxlException, HttpMediaTypeNotSupportedException {
 
-        PxlImportSupport.validateExcelExtension(excelFile);
+        PxlImportSupport.validateExcelExtension(excelResource);
 
         // resolved only once the resource is known: a blank name falls back to the file's base name
-        final String workbookName = source.resolveWorkbookName(excelFile);
+        final String workbookName = source.resolveWorkbookName(excelResource);
 
-        return readInto(source, workbookName, excelFile);
+        return readInto(source, workbookName, excelResource);
     }
 
     /**
@@ -504,17 +504,17 @@ public class PxlExcelImporter {
              * that does not (a bare {@code ByteArrayResource}, say) is rejected rather than let through
              * unchecked.</p>
              *
-             * @param excelFile the Excel resource ({@code .xls}/{@code .xlsx})
+             * @param excelResource the Excel resource ({@code .xls}/{@code .xlsx})
              * @return the parsed workbook object or row collection
-             * @throws PxlException                       if {@code excelFile} is {@code null}, the resource
-             *                                            cannot be read, or parsing fails
+             * @throws PxlException                       if {@code excelResource} is {@code null}, the
+             *                                            resource cannot be read, or parsing fails
              * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its
              *                                            extension is not a supported Excel type
              */
-            public R fromResource(final Resource excelFile)
+            public R fromResource(final Resource excelResource)
                     throws PxlException, HttpMediaTypeNotSupportedException {
 
-                return importer.importExcelFromResource(this, excelFile);
+                return importer.importExcelFromResource(this, excelResource);
             }
 
             // ----- resolution helpers read by PxlExcelImporter -----
@@ -536,12 +536,12 @@ public class PxlExcelImporter {
              * Resolves the workbook name: the explicit name, else the resource's base file name,
              * NFC-normalized and trimmed.
              *
-             * @param excelFile the Excel resource (already extension-validated, so its name is non-blank)
+             * @param excelResource the Excel resource (already extension-validated, so its name is non-blank)
              * @return the workbook name
              */
-            private String resolveWorkbookName(final Resource excelFile) {
+            private String resolveWorkbookName(final Resource excelResource) {
 
-                return resolveWorkbookName(excelFile.getFilename());
+                return resolveWorkbookName(excelResource.getFilename());
             }
 
             /**

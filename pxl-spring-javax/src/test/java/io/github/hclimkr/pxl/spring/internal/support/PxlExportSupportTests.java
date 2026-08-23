@@ -174,14 +174,14 @@ class PxlExportSupportTests {
     @Test
     void responseHeaderSetters_useTheSameEncoding() {
         final MockHttpServletResponse excelResponse = new MockHttpServletResponse();
-        PxlExportSupport.setResponseForExport("my report", PxlFileFormat.XLS, excelResponse);
+        PxlExportSupport.setDownloadHeadersForExport("my report", PxlFileFormat.XLS, excelResponse);
 
         assertThat(excelResponse.getHeader(HttpHeaders.CONTENT_DISPOSITION))
                 .isEqualTo("attachment; filename=\"my report.xls\"; filename*=UTF-8''my%20report.xls");
         assertThat(excelResponse.getStatus()).isEqualTo(200);
 
         final MockHttpServletResponse zipResponse = new MockHttpServletResponse();
-        PxlExportSupport.setResponseForExportZip("my archive", zipResponse);
+        PxlExportSupport.setDownloadHeadersForExportZip("my archive", zipResponse);
 
         assertThat(zipResponse.getHeader(HttpHeaders.CONTENT_DISPOSITION))
                 .isEqualTo("attachment; filename=\"my archive.zip\"; filename*=UTF-8''my%20archive.zip");
@@ -226,7 +226,7 @@ class PxlExportSupportTests {
     @Test
     void controlCharactersInFilename_cannotSplitTheHeader() {
         final MockHttpServletResponse response = new MockHttpServletResponse();
-        PxlExportSupport.setResponseForExport("a\r\nX-Evil: 1", PxlFileFormat.XLSX, response);
+        PxlExportSupport.setDownloadHeadersForExport("a\r\nX-Evil: 1", PxlFileFormat.XLSX, response);
 
         // header-injection guard: filename* is safe through percent-encoding, but the ASCII fallback is
         // written literally, so it is the one place a CR/LF could have broken the header apart

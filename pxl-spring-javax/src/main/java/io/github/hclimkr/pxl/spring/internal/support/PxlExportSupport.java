@@ -61,9 +61,9 @@ public final class PxlExportSupport {
      * @param fileFormat the export file format (provides extension and content type)
      * @param response   the servlet response to configure
      */
-    public static void setResponseForExport(final String filename,
-                                            final PxlFileFormat fileFormat,
-                                            final HttpServletResponse response) {
+    public static void setDownloadHeadersForExport(final String filename,
+                                                   final PxlFileFormat fileFormat,
+                                                   final HttpServletResponse response) {
 
         response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
                 contentDisposition(filename, fileFormat.getFilenameExtension()));
@@ -96,7 +96,7 @@ public final class PxlExportSupport {
             throws PxlIOException {
 
         try {
-            PxlExportSupport.setResponseForExport(filename, fileFormat, response);
+            PxlExportSupport.setDownloadHeadersForExport(filename, fileFormat, response);
             response.setContentLength(outputStream.size());
             outputStream.writeTo(response.getOutputStream());
         } catch (IOException e) {
@@ -141,8 +141,8 @@ public final class PxlExportSupport {
      * @param zipFilename the archive file name without extension
      * @param response    the servlet response to configure
      */
-    public static void setResponseForExportZip(final String zipFilename,
-                                               final HttpServletResponse response) {
+    public static void setDownloadHeadersForExportZip(final String zipFilename,
+                                                      final HttpServletResponse response) {
 
         response.setHeader(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(zipFilename, "zip"));
         response.setContentType("application/zip");
@@ -171,7 +171,7 @@ public final class PxlExportSupport {
             throws PxlIOException {
 
         try {
-            PxlExportSupport.setResponseForExportZip(zipFilename, response);
+            PxlExportSupport.setDownloadHeadersForExportZip(zipFilename, response);
             response.setContentLength(outputStream.size());
             outputStream.writeTo(response.getOutputStream());
         } catch (IOException e) {

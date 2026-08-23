@@ -64,17 +64,17 @@ public final class PxlImportSupport {
      * Validates that the resource is present and has a supported Excel extension
      * ({@code .xls}/{@code .xlsx}).
      *
-     * @param excelFile the resource to check
-     * @throws PxlNullPointerException            if {@code excelFile} is {@code null}
+     * @param excelResource the resource to check
+     * @throws PxlNullPointerException            if {@code excelResource} is {@code null}
      * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its extension is
      *                                            unsupported
      */
-    public static void validateExcelExtension(final Resource excelFile)
+    public static void validateExcelExtension(final Resource excelResource)
             throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
 
-        PxlArgumentSupport.requireNonNull(excelFile, "excelFile");
+        PxlArgumentSupport.requireNonNull(excelResource, "excelResource");
 
-        validateFileExtension(excelFile.getFilename(),
+        validateFileExtension(excelResource.getFilename(),
                 PxlConstants.FILENAME_EXTENSION_XLS, PxlConstants.FILENAME_EXTENSION_XLSX);
     }
 
@@ -96,17 +96,17 @@ public final class PxlImportSupport {
     /**
      * Validates that the resource is present and has a {@code .csv} extension.
      *
-     * @param csvFile the resource to check
-     * @throws PxlNullPointerException            if {@code csvFile} is {@code null}
+     * @param csvResource the resource to check
+     * @throws PxlNullPointerException            if {@code csvResource} is {@code null}
      * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its extension is
      *                                            not {@code .csv}
      */
-    public static void validateCsvExtension(final Resource csvFile)
+    public static void validateCsvExtension(final Resource csvResource)
             throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
 
-        PxlArgumentSupport.requireNonNull(csvFile, "csvFile");
+        PxlArgumentSupport.requireNonNull(csvResource, "csvResource");
 
-        validateFileExtension(csvFile.getFilename(), PxlConstants.FILENAME_EXTENSION_CSV);
+        validateFileExtension(csvResource.getFilename(), PxlConstants.FILENAME_EXTENSION_CSV);
     }
 
     /**

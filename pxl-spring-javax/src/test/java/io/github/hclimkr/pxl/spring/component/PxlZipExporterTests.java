@@ -674,7 +674,7 @@ class PxlZipExporterTests {
     @Test
     void duplicateEntryNames_areRejectedBeforeHeadersGoOut() {
         // The other half of the same win: on the streaming path validateEntries runs before
-        // setResponseForExportZip, so this failure leaves no download headers behind. Every check this
+        // setDownloadHeadersForExportZip, so this failure leaves no download headers behind. Every check this
         // builder makes itself is now on that side of the line; what is not is a core-level failure
         // (streamingStillCommitsHeadersBeforeACoreLevelFailure).
         final MockHttpServletResponse response = new MockHttpServletResponse();

@@ -194,10 +194,10 @@ class PxlImportSupportTests {
     void nullResource_isRejectedAsPxlNullPointerNotRawNpe() {
         assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension((Resource) null))
                 .isInstanceOf(PxlNullPointerException.class)
-                .hasMessageContaining("excelFile");
+                .hasMessageContaining("excelResource");
 
         assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension((Resource) null))
                 .isInstanceOf(PxlNullPointerException.class)
-                .hasMessageContaining("csvFile");
+                .hasMessageContaining("csvResource");
     }
 }

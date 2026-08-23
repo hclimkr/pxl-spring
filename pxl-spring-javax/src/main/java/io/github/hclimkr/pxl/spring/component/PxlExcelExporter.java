@@ -128,7 +128,7 @@ public class PxlExcelExporter {
         PxlArgumentSupport.requireNonNull(outputStream, "outputStream");
         builder.validateSource();
 
-        writeToStream(builder, outputStream);
+        generateToStream(builder, outputStream);
     }
 
     /**
@@ -189,7 +189,7 @@ public class PxlExcelExporter {
         // Generate fully in memory first; the response is only written once the bytes are complete, so a
         // generation failure leaves the response - including any CORS headers added upstream - untouched.
         final FastByteArrayOutputStream outputStream = new FastByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
-        writeToStream(builder, outputStream);
+        generateToStream(builder, outputStream);
 
         PxlExportSupport.writeBufferToResponseForExport(outputStream, resolvedFilename, fileFormat, response);
     }
@@ -222,10 +222,10 @@ public class PxlExcelExporter {
         // Headers must go out before the body, so they are set before anything can fail. Past this point the
         // response is committed and a failure cannot be taken back - that is the trade this terminal asks for,
         // and no Content-Length is possible because the size is not known yet.
-        PxlExportSupport.setResponseForExport(resolvedFilename, fileFormat, response);
+        PxlExportSupport.setDownloadHeadersForExport(resolvedFilename, fileFormat, response);
 
         try {
-            writeToStream(builder, response.getOutputStream());
+            generateToStream(builder, response.getOutputStream());
         } catch (IOException e) {
             throw new PxlIOException(e);
         }
@@ -258,7 +258,7 @@ public class PxlExcelExporter {
         FastByteArrayOutputStream outputStream = null;
         try {
             outputStream = new FastByteArrayOutputStream(PxlSpringConstants.DOWNLOAD_BUFFER_INITIAL_BYTES);
-            writeToStream(builder, outputStream);
+            generateToStream(builder, outputStream);
             return PxlExportSupport.makeResponseEntityForExport(resolvedFilename, fileFormat, outputStream);
         } finally {
             IOUtils.closeQuietly(outputStream);
@@ -277,8 +277,8 @@ public class PxlExcelExporter {
      * @throws PxlException if encryption is requested but the workbook type does not support it, or export
      *                      fails
      */
-    private static void writeToStream(final Builder builder,
-                                      final OutputStream outputStream)
+    private static void generateToStream(final Builder builder,
+                                         final OutputStream outputStream)
             throws PxlException {
 
         if (Objects.nonNull(builder.poiWorkbook)) {

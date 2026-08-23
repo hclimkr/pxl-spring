@@ -137,7 +137,7 @@ public class PxlCsvImporter {
                                              @NotEmpty final List<@NotNull MultipartFile> csvFiles)
             throws PxlException, HttpMediaTypeNotSupportedException {
 
-        validateCsvSources(csvFiles);
+        validateCsvSources(csvFiles, "csvFiles");
 
         // rejects a null element too, so the getOriginalFilename() calls below are safe
         for (final MultipartFile csvFile : csvFiles) {
@@ -146,7 +146,7 @@ public class PxlCsvImporter {
 
         final List<String> csvNames = new ArrayList<>();
         for (final MultipartFile csvFile : csvFiles) {
-            csvNames.add(sheetNameFrom(csvFile.getOriginalFilename()));
+            csvNames.add(resolveSheetName(csvFile.getOriginalFilename()));
         }
 
         return readInto(source, csvNames, csvFiles);
@@ -163,11 +163,11 @@ public class PxlCsvImporter {
      * also rejects a resource reporting no file name, which is what makes the sheet-name derivation below
      * safe.</p>
      *
-     * @param source   the configured source step
-     * @param csvFiles the CSV resources (one resource becomes one sheet)
-     * @param <R>      the parsed result type
+     * @param source       the configured source step
+     * @param csvResources the CSV resources (one resource becomes one sheet)
+     * @param <R>          the parsed result type
      * @return the parsed workbook object or row collection
-     * @throws PxlException                       if {@code csvFiles} is {@code null} or empty or holds a
+     * @throws PxlException                       if {@code csvResources} is {@code null} or empty or holds a
      *                                            {@code null} element, a {@code sheet(...)} parse target is
      *                                            given more than one resource, a resource cannot be read, or
      *                                            parsing fails
@@ -176,36 +176,39 @@ public class PxlCsvImporter {
      */
     @PxlPerformanceLogging(TAG)
     public <R> R importCsvFromResources(@NotNull final Builder.Source<R> source,
-                                        @NotEmpty final List<@NotNull Resource> csvFiles)
+                                        @NotEmpty final List<@NotNull Resource> csvResources)
             throws PxlException, HttpMediaTypeNotSupportedException {
 
-        validateCsvSources(csvFiles);
+        validateCsvSources(csvResources, "csvResources");
 
         // rejects a null element too, so the getFilename() calls below are safe
-        for (final Resource csvFile : csvFiles) {
-            PxlImportSupport.validateCsvExtension(csvFile);
+        for (final Resource csvResource : csvResources) {
+            PxlImportSupport.validateCsvExtension(csvResource);
         }
 
         final List<String> csvNames = new ArrayList<>();
-        for (final Resource csvFile : csvFiles) {
-            csvNames.add(sheetNameFrom(csvFile.getFilename()));
+        for (final Resource csvResource : csvResources) {
+            csvNames.add(resolveSheetName(csvResource.getFilename()));
         }
 
-        return readInto(source, csvNames, csvFiles);
+        return readInto(source, csvNames, csvResources);
     }
 
     /**
      * Rejects a source list that bean validation would have rejected, for components built plainly.
      *
-     * @param csvFiles the source list handed to a back-end
-     * @throws PxlNullPointerException if {@code csvFiles} is {@code null}
-     * @throws PxlArgumentException    if {@code csvFiles} is empty
+     * @param csvSources    the source list handed to a back-end
+     * @param parameterName the calling back-end's own parameter name, so the message names the source form
+     *                      the call actually came from
+     * @throws PxlNullPointerException if {@code csvSources} is {@code null}
+     * @throws PxlArgumentException    if {@code csvSources} is empty
      */
-    private static void validateCsvSources(final List<?> csvFiles)
+    private static void validateCsvSources(final List<?> csvSources,
+                                           final String parameterName)
             throws PxlNullPointerException, PxlArgumentException {
 
-        PxlArgumentSupport.requireNonNull(csvFiles, "csvFiles");
-        if (csvFiles.isEmpty()) {
+        PxlArgumentSupport.requireNonNull(csvSources, parameterName);
+        if (csvSources.isEmpty()) {
             throw new PxlArgumentException("at least one CSV file must be specified");
         }
     }
@@ -216,7 +219,7 @@ public class PxlCsvImporter {
      * @param sourceFilename the source's file name (non-blank: the extension check has already run)
      * @return the sheet name
      */
-    private static String sheetNameFrom(final String sourceFilename) {
+    private static String resolveSheetName(final String sourceFilename) {
 
         return Normalizer.normalize(FilenameUtils.getBaseName(sourceFilename), Normalizer.Form.NFC).trim();
     }
@@ -509,17 +512,17 @@ public class PxlCsvImporter {
              * read from. One that does not (a bare {@code ByteArrayResource}, say) is rejected rather than
              * let through unchecked.</p>
              *
-             * @param csvFile the CSV resource
+             * @param csvResource the CSV resource
              * @return the parsed workbook object or row collection
-             * @throws PxlException                       if {@code csvFile} is {@code null}, the resource
+             * @throws PxlException                       if {@code csvResource} is {@code null}, the resource
              *                                            cannot be read, or parsing fails
              * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its
              *                                            extension is not {@code .csv}
              */
-            public R fromResource(final Resource csvFile)
+            public R fromResource(final Resource csvResource)
                     throws PxlException, HttpMediaTypeNotSupportedException {
 
-                return fromResources(Collections.singletonList(csvFile));
+                return fromResources(Collections.singletonList(csvResource));
             }
 
             /**
@@ -529,19 +532,19 @@ public class PxlCsvImporter {
              * other respect: the {@code sheet(...)} forms accept exactly one resource, and each resource's
              * base file name becomes its sheet name.</p>
              *
-             * @param csvFiles the CSV resources
+             * @param csvResources the CSV resources
              * @return the parsed workbook object or row collection
-             * @throws PxlException                       if {@code csvFiles} is {@code null} or empty, a
+             * @throws PxlException                       if {@code csvResources} is {@code null} or empty, a
              *                                            {@code sheet(...)} form is given more than one
              *                                            resource, a resource cannot be read, or parsing
              *                                            fails
              * @throws HttpMediaTypeNotSupportedException if any resource reports no file name, or its
              *                                            extension is not {@code .csv}
              */
-            public R fromResources(final List<Resource> csvFiles)
+            public R fromResources(final List<Resource> csvResources)
                     throws PxlException, HttpMediaTypeNotSupportedException {
 
-                return importer.importCsvFromResources(this, csvFiles);
+                return importer.importCsvFromResources(this, csvResources);
             }
 
         }

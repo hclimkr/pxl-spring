@@ -256,7 +256,7 @@ public class PxlZipExporter {
         // Headers must go out before the body, so they are set before anything can fail. Past this point the
         // response is committed and a failure cannot be taken back - that is the trade this terminal asks for,
         // and no Content-Length is possible because the size is not known yet.
-        PxlExportSupport.setResponseForExportZip(resolvedFilename, response);
+        PxlExportSupport.setDownloadHeadersForExportZip(resolvedFilename, response);
 
         try {
             writeArchive(response.getOutputStream(), builder);
@@ -503,13 +503,13 @@ public class PxlZipExporter {
     public static final class Builder {
 
         /**
-         * Entry file name prefix used when no earlier step - an explicit name, or the workbook object name
-         * where the kind of entry has one - yields a name; the entry's zero-based index is appended.
+         * Entry base file name prefix used when no earlier step - an explicit name, or the workbook object
+         * name where the kind of entry has one - yields a name; the entry's zero-based index is appended.
          *
          * <p>Only the Excel kinds reach it. A CSV entry is required to have a sheet name, so it always has
          * one to fall back on and never needs a default of its own.</p>
          */
-        private static final String DEFAULT_EXPORT_EXCEL_FILENAME = "Pxl";
+        private static final String DEFAULT_ENTRY_NAME_PREFIX = "Pxl";
 
         /**
          * The same for a sample template entry, which describes a shape rather than a data set.
@@ -518,7 +518,7 @@ public class PxlZipExporter {
          * appended here: that one names a single download, where uniqueness is nobody's concern, while these
          * share an archive and must come out distinct.</p>
          */
-        private static final String DEFAULT_EXPORT_SAMPLE_EXCEL_FILENAME = "PxlSample";
+        private static final String DEFAULT_SAMPLE_ENTRY_NAME_PREFIX = "PxlSample";
 
         /**
          * The owning component; terminals call back into it so the export runs through its AOP proxy.
@@ -1240,7 +1240,7 @@ public class PxlZipExporter {
             @Override
             String resolveEntryName(final int index) {
 
-                return withExtension(resolveExcelFilename(index), resolveFileFormat());
+                return withExtension(resolveEntryBaseName(index), resolveFileFormat());
             }
 
             /**
@@ -1288,13 +1288,13 @@ public class PxlZipExporter {
             }
 
             /**
-             * Resolves this entry's file name: the explicit name, else the {@code @PxlWorkbook} workbook name,
-             * else {@code Pxl} followed by the entry index.
+             * Resolves this entry's base file name: the explicit name, else the {@code @PxlWorkbook} workbook
+             * name, else {@code Pxl} followed by the entry index.
              *
              * @param index the entry's zero-based index in the archive
              * @return the entry file name without extension
              */
-            private String resolveExcelFilename(final int index) {
+            private String resolveEntryBaseName(final int index) {
 
                 if (StringUtils.isNotBlank(excelFilename)) {
                     return excelFilename;
@@ -1305,7 +1305,7 @@ public class PxlZipExporter {
                     return workbookName;
                 }
 
-                return DEFAULT_EXPORT_EXCEL_FILENAME + index;
+                return DEFAULT_ENTRY_NAME_PREFIX + index;
             }
 
         }
@@ -1353,7 +1353,7 @@ public class PxlZipExporter {
             @Override
             String resolveEntryName(final int index) {
 
-                return withExtension(resolveExcelFilename(index), resolveFileFormat());
+                return withExtension(resolveEntryBaseName(index), resolveFileFormat());
             }
 
             /**
@@ -1398,21 +1398,21 @@ public class PxlZipExporter {
             }
 
             /**
-             * Resolves this entry's file name: the explicit name, else {@code Pxl} followed by the entry
+             * Resolves this entry's base file name: the explicit name, else {@code Pxl} followed by the entry
              * index.
              *
-             * <p>Shorter than {@code WorkbookEntry.resolveExcelFilename} by one step, and not by choice: a
+             * <p>Shorter than {@code WorkbookEntry.resolveEntryBaseName} by one step, and not by choice: a
              * workbook name is read off a {@code @PxlWorkbook}-annotated object, and a raw POI workbook is
              * not one.</p>
              *
              * @param index the entry's zero-based index in the archive
              * @return the entry file name without extension
              */
-            private String resolveExcelFilename(final int index) {
+            private String resolveEntryBaseName(final int index) {
 
                 return StringUtils.isNotBlank(excelFilename)
                         ? excelFilename
-                        : DEFAULT_EXPORT_EXCEL_FILENAME + index;
+                        : DEFAULT_ENTRY_NAME_PREFIX + index;
             }
 
         }
@@ -1422,7 +1422,7 @@ public class PxlZipExporter {
          * the class to describe, its optional per-entry export option, and its optional entry file name.
          *
          * <p>Holds a {@link Class} where {@code WorkbookEntry} holds an instance, which is the whole of the
-         * difference between the two - see {@link #resolveExcelFilename(int)} for what that costs.</p>
+         * difference between the two - see {@link #resolveEntryBaseName(int)} for what that costs.</p>
          */
         private static final class SampleWorkbookEntry extends Entry {
 
@@ -1459,7 +1459,7 @@ public class PxlZipExporter {
             @Override
             String resolveEntryName(final int index) {
 
-                return withExtension(resolveExcelFilename(index), resolveFileFormat());
+                return withExtension(resolveEntryBaseName(index), resolveFileFormat());
             }
 
             /**
@@ -1504,8 +1504,8 @@ public class PxlZipExporter {
             }
 
             /**
-             * Resolves this entry's file name: the explicit name, else {@code PxlSample} followed by the entry
-             * index.
+             * Resolves this entry's base file name: the explicit name, else {@code PxlSample} followed by the
+             * entry index.
              *
              * <p>No workbook-name step, and not by choice: {@code PxlWorkbookUtils} reads a workbook name off
              * an annotated <em>instance</em>, and this kind is given a class. The index is always appended, so
@@ -1514,11 +1514,11 @@ public class PxlZipExporter {
              * @param index the entry's zero-based index in the archive
              * @return the entry file name without extension
              */
-            private String resolveExcelFilename(final int index) {
+            private String resolveEntryBaseName(final int index) {
 
                 return StringUtils.isNotBlank(excelFilename)
                         ? excelFilename
-                        : DEFAULT_EXPORT_SAMPLE_EXCEL_FILENAME + index;
+                        : DEFAULT_SAMPLE_ENTRY_NAME_PREFIX + index;
             }
 
         }
@@ -1587,7 +1587,7 @@ public class PxlZipExporter {
             @Override
             String resolveEntryName(final int index) {
 
-                return withExtension(resolveCsvFilename(), PxlFileFormat.CSV);
+                return withExtension(resolveEntryBaseName(), PxlFileFormat.CSV);
             }
 
             /**
@@ -1609,11 +1609,11 @@ public class PxlZipExporter {
             }
 
             /**
-             * Resolves this entry's file name: the explicit name, else the sheet name.
+             * Resolves this entry's base file name: the explicit name, else the sheet name.
              *
              * @return the entry file name without extension
              */
-            private String resolveCsvFilename() {
+            private String resolveEntryBaseName() {
 
                 return StringUtils.isNotBlank(csvFilename) ? csvFilename : sheetName;
             }
@@ -1669,7 +1669,7 @@ public class PxlZipExporter {
             @Override
             String resolveEntryName(final int index) {
 
-                return withExtension(resolveCsvFilename(), PxlFileFormat.CSV);
+                return withExtension(resolveEntryBaseName(), PxlFileFormat.CSV);
             }
 
             /**
@@ -1692,11 +1692,11 @@ public class PxlZipExporter {
             }
 
             /**
-             * Resolves this entry's file name: the explicit name, else the sheet name.
+             * Resolves this entry's base file name: the explicit name, else the sheet name.
              *
              * @return the entry file name without extension
              */
-            private String resolveCsvFilename() {
+            private String resolveEntryBaseName() {
 
                 return StringUtils.isNotBlank(csvFilename) ? csvFilename : sheetName;
             }

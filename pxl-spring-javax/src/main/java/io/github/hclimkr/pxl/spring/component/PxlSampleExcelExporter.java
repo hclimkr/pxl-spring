@@ -208,7 +208,7 @@ public class PxlSampleExcelExporter {
         // Headers must go out before the body, so they are set before anything can fail. Past this point the
         // response is committed and a failure cannot be taken back - that is the trade this terminal asks for,
         // and no Content-Length is possible because the size is not known yet.
-        PxlExportSupport.setResponseForExport(resolvedFilename, fileFormat, response);
+        PxlExportSupport.setDownloadHeadersForExport(resolvedFilename, fileFormat, response);
 
         try {
             builder.coreBuilder.toStream(response.getOutputStream());
