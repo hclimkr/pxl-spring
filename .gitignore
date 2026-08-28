@@ -49,10 +49,5 @@ build/
 
 # AI Assistant Configurations (Claude Code)
 CLAUDE.md
-LIMITATION.md
-RELEASE.md
-TODO.md
 .claude/
-.claude_history
-.claude_cache/
 .claudeignore
