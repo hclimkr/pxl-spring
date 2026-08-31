@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `exportZip().toFile(...)` writes through a buffer. The archive hands its deflater output down
+  512 bytes at a time, and with the file directly beneath that, an export cost one write call per
+  512 bytes of archive — worst for `.xlsx` members, which are stored uncompressed and so are not
+  shrunk on the way past. It was the one destination in the library without a buffer under it.
+  Nothing else moves: a failed export still leaves the archive unfinished and undeleted.
+
 ## [0.9.3] - 2026-08-22
 
 Built against [pxl](https://github.com/hclimkr/pxl) 0.9.5, up from 0.9.4.

@@ -31,6 +31,7 @@ import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -187,7 +188,7 @@ public class PxlZipExporter {
 
         // The file stream is closed here rather than by the archive: on a failure the archive is abandoned
         // without being finished, and the handle still has to be released.
-        try (OutputStream fileOutputStream = new FileOutputStream(zipFile)) {
+        try (OutputStream fileOutputStream = new BufferedOutputStream(new FileOutputStream(zipFile))) {
             writeArchive(fileOutputStream, builder);
         } catch (IOException e) {
             throw new PxlIOException(e);
