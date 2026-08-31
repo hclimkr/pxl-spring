@@ -104,7 +104,7 @@ class PxlPerformanceLoggingAspectTests {
 
     @Test
     void emptyTagMethod_returnValuePassesThroughUnchanged() throws ReflectiveOperationException {
-        // exercises the empty-tag branch of the prefix (a.tag().isEmpty() == true)
+        // exercises the empty-tag branch of the prefix (annotation.tag().isEmpty() == true)
         final Service service = proxy(5_000L);
         assertThat(service.untagged()).isEqualTo("plain");
     }

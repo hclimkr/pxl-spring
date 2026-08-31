@@ -64,7 +64,7 @@ public class PxlPerformanceLoggingAspect {
      * @throws Throwable whatever the intercepted method throws
      */
     @Around("@annotation(io.github.hclimkr.pxl.spring.logging.PxlPerformanceLogging)")
-    public Object doLogging(ProceedingJoinPoint joinPoint) throws Throwable {
+    public Object doLogging(final ProceedingJoinPoint joinPoint) throws Throwable {
 
         final MethodSignature methodSignature = (MethodSignature) joinPoint.getSignature();
         final String methodSignatureString = methodSignature.toShortString();
@@ -73,7 +73,7 @@ public class PxlPerformanceLoggingAspect {
         final Method method = methodSignature.getMethod();
         final PxlPerformanceLogging performanceLogging = AnnotationUtils.getAnnotation(method, PxlPerformanceLogging.class);
         final String tag = Optional.ofNullable(performanceLogging)
-                .map(a -> !a.tag().isEmpty() ? a.tag() + ": " : a.tag())
+                .map(annotation -> annotation.tag().isEmpty() ? "" : annotation.tag() + ": ")
                 .orElse("");
         //final Object[] methodArguments = joinPoint.getArgs();
 
