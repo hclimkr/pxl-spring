@@ -23,11 +23,13 @@ import org.springframework.web.HttpMediaTypeNotSupportedException;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
 
+import static io.github.hclimkr.pxl.spring.component.PxlExcelExporterTests.ClosingTrackedStream;
 import static io.github.hclimkr.pxl.spring.component.PxlExcelExporterTests.bodyBytes;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,8 +67,62 @@ class PxlSampleCsvExporterTests {
     /**
      * The template's records, split on the CRLF the CSV writer emits.
      */
+    private static List<String> linesOf(final byte[] bytes, final Charset charset) {
+        return Arrays.asList(new String(bytes, charset).split("\r\n", -1));
+    }
+
     private static List<String> linesOf(final byte[] bytes) {
-        return Arrays.asList(new String(bytes, StandardCharsets.UTF_8).split("\r\n", -1));
+        return linesOf(bytes, StandardCharsets.UTF_8);
+    }
+
+    // ----- File -----
+
+    @Test
+    void exportToFile_underMissingDirectory_staysInsidePxlException() {
+        // the parent directory does not exist, so opening the destination fails. This exporter hands the file
+        // to the core rather than opening it itself, so what matters here is only that no raw IOException
+        // escapes the "every failure is a PxlException" contract; which subtype it is, is the core's call.
+        final File unwritable = new File("target/no-such-dir-for-pxl/x.csv");
+
+        assertThatThrownBy(() -> pxlSpring.exportSampleCsv()
+                .sheet(TestUser.class, "Users")
+                .toFile(unwritable))
+                .isInstanceOf(PxlException.class);
+    }
+
+    @Test
+    void failedExportToFile_leavesNoFileBehind() {
+        // the core renders the whole template before opening the destination, so a refusal never creates a
+        // file - the same guarantee PxlCsvExporter gives, driven by the same password refusal
+        final File file = TestPaths.exportFile(testInfo, ".csv");
+        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                .exportPassword("secret")
+                .build();
+
+        assertThatThrownBy(() -> pxlSpring.exportSampleCsv()
+                .sheet(TestUser.class, "Users")
+                .override(option)
+                .toFile(file))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(file).doesNotExist();
+    }
+
+    // ----- OutputStream (the caller keeps ownership of the stream) -----
+
+    @Test
+    void toStream_doesNotCloseGivenStream() throws PxlException {
+        // destination-bound by intent, so a plain @Test rather than a Dest sweep: toStream is the one
+        // terminal handed a stream somebody else opened, and its javadoc promises it back open
+        final ClosingTrackedStream tracking = new ClosingTrackedStream();
+
+        pxlSpring.exportSampleCsv()
+                .sheet(TestUser.class, "Users")
+                .toStream(tracking);
+
+        assertThat(tracking.isClosed()).as("caller's stream must be left open").isFalse();
+        // and the template is complete regardless: the core flushes what it wrote
+        assertThat(linesOf(tracking.written())).startsWith("Name,Age", "Alice,30");
     }
 
     // ----- HttpServletResponse -----
@@ -101,6 +157,27 @@ class PxlSampleCsvExporterTests {
         assertThat(linesOf(bodyBytes(entity))).startsWith("Name,Age", "Alice,30");
     }
 
+    // ----- pre-existing response headers -----
+
+    @Test
+    void exportToResponse_replacesPreexistingDownloadHeaders() throws PxlException {
+        final MockHttpServletResponse response = new MockHttpServletResponse();
+        // headers already present (e.g. set by a filter or MVC default before the export runs)
+        response.addHeader(HttpHeaders.CONTENT_DISPOSITION, "inline");
+        response.setContentType("text/html");
+
+        pxlSpring.exportSampleCsv()
+                .sheet(TestUser.class, "Users")
+                .toResponse(response, "template");
+
+        // Content-Disposition must be replaced, not appended - a second value would corrupt the download
+        assertThat(response.getHeaders(HttpHeaders.CONTENT_DISPOSITION)).hasSize(1);
+        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("template.csv");
+        // Content-Type reflects the export as a single value
+        assertThat(response.getHeaders(HttpHeaders.CONTENT_TYPE)).hasSize(1);
+        assertThat(response.getContentType()).isNotEqualTo("text/html");
+    }
+
     // ----- override(...) -----
     // What an option does to the template's bytes is swept across every destination in the matrix section
     // below; what is left here is the refusal, which never produces bytes at all, and the two engine tests,
@@ -110,6 +187,21 @@ class PxlSampleCsvExporterTests {
     void passwordOption_isRefusedRatherThanIgnored() {
         final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
                 .exportPassword("secret")
+                .build();
+
+        assertThatThrownBy(() -> pxlSpring.exportSampleCsv()
+                .sheet(TestUser.class, "Users")
+                .override(option)
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
+    }
+
+    @Test
+    void unsupportedCharset_throwsPxlArgument() {
+        // the other CSV-only refusal, alongside the password one: a charset name the JVM cannot resolve is
+        // rejected rather than silently falling back to a default encoding
+        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                .exportCsvCharset("NoSuchCharset")
                 .build();
 
         assertThatThrownBy(() -> pxlSpring.exportSampleCsv()
@@ -362,6 +454,47 @@ class PxlSampleCsvExporterTests {
                 .override(option), dest);
 
         assertThat(linesOf(bytes)).startsWith("Name;Age", "Alice;30");
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void noByteOrderMarkIsWrittenByDefaultOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        final byte[] bytes = emit(pxlSpring.exportSampleCsv()
+                .sheet(TestUser.class, "Users"), dest);
+
+        // the default is off, so the first byte is the header's first character rather than EF BB BF
+        assertThat(bytes[0]).isEqualTo((byte) 'N');
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void bomOption_prefixesTheUtf8MarkOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        // asserted on the raw bytes: decoding first would absorb the mark into U+FEFF and hide whether one
+        // was written at all
+        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                .exportCsvBom(Boolean.TRUE)
+                .build();
+
+        final byte[] bytes = emit(pxlSpring.exportSampleCsv()
+                .sheet(TestUser.class, "Users")
+                .override(option), dest);
+
+        assertThat(bytes).startsWith((byte) 0xEF, (byte) 0xBB, (byte) 0xBF);
+    }
+
+    @ParameterizedTest
+    @EnumSource(Dest.class)
+    void charsetOption_encodesTheOutputWithItOnEveryDestination(final Dest dest) throws PxlException, IOException {
+        final PxlExportWorkbookOption option = PxlExportWorkbookOption.builder()
+                .exportCsvCharset("MS949")
+                .build();
+
+        final byte[] bytes = emit(pxlSpring.exportSampleCsv()
+                .sheet(TestUser.class, "Users")
+                .override(option), dest);
+
+        // ASCII data either way; what this pins is that the named charset is accepted and used to encode
+        assertThat(linesOf(bytes, Charset.forName("MS949"))).startsWith("Name,Age", "Alice,30");
     }
 
     // ----- builder call-order independence -----

@@ -193,6 +193,59 @@ class PxlSampleExcelExporterTests {
                 .isInstanceOf(PxlNullPointerException.class);
     }
 
+    // ----- File -----
+
+    @Test
+    void exportToFile_underMissingDirectory_staysInsidePxlException() {
+        // the parent directory does not exist, so opening the destination fails. This exporter hands the file
+        // to the core rather than opening it itself, so what matters here is only that no raw IOException
+        // escapes the "every failure is a PxlException" contract; which subtype it is, is the core's call.
+        final File unwritable = new File("target/no-such-dir-for-pxl/x.xlsx");
+
+        assertThatThrownBy(() -> pxlSpring.exportSampleExcel()
+                .sheet(TestUser.class, "Users")
+                .toFile(unwritable))
+                .isInstanceOf(PxlException.class);
+    }
+
+    // ----- OutputStream (the caller keeps ownership of the stream) -----
+
+    @Test
+    void toStream_doesNotCloseGivenStream() throws PxlException {
+        // destination-bound by intent: toStream is the one terminal handed a stream somebody else opened,
+        // and its javadoc promises it back open
+        final ClosingTrackedStream tracking = new ClosingTrackedStream();
+
+        pxlSpring.exportSampleExcel()
+                .sheet(TestUser.class, "Users")
+                .toStream(tracking);
+
+        assertThat(tracking.isClosed()).as("caller's stream must be left open").isFalse();
+        // and the template is complete regardless: the core flushes what it wrote
+        assertThat(isXlsx(tracking.written())).isTrue();
+    }
+
+    // ----- pre-existing response headers -----
+
+    @Test
+    void exportToResponse_replacesPreexistingDownloadHeaders() throws PxlException {
+        final MockHttpServletResponse response = new MockHttpServletResponse();
+        // headers already present (e.g. set by a filter or MVC default before the export runs)
+        response.addHeader(HttpHeaders.CONTENT_DISPOSITION, "inline");
+        response.setContentType("text/html");
+
+        pxlSpring.exportSampleExcel()
+                .sheet(TestUser.class, "Users")
+                .toResponse(response, "template");
+
+        // Content-Disposition must be replaced, not appended - a second value would corrupt the download
+        assertThat(response.getHeaders(HttpHeaders.CONTENT_DISPOSITION)).hasSize(1);
+        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("template.xlsx");
+        // Content-Type reflects the export as a single value
+        assertThat(response.getHeaders(HttpHeaders.CONTENT_TYPE)).hasSize(1);
+        assertThat(response.getContentType()).isNotEqualTo("text/html");
+    }
+
     // ----- source x destination matrix -----
     // Both source forms are now reachable from all four terminals, and the fluent builder newly allows
     // several sheet(...) calls; these sweep every pairing rather than spot-checking a few. Every assertion

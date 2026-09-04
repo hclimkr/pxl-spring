@@ -157,6 +157,29 @@ class PxlExportSupportTests {
         assertThat(entity.getBody().isOpen()).isFalse();
     }
 
+    @Test
+    void responseEntityBody_answersForItselfWithoutOpeningAStream() throws IOException {
+        // The two overrides that are not about the bytes. AbstractResource decides exists() by opening the
+        // resource and closing it again, which is pure waste for an array already in hand; and its default
+        // description names no particular resource, whereas this one is what a framework error message
+        // quotes, so it says what the body is and how big.
+        final FastByteArrayOutputStream outputStream = new FastByteArrayOutputStream(8);
+        outputStream.write("0123456789".getBytes(StandardCharsets.UTF_8));
+
+        final Resource body = PxlExportSupport.makeResponseEntityForExport(
+                "data", PxlFileFormat.XLSX, outputStream).getBody();
+
+        assertThat(body.exists()).isTrue();
+        assertThat(body.getDescription()).isEqualTo("PXL download buffer (10 bytes)");
+
+        // an empty export is still a resource that exists - there is nothing to look up either way
+        final Resource empty = PxlExportSupport.makeResponseEntityForExportZip(
+                "data", new FastByteArrayOutputStream()).getBody();
+
+        assertThat(empty.exists()).isTrue();
+        assertThat(empty.getDescription()).isEqualTo("PXL download buffer (0 bytes)");
+    }
+
     // ----- RFC 5987 file-name encoding -----
     // URLEncoder emits application/x-www-form-urlencoded, which spells a space as "+"; RFC 5987 requires
     // "%20", so the shared encoder rewrites it. These pin that difference on both header families.

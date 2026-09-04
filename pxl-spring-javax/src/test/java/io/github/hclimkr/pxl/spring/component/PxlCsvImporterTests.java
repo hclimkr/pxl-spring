@@ -6,10 +6,7 @@ import io.github.hclimkr.pxl.exception.PxlIOException;
 import io.github.hclimkr.pxl.exception.PxlNullPointerException;
 import io.github.hclimkr.pxl.option.PxlImportWorkbookOption;
 import io.github.hclimkr.pxl.spring.PxlSpring;
-import io.github.hclimkr.pxl.spring.tcdata.TestMultiSheetWorkbook;
-import io.github.hclimkr.pxl.spring.tcdata.TestPaths;
-import io.github.hclimkr.pxl.spring.tcdata.TestUser;
-import io.github.hclimkr.pxl.spring.tcdata.TestWorkbook;
+import io.github.hclimkr.pxl.spring.tcdata.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.FileSystemResource;
@@ -441,6 +438,27 @@ class PxlCsvImporterTests {
         final TestWorkbook back = pxlSpring.importCsv()
                 .workbook(TestWorkbook.class)
                 .fromResource(resource("Users.csv", USERS_CSV));
+
+        assertThat(back.getUsers()).extracting(TestUser::getName).containsExactly("Alice", "Bob");
+    }
+
+    @Test
+    void importCsvFromResource_nfcNormalizesTheDerivedSheetName() throws PxlException, HttpMediaTypeNotSupportedException {
+        // A CSV file names its sheet, so the derivation the Excel importer applies to a workbook name lands
+        // here on a sheet name - and this is the only place it shows, since a CSV import never derives the
+        // workbook name from a file name. macOS hands out decomposed file names, so a local file and an
+        // upload can disagree on the bytes while naming the same sheet; the core matches sheet names by
+        // equality (whitespace stripped, case folded) and normalizes nothing of its own, so without the NFC
+        // step the sheet would simply not be found.
+        //
+        // Spelled with an escape on purpose, as TestKoreanSheetWorkbook's own name is: written literally,
+        // this source file would already hold the composed form on both sides, and the test would pass
+        // whether or not anything normalized.
+        final String decomposed = "\u1100\u1161";   // HANGUL CHOSEONG KIYEOK + JUNGSEONG A
+
+        final TestKoreanSheetWorkbook back = pxlSpring.importCsv()
+                .workbook(TestKoreanSheetWorkbook.class)
+                .fromResource(resource(decomposed + ".csv", USERS_CSV));
 
         assertThat(back.getUsers()).extracting(TestUser::getName).containsExactly("Alice", "Bob");
     }

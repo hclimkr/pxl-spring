@@ -28,8 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
 
-import static io.github.hclimkr.pxl.spring.component.PxlExcelExporterTests.bodyBytes;
-import static io.github.hclimkr.pxl.spring.component.PxlExcelExporterTests.users;
+import static io.github.hclimkr.pxl.spring.component.PxlExcelExporterTests.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -123,6 +122,23 @@ class PxlCsvExporterTests {
                 .isInstanceOf(PxlArgumentException.class);
 
         assertThat(file).doesNotExist();
+    }
+
+    // ----- OutputStream (the caller keeps ownership of the stream) -----
+
+    @Test
+    void toStream_doesNotCloseGivenStream() throws PxlException {
+        // destination-bound by intent, so a plain @Test rather than a Dest sweep: toStream is the one
+        // terminal handed a stream somebody else opened, and its javadoc promises it back open
+        final ClosingTrackedStream tracking = new ClosingTrackedStream();
+
+        pxlSpring.exportCsv()
+                .sheet(TestUser.class, users(), "Users")
+                .toStream(tracking);
+
+        assertThat(tracking.isClosed()).as("caller's stream must be left open").isFalse();
+        // and the records are complete regardless: the core flushes what it wrote
+        assertThat(linesOf(tracking.written())).startsWith("Name,Age", "Alice,30");
     }
 
     // ----- HttpServletResponse -----

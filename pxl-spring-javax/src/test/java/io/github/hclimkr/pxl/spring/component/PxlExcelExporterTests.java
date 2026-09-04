@@ -106,6 +106,44 @@ public class PxlExcelExporterTests {
     }
 
     /**
+     * An {@link OutputStream} that records what was written to it and whether it was ever closed.
+     *
+     * <p>Every {@code toStream} back-end promises the caller's stream back open - the core flushes it and
+     * leaves closing to whoever opened it - and nothing about the produced bytes shows whether that held.
+     * Package-private for the same reason as {@link #bodyBytes}: the other exporter test classes sit in this
+     * package and make the same assertion about their own terminal.</p>
+     */
+    static final class ClosingTrackedStream extends OutputStream {
+
+        private final ByteArrayOutputStream delegate = new ByteArrayOutputStream();
+
+        private boolean closed;
+
+        @Override
+        public void write(final int b) {
+            delegate.write(b);
+        }
+
+        @Override
+        public void write(final byte[] b, final int off, final int len) {
+            delegate.write(b, off, len);
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+        }
+
+        boolean isClosed() {
+            return closed;
+        }
+
+        byte[] written() {
+            return delegate.toByteArray();
+        }
+    }
+
+    /**
      * The workbook's sheet names, in sheet order - so a test can assert both how many sheets were produced
      * and in which order, which reimporting by name cannot show.
      */
@@ -480,6 +518,42 @@ public class PxlExcelExporterTests {
         }
     }
 
+    // ----- OutputStream (the caller keeps ownership of the stream) -----
+    // Destination-bound by intent, so a plain @Test rather than a Dest sweep: toStream is the one terminal
+    // handed a stream somebody else opened, and its javadoc promises it back open. Both halves of
+    // generateToStream get their own, because only one of them goes through the core builder.
+
+    @Test
+    void toStream_doesNotCloseGivenStream() throws PxlException {
+        final ClosingTrackedStream tracking = new ClosingTrackedStream();
+
+        pxlSpring.exportExcel()
+                .sheet(TestUser.class, users(), "Users")
+                .toStream(tracking);
+
+        assertThat(tracking.isClosed()).as("caller's stream must be left open").isFalse();
+        // and the workbook is complete regardless: the core flushes what it wrote
+        assertThat(isXlsx(tracking.written())).isTrue();
+    }
+
+    @Test
+    void toStream_withPoiWorkbookSource_doesNotCloseGivenStream() throws PxlException, IOException {
+        // the raw POI form writes the workbook itself rather than handing the stream to the core builder,
+        // so the promise rests on a different call and needs its own guard
+        final ClosingTrackedStream tracking = new ClosingTrackedStream();
+
+        try (Workbook workbook = new XSSFWorkbook()) {
+            workbook.createSheet("S").createRow(0).createCell(0).setCellValue("hi");
+
+            pxlSpring.exportExcel()
+                    .poiWorkbook(workbook)
+                    .toStream(tracking);
+        }
+
+        assertThat(tracking.isClosed()).as("caller's stream must be left open").isFalse();
+        assertThat(isXlsx(tracking.written())).isTrue();
+    }
+
     // ----- source x destination matrix -----
     // The fluent builder makes every source form reachable from every terminal, which the old fixed-arity
     // overloads did not. These sweep each source across all four destinations so no pairing is left untried.
@@ -851,6 +925,28 @@ public class PxlExcelExporterTests {
 
         // had the first call won, this would be first.xls with an OLE2 body
         assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("second.xlsx");
+        assertThat(isXlsx(response.getContentAsByteArray())).isTrue();
+    }
+
+    @Test
+    void overrideWithNull_clearsAnOptionSetEarlierInTheChain() throws PxlException {
+        // override(...) is documented as taking null, and the slot is plain last-write-wins - so a null must
+        // clear the earlier option rather than be ignored as "no change". It has to clear it in both places
+        // the builder keeps it: the core builder, which writes the body, and the workbookOption field, which
+        // resolveFileFormat() reads for the download extension.
+        final PxlExportWorkbookOption hssfOption = PxlExportWorkbookOption.builder()
+                .exportExcelEngine(PxlExcelEngine.HSSF)
+                .build();
+
+        final MockHttpServletResponse response = new MockHttpServletResponse();
+        pxlSpring.exportExcel()
+                .sheet(TestUser.class, users(), "Users")
+                .override(hssfOption)
+                .override(null)
+                .toResponse(response, "cleared");
+
+        // had the HSSF option survived, this would be cleared.xls with an OLE2 body
+        assertThat(response.getHeader(HttpHeaders.CONTENT_DISPOSITION)).contains("cleared.xlsx");
         assertThat(isXlsx(response.getContentAsByteArray())).isTrue();
     }
 
