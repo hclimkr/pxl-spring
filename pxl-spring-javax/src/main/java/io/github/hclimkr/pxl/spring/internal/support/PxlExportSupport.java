@@ -295,9 +295,12 @@ public final class PxlExportSupport {
      * fresh view per call and stays re-readable.</p>
      *
      * <p>What the view rests on is that the buffer is finished before a body wraps it and is never written
-     * to again. The four export components close theirs as well, in a {@code finally} that outlives the
+     * to again. All five export components close theirs as well, in a {@code finally} that outlives the
      * entity they return, so a later write there fails outright rather than altering a body already handed
-     * to the framework - closing does not stop the body being read, only being changed.</p>
+     * to the framework - closing does not stop the body being read, only being changed. That split is the
+     * whole reason closing is safe here: {@link FastByteArrayOutputStream} consults its closed flag in its
+     * two {@code write} methods and nowhere else, so {@code getInputStream()} and {@code size()} - the only
+     * two this view calls - answer exactly as they did before.</p>
      */
     private static final class BufferResource extends AbstractResource {
 

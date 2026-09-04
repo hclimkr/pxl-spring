@@ -1,6 +1,8 @@
 package io.github.hclimkr.pxl.spring.internal.support;
 
 import io.github.hclimkr.pxl.exception.PxlIOException;
+import io.github.hclimkr.pxl.spring.PxlSpring;
+import io.github.hclimkr.pxl.spring.tcdata.TestUser;
 import io.github.hclimkr.pxl.type.PxlFileFormat;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.Resource;
@@ -16,8 +18,12 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
+import static io.github.hclimkr.pxl.spring.component.PxlExcelExporterTests.users;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -28,7 +34,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * its buffer-to-response writers translate a body-write {@code IOException} into {@link PxlIOException},
  * and the body it puts in a {@link ResponseEntity} is a view of the download buffer rather than a copy of
  * it - which only holds if that view spans every block of the buffer, survives the buffer being closed and
- * can be read more than once.
+ * can be read more than once. The last of those is what lets every entity terminal close its buffer once
+ * the body is built, and that all five do is pinned here too, since nothing about a handed-out body shows
+ * it.
  */
 class PxlExportSupportTests {
 
@@ -272,5 +280,61 @@ class PxlExportSupportTests {
                 };
             }
         };
+    }
+
+    @Test
+    void everyResponseEntityTerminal_handsOutABodyOverAClosedBuffer() throws Exception {
+        // The entity terminals are the only destinations whose buffer outlives the method that filled it -
+        // toResponse writes it out and drops it there and then - so they are the ones that close it in a
+        // finally. Closing costs the body nothing, because FastByteArrayOutputStream consults its closed
+        // flag in its two write methods and nowhere else; what it buys is that a later write into a body
+        // already handed to the framework fails outright instead of quietly altering it.
+        //
+        // Swept rather than asserted once: ZIP was the terminal that did not close, and nothing observable
+        // said so, because BufferResource keeps the buffer private and hands out no way to reach it. This
+        // reaches in for it the way PxlCoreSupportTests reaches for the shared core - the invariant is the
+        // five being the same, so the test has to see all five.
+        final PxlSpring pxlSpring = new PxlSpring();
+
+        final Map<String, ResponseEntity<Resource>> entities = new LinkedHashMap<>();
+        entities.put("exportExcel",
+                pxlSpring.exportExcel().sheet(TestUser.class, users(), "Users").toResponseEntity("excel"));
+        entities.put("exportSampleExcel",
+                pxlSpring.exportSampleExcel().sheet(TestUser.class, "Users").toResponseEntity("sample"));
+        entities.put("exportCsv",
+                pxlSpring.exportCsv().sheet(TestUser.class, users(), "Users").toResponseEntity("csv"));
+        entities.put("exportSampleCsv",
+                pxlSpring.exportSampleCsv().sheet(TestUser.class, "Users").toResponseEntity("sample"));
+        entities.put("exportZip",
+                pxlSpring.exportZip().csvSheet(TestUser.class, users(), "Users").toResponseEntity("archive"));
+
+        for (final Map.Entry<String, ResponseEntity<Resource>> entity : entities.entrySet()) {
+            final Resource body = entity.getValue().getBody();
+
+            assertThat(body).as(entity.getKey()).isNotNull();
+
+            // still readable: closing is invisible to the two methods this view calls
+            assertThat(body.contentLength()).as(entity.getKey()).isPositive();
+            assertThat(StreamUtils.copyToByteArray(body.getInputStream())).as(entity.getKey()).isNotEmpty();
+
+            // but no longer writable
+            assertThatThrownBy(() -> downloadBufferOf(body).write('x'))
+                    .as(entity.getKey())
+                    .isInstanceOf(IOException.class);
+        }
+    }
+
+    /**
+     * Reaches the download buffer a {@code BufferResource} body reads from.
+     *
+     * <p>{@code BufferResource} is a private nested class holding the buffer in a private field, which is
+     * exactly why "was it closed" cannot be observed any other way - and why it is worth pinning rather
+     * than trusting five call sites to stay alike.</p>
+     */
+    private static FastByteArrayOutputStream downloadBufferOf(final Resource body) throws Exception {
+        final Field buffer = body.getClass().getDeclaredField("buffer");
+        buffer.setAccessible(true);
+
+        return (FastByteArrayOutputStream) buffer.get(body);
     }
 }

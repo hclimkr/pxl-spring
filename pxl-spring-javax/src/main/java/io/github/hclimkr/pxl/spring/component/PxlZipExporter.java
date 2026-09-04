@@ -16,6 +16,7 @@ import io.github.hclimkr.pxl.type.PxlExcelEngine;
 import io.github.hclimkr.pxl.type.PxlFileFormat;
 import io.github.hclimkr.pxl.util.PxlWorkbookUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.CloseShieldOutputStream;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -288,9 +289,13 @@ public class PxlZipExporter {
 
         // Build the whole archive in memory first; the response is only written once the archive is
         // complete, so a failure leaves the response - including any CORS headers added upstream - untouched.
-        final FastByteArrayOutputStream outputStream = writeArchiveToBuffer(builder);
-
-        return PxlExportSupport.makeResponseEntityForExportZip(resolvedFilename, outputStream);
+        FastByteArrayOutputStream outputStream = null;
+        try {
+            outputStream = writeArchiveToBuffer(builder);
+            return PxlExportSupport.makeResponseEntityForExportZip(resolvedFilename, outputStream);
+        } finally {
+            IOUtils.closeQuietly(outputStream);
+        }
     }
 
     /**
