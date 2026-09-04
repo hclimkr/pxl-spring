@@ -239,7 +239,8 @@ public class PxlCsvImporter {
      *
      * <p>The two lists line up by construction - the caller builds {@code csvNames} by walking
      * {@code csvSources} in order, and the loop below walks the same list again - which matters because the
-     * core's {@code fromStreams} pairs them positionally without checking their lengths.</p>
+     * core's {@code fromStreams} pairs them positionally: a name and the stream beside it are the same
+     * source.</p>
      *
      * @param source     the configured source step (already validated)
      * @param csvNames   the resolved sheet names, in source order
