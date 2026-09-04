@@ -2,6 +2,8 @@ package io.github.hclimkr.pxl.spring.internal.support;
 
 import io.github.hclimkr.pxl.exception.PxlNullPointerException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.mock.web.MockMultipartFile;
@@ -199,5 +201,53 @@ class PxlImportSupportTests {
         assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension((Resource) null))
                 .isInstanceOf(PxlNullPointerException.class)
                 .hasMessageContaining("csvResource");
+    }
+
+    @Test
+    void fileNameCarryingANulCharacter_isRejectedAsUnsupportedMediaTypeNotRawIllegalArgument() {
+        // FilenameUtils refuses a name holding a NUL outright, on every platform, and the refusal is an
+        // unchecked IllegalArgumentException. It used to escape: getExtension has no such check, so the name
+        // passed validation here and blew up afterwards in the importers' own getBaseName - a 500 where this
+        // class's answer is a 415, and outside the "every failure is a PxlException" contract either way.
+        final String nul = "report\u0000.xlsx";
+
+        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension(file(nul)))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension(resource(nul)))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+
+        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension(file("rows\u0000.csv")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension(resource("rows\u0000.csv")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void fileNameCarryingAnAdsSeparator_isRejectedAsUnsupportedMediaTypeOnWindows() {
+        // Windows only, mirroring commons-io's own isSystemWindows() gate: there a ':' after the last
+        // separator reads as an NTFS alternate-data-stream identifier and FilenameUtils refuses the name.
+        // Elsewhere the same upload is an ordinary file name and is accepted, which is why this is gated
+        // rather than asserted both ways - the platform's rule, not this library's.
+        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension(file("report:1.xlsx")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+        assertThatThrownBy(() -> PxlImportSupport.validateExcelExtension(resource("report:1.xlsx")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+
+        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension(file("rows:1.csv")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+        assertThatThrownBy(() -> PxlImportSupport.validateCsvExtension(resource("rows:1.csv")))
+                .isInstanceOf(HttpMediaTypeNotSupportedException.class);
+    }
+
+    @Test
+    void fullWindowsPathAsFileName_isStillAccepted() {
+        // The colon that matters is the one after the last separator. A browser that sends the whole local
+        // path instead of the bare name - which some do - puts one before it, and that must keep working:
+        // the drive letter is not an ADS identifier, and the guard has to leave it alone.
+        assertThatCode(() -> PxlImportSupport.validateExcelExtension(file("C:\\Users\\someone\\report.xlsx")))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> PxlImportSupport.validateCsvExtension(resource("C:\\Users\\someone\\rows.csv")))
+                .doesNotThrowAnyException();
     }
 }

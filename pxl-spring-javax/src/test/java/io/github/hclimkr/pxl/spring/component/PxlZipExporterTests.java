@@ -17,6 +17,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.core.io.FileSystemResource;
@@ -2010,5 +2012,86 @@ class PxlZipExporterTests {
         } finally {
             tmp.delete();
         }
+    }
+
+    @Test
+    void unreadableEntryName_isRejectedBeforeAnythingIsWritten() {
+        // A NUL in the name makes FilenameUtils refuse it outright, on every platform, with an unchecked
+        // IllegalArgumentException - which used to be what came out. The guard in validateEntries turns it
+        // into the library's own exception and, as with the path check, puts it ahead of every destination:
+        // no headers, no file, nothing on the caller's stream.
+        final String unreadable = "rep\u0000ort";
+
+        final MockHttpServletResponse streamed = new MockHttpServletResponse();
+
+        assertThatThrownBy(() -> pxlSpring.exportZip()
+                .workbook(workbook("first"), null, unreadable)
+                .toResponseStreaming(streamed, "archive"))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(streamed.getContentAsByteArray()).isEmpty();
+        assertThat(streamed.getHeader(HttpHeaders.CONTENT_DISPOSITION)).isNull();
+
+        final File zipFile = TestPaths.exportFile(testInfo, ".zip");
+
+        assertThatThrownBy(() -> pxlSpring.exportZip()
+                .workbook(workbook("first"), null, unreadable)
+                .toFile(zipFile))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(zipFile).doesNotExist();
+
+        final ByteArrayOutputStream stream = new ByteArrayOutputStream();
+
+        assertThatThrownBy(() -> pxlSpring.exportZip()
+                .workbook(workbook("first"), null, unreadable)
+                .toStream(stream))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(stream.toByteArray()).isEmpty();
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void adsSeparatorInEntryName_isRejectedBeforeHeadersGoOutOnWindows() {
+        // The half the path check never saw. FilenameUtils.getName lets a ':' through, so this name reached
+        // deflateLevelFor inside writeEntries - past the file being created and past the streaming headers
+        // being committed - and failed there as a raw IllegalArgumentException. Windows only, because that
+        // is where commons-io reads a ':' as an NTFS alternate-data-stream identifier; elsewhere the entry
+        // is written, which is why the assertion is gated rather than made both ways.
+        final MockHttpServletResponse streamed = new MockHttpServletResponse();
+
+        assertThatThrownBy(() -> pxlSpring.exportZip()
+                .workbook(workbook("first"), null, "report:1")
+                .toResponseStreaming(streamed, "archive"))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(streamed.getContentAsByteArray()).isEmpty();
+        assertThat(streamed.getHeader(HttpHeaders.CONTENT_DISPOSITION)).isNull();
+
+        final File zipFile = TestPaths.exportFile(testInfo, ".zip");
+
+        assertThatThrownBy(() -> pxlSpring.exportZip()
+                .workbook(workbook("first"), null, "report:1")
+                .toFile(zipFile))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThat(zipFile).doesNotExist();
+    }
+
+    @Test
+    void unreadableEntryName_isRejectedWhereverTheNameComesFrom() {
+        // The guard sits on the resolved name, so a name that arrives from application data rather than from
+        // the call is caught the same way - the counterpart of pathCarryingWorkbookName_isRejectedToo and
+        // pathCarryingSheetName_isRejectedToo.
+        assertThatThrownBy(() -> pxlSpring.exportZip()
+                .workbook(workbook("rep\u0000ort"))
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
+
+        assertThatThrownBy(() -> pxlSpring.exportZip()
+                .csvSheet(TestUser.class, users(), "rep\u0000ort")
+                .toStream(new ByteArrayOutputStream()))
+                .isInstanceOf(PxlArgumentException.class);
     }
 }

@@ -31,11 +31,7 @@ import javax.annotation.Nullable;
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotNull;
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.util.*;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
@@ -150,8 +146,8 @@ public class PxlZipExporter {
      * @param builder      the configured ZIP export builder
      * @param outputStream the destination stream (not closed by this method)
      * @throws PxlException if {@code builder} or {@code outputStream} is {@code null}, the builder has no
-     *                      entry, an entry name carries a path or collides with another, or writing or
-     *                      finishing the archive fails
+     *                      entry, an entry name cannot be read as a file name, carries a path or
+     *                      collides with another, or writing or finishing the archive fails
      */
     @PxlPerformanceLogging(TAG)
     public void exportZipToStream(@NotNull final Builder builder,
@@ -175,8 +171,8 @@ public class PxlZipExporter {
      * @param builder the configured ZIP export builder
      * @param zipFile the destination ZIP file
      * @throws PxlException if {@code builder} or {@code zipFile} is {@code null}, the builder has no entry,
-     *                      an entry name carries a path or collides with another, the file cannot be opened,
-     *                      or writing or finishing the archive fails
+     *                      an entry name cannot be read as a file name, carries a path or collides with
+     *                      another, the file cannot be opened, or writing or finishing the archive fails
      */
     @PxlPerformanceLogging(TAG)
     public void exportZipToFile(@NotNull final Builder builder,
@@ -208,8 +204,8 @@ public class PxlZipExporter {
      * @param response    the servlet response to write to
      * @param zipFilename the archive file name without extension; required
      * @throws PxlException if {@code builder} or {@code response} is {@code null}, the builder has no entry,
-     *                      an entry name carries a path or collides with another, {@code zipFilename} is
-     *                      blank, or writing the archive or response fails
+     *                      an entry name cannot be read as a file name, carries a path or collides with
+     *                      another, {@code zipFilename} is blank, or writing the archive or response fails
      */
     @PxlPerformanceLogging(TAG)
     public void exportZipToResponse(@NotNull final Builder builder,
@@ -240,8 +236,8 @@ public class PxlZipExporter {
      * @param response    the servlet response to write to
      * @param zipFilename the archive file name without extension; required
      * @throws PxlException if {@code builder} or {@code response} is {@code null}, the builder has no entry,
-     *                      an entry name carries a path or collides with another, {@code zipFilename} is
-     *                      blank, or writing the archive or response fails
+     *                      an entry name cannot be read as a file name, carries a path or collides with
+     *                      another, {@code zipFilename} is blank, or writing the archive or response fails
      */
     @PxlPerformanceLogging(TAG)
     public void exportZipToResponseStreaming(@NotNull final Builder builder,
@@ -278,8 +274,8 @@ public class PxlZipExporter {
      * @param zipFilename the archive file name without extension; required
      * @return the response entity carrying the archive bytes
      * @throws PxlException if {@code builder} is {@code null}, the builder has no entry, an entry name
-     *                      carries a path or collides with another, {@code zipFilename} is blank, or
-     *                      building the response fails
+     *                      cannot be read as a file name, carries a path or collides with another,
+     *                      {@code zipFilename} is blank, or building the response fails
      */
     @PxlPerformanceLogging(TAG)
     public ResponseEntity<Resource> exportZipToResponseEntity(@NotNull final Builder builder,
@@ -356,7 +352,13 @@ public class PxlZipExporter {
      * since every kind appends its own through {@code Entry.withExtension}, so what comes back out here is
      * exactly the constant that went in.</p>
      *
-     * @param entryName the entry's name inside the archive, extension included
+     * <p>{@link FilenameUtils#getExtension} throws on a name it cannot parse, which here would be past the
+     * point where a failure can be taken back. It cannot happen: {@code Builder.requireReadableEntryName}
+     * has already put every entry name through this same call, back when the builder validated them. Keep
+     * that pairing if either side moves.</p>
+     *
+     * @param entryName the entry's name inside the archive, extension included, already proven readable by
+     *                  {@code Builder.validateEntries}
      * @return the deflate level to apply to that entry
      */
     private static int deflateLevelFor(final String entryName) {
@@ -956,7 +958,8 @@ public class PxlZipExporter {
          *
          * @param outputStream the destination stream (not closed by this method)
          * @throws PxlException if {@code outputStream} is {@code null}, no entry was added, an entry name
-         *                      carries a path or collides with another, or writing the archive fails
+         *                      cannot be read as a file name, carries a path or collides with another, or
+         *                      writing the archive fails
          */
         public void toStream(final OutputStream outputStream)
                 throws PxlException {
@@ -968,8 +971,9 @@ public class PxlZipExporter {
          * Writes the configured entries as a ZIP archive to the given file.
          *
          * @param zipFile the destination ZIP file
-         * @throws PxlException if {@code zipFile} is {@code null}, no entry was added, an entry name carries
-         *                      a path or collides with another, or writing the archive fails
+         * @throws PxlException if {@code zipFile} is {@code null}, no entry was added, an entry name cannot
+         *                      be read as a file name, carries a path or collides with another, or writing
+         *                      the archive fails
          */
         public void toFile(final File zipFile)
                 throws PxlException {
@@ -986,9 +990,9 @@ public class PxlZipExporter {
          *
          * @param response    the servlet response to write to
          * @param zipFilename the archive file name without extension; required
-         * @throws PxlException if {@code response} is {@code null}, no entry was added, an entry name carries
-         *                      a path or collides with another, {@code zipFilename} is blank, or writing the
-         *                      archive or response fails
+         * @throws PxlException if {@code response} is {@code null}, no entry was added, an entry name cannot
+         *                      be read as a file name, carries a path or collides with another,
+         *                      {@code zipFilename} is blank, or writing the archive or response fails
          */
         public void toResponse(final HttpServletResponse response,
                                final String zipFilename)
@@ -1027,9 +1031,9 @@ public class PxlZipExporter {
          *
          * @param response    the servlet response to write to
          * @param zipFilename the archive file name without extension; required
-         * @throws PxlException if {@code response} is {@code null}, no entry was added, an entry name carries
-         *                      a path or collides with another, {@code zipFilename} is blank, or writing the
-         *                      archive or response fails
+         * @throws PxlException if {@code response} is {@code null}, no entry was added, an entry name cannot
+         *                      be read as a file name, carries a path or collides with another,
+         *                      {@code zipFilename} is blank, or writing the archive or response fails
          */
         public void toResponseStreaming(final HttpServletResponse response,
                                         final String zipFilename)
@@ -1045,8 +1049,9 @@ public class PxlZipExporter {
          *
          * @param zipFilename the archive file name without extension; required
          * @return the response entity carrying the archive bytes
-         * @throws PxlException if no entry was added, an entry name carries a path or collides with another,
-         *                      {@code zipFilename} is blank, or building the response fails
+         * @throws PxlException if no entry was added, an entry name cannot be read as a file name, carries a
+         *                      path or collides with another, {@code zipFilename} is blank, or building the
+         *                      response fails
          */
         public ResponseEntity<Resource> toResponseEntity(final String zipFilename)
                 throws PxlException {
@@ -1058,15 +1063,17 @@ public class PxlZipExporter {
         // private: the component is this class's nestmate, so nothing here needs to be exposed.
 
         /**
-         * Rejects an archive with no members, one whose members carry a path in their name, and one whose
-         * members would collide by name. Called by every terminal before any work is done.
+         * Rejects an archive with no members, one whose members carry an unreadable name or a path in their
+         * name, and one whose members would collide by name. Called by every terminal before any work is
+         * done.
          *
-         * <p><strong>Both name checks belong here rather than in {@code writeEntries} because here they are
-         * still early enough to matter.</strong> Every terminal calls this first, so either failure comes
+         * <p><strong>The name checks belong here rather than in {@code writeEntries} because here they are
+         * still early enough to matter.</strong> Every terminal calls this first, so any of them fails
          * before the file destination has created its file and before the streaming destination has sent its
          * download headers - neither of which can be taken back once writing has begun. The loop resolves
-         * each entry's name once and both checks read that one value, so what is reported is what would have
-         * been written.</p>
+         * each entry's name once and every check reads that one value, so what is reported is what would have
+         * been written. {@link #requireReadableEntryName(String)} carries its own note on why the third one
+         * is here.</p>
          *
          * <p><strong>The path check.</strong> A {@link ZipEntry} name may legally hold a path, and this one
          * can come from application data - a workbook name or a sheet name the application filled in - so an
@@ -1087,8 +1094,8 @@ public class PxlZipExporter {
          * surface mid-write as a {@link ZipException} wrapped in {@link PxlIOException}, indistinguishable
          * from a disk failure.</p>
          *
-         * @throws PxlArgumentException if no entry was added, an entry name carries a path, or two entries
-         *                              resolve to the same file name
+         * @throws PxlArgumentException if no entry was added, an entry name cannot be read as a file name or
+         *                              carries a path, or two entries resolve to the same file name
          */
         private void validateEntries()
                 throws PxlArgumentException {
@@ -1102,6 +1109,8 @@ public class PxlZipExporter {
             for (int index = 0; index < entries.size(); index++) {
                 final String entryName = entries.get(index).resolveEntryName(index);
 
+                requireReadableEntryName(entryName);
+
                 if (!entryName.equals(FilenameUtils.getName(entryName))) {
                     throw new PxlArgumentException("entry file name must not carry a path: '" + entryName + "'");
                 }
@@ -1109,6 +1118,39 @@ public class PxlZipExporter {
                 if (!seenEntryNames.add(entryName.toLowerCase(Locale.ROOT))) {
                     throw new PxlArgumentException("duplicate entry file name: '" + entryName + "'");
                 }
+            }
+        }
+
+        /**
+         * Rejects an entry name that the file-name helpers refuse to parse, before anything is written.
+         *
+         * <p>{@link FilenameUtils} answers such a name with an unchecked {@code IllegalArgumentException}
+         * rather than a value, and this class puts entry names through it twice: {@code getName} for the path
+         * check just below, and {@code getExtension} inside {@code deflateLevelFor} when the entry is
+         * written. The two refuse different names - {@code getName} a NUL character anywhere, on every
+         * platform; {@code getExtension} a {@code ':'}, which on a Windows JVM it reads as an NTFS
+         * alternate-data-stream separator - so both are asked here, and the raw exception becomes this
+         * library's own.</p>
+         *
+         * <p><strong>Which of the two refuses it matters less than where it lands.</strong> The
+         * {@code getExtension} call runs inside {@code writeEntries}, past the point of no return for the
+         * three destinations that write as they go: the caller's stream has already taken bytes, the file
+         * destination has created its file, and the streaming response has committed its download headers.
+         * Asking the same question here puts the failure alongside the path and duplicate checks, ahead of
+         * everything any destination does - the property this builder's up-front validation exists to hold.
+         * Nothing is accepted or rejected that was not already; only the exception and its timing change.</p>
+         *
+         * @param entryName the resolved entry name, extension included
+         * @throws PxlArgumentException if the name cannot be read as a file name
+         */
+        private static void requireReadableEntryName(final String entryName)
+                throws PxlArgumentException {
+
+            try {
+                FilenameUtils.getName(entryName);
+                FilenameUtils.getExtension(entryName);
+            } catch (IllegalArgumentException e) {
+                throw new PxlArgumentException("entry file name cannot be read as a file name: '" + entryName + "'");
             }
         }
 

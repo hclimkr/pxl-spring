@@ -56,8 +56,9 @@ import java.util.Objects;
  *
  * <p>The file extension is validated ({@code .xls}/{@code .xlsx}); a violation raises
  * {@link HttpMediaTypeNotSupportedException}, and so does a resource that reports no file name at all,
- * since an extension that cannot be read cannot be checked. When a workbook name is omitted it is derived
- * from the file name and NFC-normalized.</p>
+ * since an extension that cannot be read cannot be checked - as does a name that cannot be read as a file
+ * name in the first place. When a workbook name is omitted it is derived from the file name and
+ * NFC-normalized.</p>
  *
  * <p>That builder is the nested {@link Builder}, and its parse-target step is {@link Builder.Source}. A
  * fluent chain never has to name either; on the rare occasion you hold one in a variable, spell them
@@ -129,7 +130,8 @@ public class PxlExcelImporter {
      * @throws PxlException                       if {@code excelFile} is {@code null}, the source step's
      *                                            parse target is invalid, the upload cannot be read, or
      *                                            parsing fails
-     * @throws HttpMediaTypeNotSupportedException if the file extension is not a supported Excel type
+     * @throws HttpMediaTypeNotSupportedException if the file name cannot be read as one, or its
+     *                                            extension is not a supported Excel type
      */
     @PxlPerformanceLogging(TAG)
     public <R> R importExcelFromMultipartFile(@NotNull final Builder.Source<R> source,
@@ -161,8 +163,9 @@ public class PxlExcelImporter {
      * @throws PxlException                       if {@code excelResource} is {@code null}, the source step's
      *                                            parse target is invalid, the resource cannot be read, or
      *                                            parsing fails
-     * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its extension is
-     *                                            not a supported Excel type
+     * @throws HttpMediaTypeNotSupportedException if the resource reports no file name or one that cannot
+     *                                            be read as one, or its extension is not a supported
+     *                                            Excel type
      */
     @PxlPerformanceLogging(TAG)
     public <R> R importExcelFromResource(@NotNull final Builder.Source<R> source,
@@ -484,7 +487,8 @@ public class PxlExcelImporter {
              * @return the parsed workbook object or row collection
              * @throws PxlException                       if {@code excelFile} is {@code null}, the upload
              *                                            cannot be read, or parsing fails
-             * @throws HttpMediaTypeNotSupportedException if the file extension is not a supported Excel type
+             * @throws HttpMediaTypeNotSupportedException if the file name cannot be read as one, or its
+             *                                            extension is not a supported Excel type
              */
             public R fromMultipartFile(final MultipartFile excelFile)
                     throws PxlException, HttpMediaTypeNotSupportedException {
@@ -508,8 +512,9 @@ public class PxlExcelImporter {
              * @return the parsed workbook object or row collection
              * @throws PxlException                       if {@code excelResource} is {@code null}, the
              *                                            resource cannot be read, or parsing fails
-             * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its
-             *                                            extension is not a supported Excel type
+             * @throws HttpMediaTypeNotSupportedException if the resource reports no file name or one that
+             *                                            cannot be read as one, or its extension is not a
+             *                                            supported Excel type
              */
             public R fromResource(final Resource excelResource)
                     throws PxlException, HttpMediaTypeNotSupportedException {
@@ -547,7 +552,11 @@ public class PxlExcelImporter {
             /**
              * Resolves the workbook name from the source's file name, shared by both source forms.
              *
-             * @param sourceFilename the source's file name (non-blank: the extension check has already run)
+             * <p>{@link FilenameUtils#getBaseName} throws on a name it cannot parse; the extension check has
+             * already put this one through that same call, which is what makes it safe here.</p>
+             *
+             * @param sourceFilename the source's file name (non-blank and readable as one: the extension
+             *                       check has already run)
              * @return the workbook name
              */
             private String resolveWorkbookName(final String sourceFilename) {

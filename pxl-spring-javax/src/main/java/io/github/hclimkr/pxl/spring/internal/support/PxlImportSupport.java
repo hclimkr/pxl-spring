@@ -26,6 +26,11 @@ import java.util.Objects;
  * read cannot be checked, and letting it through would quietly drop the guarantee every other path
  * enforces. Callers that hold nameless bytes should wrap them in a resource that reports a name.</p>
  *
+ * <p>A name that is present but cannot be read as a file name at all - one carrying a NUL character, or on a
+ * Windows JVM a {@code ':'} - is rejected the same way and for the same reason. Both source forms therefore
+ * reach their importer with a name the file-name helpers can parse, which is what the components' own name
+ * derivation rests on.</p>
+ *
  * <p>A {@code null} source is rejected here with {@link PxlNullPointerException} rather than being left to
  * blow up as a raw {@code NullPointerException} further in. The components' {@code @NotNull} bean validation
  * only fires when a call goes through the Spring proxy, so a component built plainly
@@ -49,7 +54,8 @@ public final class PxlImportSupport {
      *
      * @param excelFile the file to check
      * @throws PxlNullPointerException            if {@code excelFile} is {@code null}
-     * @throws HttpMediaTypeNotSupportedException if the extension is missing or unsupported
+     * @throws HttpMediaTypeNotSupportedException if the file name cannot be read as one, or its extension is
+     *                                            missing or unsupported
      */
     public static void validateExcelExtension(final MultipartFile excelFile)
             throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
@@ -66,8 +72,8 @@ public final class PxlImportSupport {
      *
      * @param excelResource the resource to check
      * @throws PxlNullPointerException            if {@code excelResource} is {@code null}
-     * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its extension is
-     *                                            unsupported
+     * @throws HttpMediaTypeNotSupportedException if the resource reports no file name or one that cannot be
+     *                                            read as one, or its extension is unsupported
      */
     public static void validateExcelExtension(final Resource excelResource)
             throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
@@ -83,7 +89,8 @@ public final class PxlImportSupport {
      *
      * @param csvFile the file to check
      * @throws PxlNullPointerException            if {@code csvFile} is {@code null}
-     * @throws HttpMediaTypeNotSupportedException if the extension is missing or unsupported
+     * @throws HttpMediaTypeNotSupportedException if the file name cannot be read as one, or its extension is
+     *                                            missing or unsupported
      */
     public static void validateCsvExtension(final MultipartFile csvFile)
             throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
@@ -98,8 +105,8 @@ public final class PxlImportSupport {
      *
      * @param csvResource the resource to check
      * @throws PxlNullPointerException            if {@code csvResource} is {@code null}
-     * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its extension is
-     *                                            not {@code .csv}
+     * @throws HttpMediaTypeNotSupportedException if the resource reports no file name or one that cannot be
+     *                                            read as one, or its extension is not {@code .csv}
      */
     public static void validateCsvExtension(final Resource csvResource)
             throws PxlNullPointerException, HttpMediaTypeNotSupportedException {
@@ -119,13 +126,14 @@ public final class PxlImportSupport {
      *
      * @param filename            the source's file name, or {@code null} if it reports none
      * @param supportedExtensions the accepted extensions, without the leading dot
-     * @throws HttpMediaTypeNotSupportedException if the extension is missing or not in the supported set
+     * @throws HttpMediaTypeNotSupportedException if the file name cannot be read as one, or its extension is
+     *                                            missing or not in the supported set
      */
     private static void validateFileExtension(final String filename,
                                               final String... supportedExtensions)
             throws HttpMediaTypeNotSupportedException {
 
-        final String fileExtension = FilenameUtils.getExtension(filename);
+        final String fileExtension = readFileExtension(filename);
 
         if (StringUtils.isNotBlank(fileExtension)) {
             for (final String supportedExtension : supportedExtensions) {
@@ -137,6 +145,41 @@ public final class PxlImportSupport {
 
         throw new HttpMediaTypeNotSupportedException(
                 "File extension '" + (Objects.nonNull(fileExtension) ? fileExtension : "") + "' not supported");
+    }
+
+    /**
+     * Reads the extension off a source's file name, rejecting a name the file-name helpers refuse to parse.
+     *
+     * <p>{@link FilenameUtils} answers such a name with an unchecked {@code IllegalArgumentException} rather
+     * than a value: a NUL character anywhere in it on every platform, and - on a Windows JVM only - a
+     * {@code ':'}, which it reads as an NTFS alternate-data-stream separator. Left alone that escapes as a
+     * raw {@code IllegalArgumentException}, breaking the library's "every failure is a {@code PxlException}"
+     * contract and reaching a controller as a 500 where this method's own answer is a 415.</p>
+     *
+     * <p>{@link FilenameUtils#getBaseName(String)} is asked as well, and first: it refuses strictly more
+     * names than {@link FilenameUtils#getExtension(String)} does, and it is the helper both importers derive
+     * a workbook or sheet name with once this check has passed. Proving it here is what keeps that later
+     * derivation from failing on a name this method let through - the same guarantee the {@code null} file
+     * name already carries.</p>
+     *
+     * <p>Which names those are is the platform's business, not this library's, so nothing is accepted or
+     * rejected here that was not already: only the exception changes.</p>
+     *
+     * @param filename the source's file name, or {@code null} if it reports none
+     * @return the extension without the leading dot, empty when there is none, {@code null} for a
+     * {@code null} file name
+     * @throws HttpMediaTypeNotSupportedException if the file name cannot be read as a file name
+     */
+    private static String readFileExtension(final String filename)
+            throws HttpMediaTypeNotSupportedException {
+
+        try {
+            FilenameUtils.getBaseName(filename);
+
+            return FilenameUtils.getExtension(filename);
+        } catch (IllegalArgumentException e) {
+            throw new HttpMediaTypeNotSupportedException("File extension cannot be read from the file name");
+        }
     }
 
 }

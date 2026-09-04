@@ -55,8 +55,9 @@ import java.util.*;
  *
  * <p>The file extension is validated ({@code .csv}); a violation raises
  * {@link HttpMediaTypeNotSupportedException}, and so does a resource that reports no file name at all,
- * since an extension that cannot be read cannot be checked. Each CSV becomes one sheet whose name is
- * derived from the file name and NFC-normalized.</p>
+ * since an extension that cannot be read cannot be checked - as does a name that cannot be read as a file
+ * name in the first place. Each CSV becomes one sheet whose name is derived from the file name and
+ * NFC-normalized.</p>
  *
  * <p>That builder is the nested {@link Builder}, and its parse-target step is {@link Builder.Source}. A
  * fluent chain never has to name either; on the rare occasion you hold one in a variable, spell them
@@ -130,7 +131,8 @@ public class PxlCsvImporter {
      *                                            {@code null} element, a {@code sheet(...)} parse target is
      *                                            given more than one file, a file cannot be read, or parsing
      *                                            fails
-     * @throws HttpMediaTypeNotSupportedException if any file extension is not {@code .csv}
+     * @throws HttpMediaTypeNotSupportedException if any file name cannot be read as one, or any
+     *                                            extension is not {@code .csv}
      */
     @PxlPerformanceLogging(TAG)
     public <R> R importCsvFromMultipartFiles(@NotNull final Builder.Source<R> source,
@@ -171,8 +173,8 @@ public class PxlCsvImporter {
      *                                            {@code null} element, a {@code sheet(...)} parse target is
      *                                            given more than one resource, a resource cannot be read, or
      *                                            parsing fails
-     * @throws HttpMediaTypeNotSupportedException if any resource reports no file name, or its extension is
-     *                                            not {@code .csv}
+     * @throws HttpMediaTypeNotSupportedException if any resource reports no file name or one that cannot
+     *                                            be read as one, or its extension is not {@code .csv}
      */
     @PxlPerformanceLogging(TAG)
     public <R> R importCsvFromResources(@NotNull final Builder.Source<R> source,
@@ -216,7 +218,11 @@ public class PxlCsvImporter {
     /**
      * Derives a sheet name from a CSV source's file name: the base name, NFC-normalized and trimmed.
      *
-     * @param sourceFilename the source's file name (non-blank: the extension check has already run)
+     * <p>{@link FilenameUtils#getBaseName} throws on a name it cannot parse; the extension check has already
+     * put this one through that same call, which is what makes it safe here.</p>
+     *
+     * @param sourceFilename the source's file name (non-blank and readable as one: the extension check has
+     *                       already run)
      * @return the sheet name
      */
     private static String resolveSheetName(final String sourceFilename) {
@@ -473,7 +479,8 @@ public class PxlCsvImporter {
              * @return the parsed workbook object or row collection
              * @throws PxlException                       if {@code csvFile} is {@code null}, the upload cannot
              *                                            be read, or parsing fails
-             * @throws HttpMediaTypeNotSupportedException if the file extension is not {@code .csv}
+             * @throws HttpMediaTypeNotSupportedException if the file name cannot be read as one, or its
+             *                                            extension is not {@code .csv}
              */
             public R fromMultipartFile(final MultipartFile csvFile)
                     throws PxlException, HttpMediaTypeNotSupportedException {
@@ -492,7 +499,8 @@ public class PxlCsvImporter {
              * @throws PxlException                       if {@code csvFiles} is {@code null} or empty, a
              *                                            {@code sheet(...)} form is given more than one
              *                                            upload, an upload cannot be read, or parsing fails
-             * @throws HttpMediaTypeNotSupportedException if any file extension is not {@code .csv}
+             * @throws HttpMediaTypeNotSupportedException if any file name cannot be read as one, or any
+             *                                            extension is not {@code .csv}
              */
             public R fromMultipartFiles(final List<MultipartFile> csvFiles)
                     throws PxlException, HttpMediaTypeNotSupportedException {
@@ -516,8 +524,9 @@ public class PxlCsvImporter {
              * @return the parsed workbook object or row collection
              * @throws PxlException                       if {@code csvResource} is {@code null}, the resource
              *                                            cannot be read, or parsing fails
-             * @throws HttpMediaTypeNotSupportedException if the resource reports no file name, or its
-             *                                            extension is not {@code .csv}
+             * @throws HttpMediaTypeNotSupportedException if the resource reports no file name or one that
+             *                                            cannot be read as one, or its extension is not
+             *                                            {@code .csv}
              */
             public R fromResource(final Resource csvResource)
                     throws PxlException, HttpMediaTypeNotSupportedException {
@@ -538,8 +547,9 @@ public class PxlCsvImporter {
              *                                            {@code sheet(...)} form is given more than one
              *                                            resource, a resource cannot be read, or parsing
              *                                            fails
-             * @throws HttpMediaTypeNotSupportedException if any resource reports no file name, or its
-             *                                            extension is not {@code .csv}
+             * @throws HttpMediaTypeNotSupportedException if any resource reports no file name or one that
+             *                                            cannot be read as one, or its extension is not
+             *                                            {@code .csv}
              */
             public R fromResources(final List<Resource> csvResources)
                     throws PxlException, HttpMediaTypeNotSupportedException {
