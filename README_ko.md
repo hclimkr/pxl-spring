@@ -104,7 +104,7 @@ public ResponseEntity<Resource> download() throws Exception {
 <dependency>
     <groupId>io.github.hclimkr</groupId>
     <artifactId>pxl-spring-javax</artifactId>
-    <version>0.9.3</version>
+    <version>0.9.4</version>
 </dependency>
 ```
 
@@ -113,7 +113,7 @@ public ResponseEntity<Resource> download() throws Exception {
 <dependency>
     <groupId>io.github.hclimkr</groupId>
     <artifactId>pxl-spring-jakarta</artifactId>
-    <version>0.9.3</version>
+    <version>0.9.4</version>
 </dependency>
 ```
 
@@ -121,12 +121,12 @@ public ResponseEntity<Resource> download() throws Exception {
 
 ```groovy
 // javax 변형 (Java 8+)
-implementation 'io.github.hclimkr:pxl-spring-javax:0.9.3'
+implementation 'io.github.hclimkr:pxl-spring-javax:0.9.4'
 ```
 
 ```groovy
 // jakarta 변형 (Java 17+)
-implementation 'io.github.hclimkr:pxl-spring-jakarta:0.9.3'
+implementation 'io.github.hclimkr:pxl-spring-jakarta:0.9.4'
 ```
 
 ---

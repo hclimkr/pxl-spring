@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-09-04
+
+Built against [pxl](https://github.com/hclimkr/pxl) 0.9.6, up from 0.9.5.
+
+### Added
+
+- **Through the core.** PXL's diagnostic language can now be set per thread —
+  `Pxl.setThreadMessageLocale(Locale)`, cleared with `Pxl.resetThreadMessageLocale()` — which is
+  what answering each request in its own language needs: set it from `LocaleContextHolder.getLocale()`
+  as a request begins and clear it in a `finally`, since the container pools that thread. Process-wide
+  `Pxl.setMessageLocale(Locale)` is unchanged and stays the tier beneath it. This library registers
+  nothing for it; those two calls are the whole integration.
+- **Through the core.** A missing sheet is now reported with the sheet names the source actually
+  holds — the workbook's own names on an Excel import, and on a CSV import the sheet names derived
+  from the uploaded file or resource names. `PxlWorkbookUtils.getSheetNamesOfWorkbook(Workbook)` is
+  public for reading them directly.
+
 ### Changed
 
 - `exportZip().toFile(...)` writes through a buffer. The archive hands its deflater output down
@@ -14,6 +31,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   512 bytes of archive — worst for `.xlsx` members, which are stored uncompressed and so are not
   shrunk on the way past. It was the one destination in the library without a buffer under it.
   Nothing else moves: a failed export still leaves the archive unfinished and undeleted.
+- **Through the core.** `exportTrim` and `exportMasking` now apply to `char`, `Character` and
+  `boolean`/`Boolean` columns, which had been ignoring both — a masking rule was a silent no-op
+  there. A `Boolean` column under `exportMasking = "[a-z]"` writes `****` rather than `true`, and a
+  whitespace `Character` under `exportTrim` writes an empty cell. Columns setting neither option are
+  unaffected, and the import direction is untouched.
+
+### Fixed
+
+- A source file name that cannot be read as one — a name carrying a NUL character, or on a Windows
+  JVM one carrying `:` — is refused with `HttpMediaTypeNotSupportedException`, the same 415 an
+  unsupported extension already gives, instead of escaping as the raw `IllegalArgumentException`
+  commons-io raises. A ZIP entry name of that kind is refused with `PxlArgumentException` from
+  `validateEntries()`, before a file is created or download headers are sent, rather than mid-write.
+  Which names are refused is the platform's rule and is unchanged.
+- **Through the core.** A `char` column that was never set now exports as its `exportNullString`
+  instead of a `?`. A `char` cannot be `null`, so an unset field holds `'\0'`, which passed the
+  resolver's null gate and reached the cell as a NUL string — a character both XLSX writers replace
+  with `?` while saving. A boxed `Character` is unchanged.
 
 ## [0.9.3] - 2026-08-22
 
@@ -209,7 +244,8 @@ javax variant, `pxl-jakarta` for the jakarta one.
 - `PxlSpring`, one bean fronting all five entry points, with Bean Validation, RFC 5987
   download names, and opt-in AOP performance logging.
 
-[Unreleased]: https://github.com/hclimkr/pxl-spring/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/hclimkr/pxl-spring/compare/v0.9.4...HEAD
+[0.9.4]: https://github.com/hclimkr/pxl-spring/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/hclimkr/pxl-spring/compare/v0.9.2...v0.9.3
 [0.9.2]: https://github.com/hclimkr/pxl-spring/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/hclimkr/pxl-spring/compare/v0.9.0...v0.9.1
