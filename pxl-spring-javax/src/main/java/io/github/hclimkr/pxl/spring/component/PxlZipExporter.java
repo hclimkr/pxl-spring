@@ -461,7 +461,8 @@ public class PxlZipExporter {
          * unopenable as an archive.
          *
          * <p>Safe to call after {@code close()} has already ended the deflater: {@code Deflater.end()}
-         * delegates to a {@code Cleaner.Cleanable}, whose action runs at most once.</p>
+         * releases the native stream on the first call and does nothing on a second - a cleared handle on
+         * Java 8, a {@code Cleaner.Cleanable} whose action runs at most once from Java 9 on.</p>
          */
         private void abandon() {
 
@@ -1623,11 +1624,11 @@ public class PxlZipExporter {
              * writes - which is why {@code resolveFileFormat} is not part of {@code Entry}'s contract but a
              * private detail of the kinds that do have a choice.</p>
              *
-             * <p>{@code index} goes unused, the only kind where it does: the other four fall back to an
-             * index-suffixed default because their source may carry no name, while a CSV entry cannot be added
-             * without a sheet name. There is consequently nothing to make an unnamed entry unique, so two
-             * entries under one sheet name collide - {@code validateEntries} rejects that before anything is
-             * written.</p>
+             * <p>{@code index} goes unused, as on {@code SampleCsvSheetEntry}: the three Excel kinds fall
+             * back to an index-suffixed default because their source may carry no name, while a CSV entry
+             * cannot be added without a sheet name. There is consequently nothing to make an unnamed entry
+             * unique, so two entries under one sheet name collide - {@code validateEntries} rejects that
+             * before anything is written.</p>
              *
              * @param index the entry's zero-based index in the archive; unused by this kind
              * @return the entry name, extension included

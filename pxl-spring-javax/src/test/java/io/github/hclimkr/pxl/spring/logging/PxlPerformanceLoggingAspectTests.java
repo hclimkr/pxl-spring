@@ -32,9 +32,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Tests for the performance-logging pair. The aspect is opt-in and disabled by default
- * (via {@code @ConditionalOnExpression}), so no other test weaves it; here it is applied directly with
- * Spring's {@link AspectJProxyFactory} to exercise the {@code @Around} advice around a target bean.
+ * Tests for the performance-logging pair. The aspect is opt-in and disabled by default (via the
+ * {@code @Conditional} gate on {@code EnabledCondition}), so no other test weaves it; here it is applied
+ * directly with Spring's {@link AspectJProxyFactory} to exercise the {@code @Around} advice around a target
+ * bean.
  *
  * <p>Three parts:</p>
  * <ul>

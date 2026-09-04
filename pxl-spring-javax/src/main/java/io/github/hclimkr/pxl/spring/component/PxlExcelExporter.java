@@ -592,12 +592,11 @@ public class PxlExcelExporter {
         // private: the component is this class's nestmate, so nothing here needs to be exposed.
 
         /**
-         * Rejects source combinations the builder cannot honour: none configured, more than one form, or a
-         * raw-workbook-only option paired with a non-raw source. Called by every terminal before any work is
-         * done.
+         * Rejects source combinations the builder cannot honour: none configured, or the raw POI form
+         * combined with one of the bound ones. Called by every terminal before any work is done.
          *
-         * @throws PxlArgumentException if no source, more than one source form, or a POI-only option with a
-         *                              non-POI source was configured
+         * @throws PxlArgumentException if no source was configured, or the raw POI form was combined with
+         *                              {@code workbook(Object)}/{@code sheet(...)}
          */
         private void validateSource()
                 throws PxlArgumentException {

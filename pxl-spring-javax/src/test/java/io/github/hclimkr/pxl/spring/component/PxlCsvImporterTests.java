@@ -35,9 +35,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Behavioural tests for {@link PxlCsvImporter}, all driven through the {@link PxlCsvImporter.Builder}
  * fluent API: CSV round trips across every parse target (workbook, row-class sheet, collection-class sheet)
- * and both terminals ({@code fromMultipartFile} / {@code fromMultipartFiles}), several uploads grouped into
- * one workbook object, workbook-name and import-option handling on both the builder and the source step,
- * and file-extension validation.
+ * and all four terminals ({@code fromMultipartFile} / {@code fromMultipartFiles} and
+ * {@code fromResource} / {@code fromResources}), several uploads grouped into one workbook object,
+ * workbook-name and import-option handling on both the builder and the source step, and file-extension
+ * validation.
  *
  * <p>The builder comes from {@link PxlSpring}, the entry point the documentation guides users to. The
  * facade hands back this component's own builder, so what is exercised here is still the component.</p>

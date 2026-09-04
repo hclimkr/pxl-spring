@@ -36,9 +36,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Behavioural tests for {@link PxlSampleExcelExporter}, all driven through the
  * {@link PxlSampleExcelExporter.Builder} fluent API: template generation for both source forms
- * (workbook class, one or more sheets) across every destination (stream / file / response /
- * response-entity), export options, the default {@code PxlSample} file name, and column headers. The
- * template carries a single sample data row populated from each column's
+ * (workbook class, one or more sheets) across every destination (stream / file / response / streaming
+ * response / response-entity), export options, the default {@code PxlSample} file name, and column headers.
+ * The template carries a single sample data row populated from each column's
  * {@code @PxlColumn(exportSample = ...)} value.
  *
  * <p>The builder comes from {@link PxlSpring}, the entry point the documentation guides users to. The

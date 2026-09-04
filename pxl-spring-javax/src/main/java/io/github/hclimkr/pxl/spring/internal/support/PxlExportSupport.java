@@ -84,7 +84,7 @@ public final class PxlExportSupport {
      * {@link ResponseEntity} destinations, which set the length from the same buffer, would disagree.</p>
      *
      * @param outputStream the completed export bytes
-     * @param filename     the download file name
+     * @param filename     the download file name without extension
      * @param fileFormat   the export file format (provides extension and content type)
      * @param response     the servlet response to write to
      * @throws PxlIOException if setting headers or writing the body fails
@@ -295,10 +295,10 @@ public final class PxlExportSupport {
      * fresh view per call and stays re-readable.</p>
      *
      * <p>What the view rests on is that the buffer is finished before a body wraps it and is never written
-     * to again. All five export components close theirs as well, in a {@code finally} that outlives the
-     * entity they return, so a later write there fails outright rather than altering a body already handed
-     * to the framework - closing does not stop the body being read, only being changed. That split is the
-     * whole reason closing is safe here: {@link FastByteArrayOutputStream} consults its closed flag in its
+     * to again. All five export components close theirs as well, in a {@code finally} that runs before the
+     * entity reaches its caller, so a later write there fails outright rather than altering a body already
+     * handed to the framework - closing does not stop the body being read, only being changed. That split is
+     * the whole reason closing is safe here: {@link FastByteArrayOutputStream} consults its closed flag in its
      * two {@code write} methods and nowhere else, so {@code getInputStream()} and {@code size()} - the only
      * two this view calls - answer exactly as they did before.</p>
      */

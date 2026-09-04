@@ -433,11 +433,12 @@ public class PxlSampleExcelExporter {
          *       progress.</li>
          * </ul>
          *
-         * <p>Note where the line falls, because it sits further back here than on the other two exporters.
-         * Only the {@code null}-destination guard runs before the headers; this builder has no source check of
-         * its own at all - "both or neither source form" is the core builder's call, made inside its own
-         * terminal, which here is <strong>after</strong> the headers have gone out. Such a failure writes no
-         * body but does leave the download headers set.</p>
+         * <p>Note where the line falls, because it sits further back here than on the exporters that have an
+         * up-front check of their own ({@code PxlExcelExporter}, {@code PxlZipExporter}). Only the
+         * {@code null}-destination guard runs before the headers; this builder has no source check of its own
+         * at all - "both or neither source form" is the core builder's call, made inside its own terminal,
+         * which here is <strong>after</strong> the headers have gone out. Such a failure writes no body but
+         * does leave the download headers set.</p>
          *
          * <p>Present for consistency across the export builders rather than because templates need it: a
          * template is a header row plus one sample row per sheet, so the buffer is rarely what hurts here.
